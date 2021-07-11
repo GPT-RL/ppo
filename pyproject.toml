@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "ppo"
+version = "0.1.0"
+description = ""
+authors = ["Ethan Brooks", "Logan Walls <2934282+LoganWalls@users.noreply.github.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+torch = {url = "https://download.pytorch.org/whl/cu111/torch-1.9.0%2Bcu111-cp38-cp38-linux_x86_64.whl"}
+numpy = "^1.21.0"
+gym = {version = "^0.18.3", extras = ["atari"]}
+stable-baselines3 = "^1.1.0"
+h5py = "^3.3.0"
+atari-py = "<0.3.0"
+
+[tool.poetry.dev-dependencies]
+black = "^21.6b0"
+poethepoet = "^0.10.0"
+ipython = "^7.25.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
