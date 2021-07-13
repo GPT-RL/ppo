@@ -1,3 +1,5 @@
+import os
+
 import gym
 import numpy as np
 import torch
@@ -52,10 +54,7 @@ def make_env(env_id, seed, rank, allow_early_resets):
         if str(env.__class__.__name__).find("TimeLimit") >= 0:
             env = TimeLimitMask(env)
 
-        env = Monitor(
-            env,
-            allow_early_resets=allow_early_resets
-        )
+        env = Monitor(env, allow_early_resets=allow_early_resets)
 
         if is_atari:
             if len(env.observation_space.shape) == 3:
@@ -86,6 +85,7 @@ def make_vec_envs(
     seed,
     num_processes,
     gamma,
+    log_dir,
     device,
     allow_early_resets,
     num_frame_stack=None,
