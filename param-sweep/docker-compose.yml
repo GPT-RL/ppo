@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:alpine
+  rank-queue:
+    image: ethanabrooks/sequence-queue:latest
+    depends_on:
+      - redis
+    entrypoint:
+      - /data/entrypoint.sh
+    command:
+      - rank-queue
+      - ${REPLICAS}
+  runs-queue:
+    image: ethanabrooks/sequence-queue:latest
+    depends_on:
+      - redis
+    entrypoint:
+      - /data/entrypoint.sh
+    command:
+      - runs-queue
+      - ${NUM_RUNS}
+  sweep:
+    build: .
+    depends_on:
+      - redis
+    command:
+      - src/create_sweep.py
+      - --config=config.yml
+      - --name=${NAME}
+      - --project=gpt-rl
+      - --method=${SWEEP_METHOD}
+      - --redis
+    environment:
+      - HASURA_URI
+      - LOG_PATH
+  agent:
+    build: .
+    depends_on:
+      - rank-queue
+      - sweep
+    environment:
+      - HOST_MACHINE
+      - HASURA_URI
+      - LOG_PATH
+      - SCRIPT
+      - NUM_RUNS
+    entrypoint:
+      - param-sweep/run-sweep.sh

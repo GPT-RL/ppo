@@ -8,16 +8,15 @@ from typing import Optional
 
 import numpy as np
 import torch
-from run_logger import Logger, get_logger
-from tap import Tap
-
 import utils
 from envs import make_vec_envs
 from evaluation import evaluate
 from model import Policy
 from ppo import PPO
+from run_logger import Logger, get_logger
 from spec import spec
 from storage import RolloutStorage
+from tap import Tap
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
@@ -31,9 +30,15 @@ ENTROPY = "entropy"
 class Run(Tap):
     name: str
 
+    def configure(self) -> None:
+        self.add_argument("name", type=str)  # positional
+
 
 class Sweep(Tap):
     sweep_id: int = None
+
+    def configure(self) -> None:
+        self.add_argument("sweep_id", type=int)
 
 
 class Args(Tap):
@@ -247,7 +252,7 @@ def main(args: Args):
     metadata = dict(reproducibility_info=args.get_reproducibility_info())
     if host_machine := os.getenv("HOST_MACHINE"):
         metadata.update(host_machine=host_machine)
-    elif name := getattr(args, "name", None):
+    if name := getattr(args, "name", None):
         metadata.update(name=name)
     else:
         raise RuntimeError("Unhandled subcommand:", args.subcommand)
@@ -258,7 +263,7 @@ def main(args: Args):
             metadata=metadata,
             sweep_id=getattr(args, "sweep_id", None),
             charts=[
-                spec(x="steps", y=y)
+                spec(x="step", y=y)
                 for y in (
                     EPISODE_RETURN,
                     ACTION_LOSS,
