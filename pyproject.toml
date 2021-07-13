@@ -13,6 +13,7 @@ stable-baselines3 = "^1.1.0"
 h5py = "^3.3.0"
 atari-py = "<0.3.0"
 transformers = "^4.8.2"
+pybullet = "^3.1.7"
 
 [tool.poetry.dev-dependencies]
 black = "^21.6b0"
