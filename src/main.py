@@ -1,3 +1,8 @@
+import logging
+from pprint import pformat
+
+from run_logger import get_logger
+
 breakpoint()
 import os
 import time
@@ -17,7 +22,7 @@ from storage import RolloutStorage
 
 def main():
     args = get_args()
-
+    logger = get_logger("hasura")
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -158,21 +163,22 @@ def main():
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             end = time.time()
-            print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
-                    j,
-                    total_num_steps,
-                    int(total_num_steps / (end - start)),
-                    len(episode_rewards),
-                    np.mean(episode_rewards),
-                    np.median(episode_rewards),
-                    np.min(episode_rewards),
-                    np.max(episode_rewards),
-                    dist_entropy,
-                    value_loss,
-                    action_loss,
-                )
-            )
+            now = time.time()
+            fps = int(total_num_steps / (end - start))
+            log = {
+                "episode return": np.mean(episode_rewards),
+                "action loss": action_loss,
+                "value loss": value_loss,
+                "fps": fps,
+                "time": now * 1000000,
+                "step": total_num_steps,
+                "entropy": dist_entropy,
+            }
+            if logger is not None:
+                log.update({"run ID": logger.run_id})
+            logging.info(pformat(log))
+            if logger is not None:
+                logger.log(log)
 
         if (
             args.eval_interval is not None
