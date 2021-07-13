@@ -14,7 +14,7 @@ h5py = "^3.3.0"
 atari-py = "<0.3.0"
 transformers = "^4.8.2"
 pybullet = "^3.1.7"
-run-logger = {git = "https://github.com/ethanabrooks/run-logger.git", rev = "main"}
+run-logger = {git = "https://github.com/ethanabrooks/run-logger.git", rev = "8e05f4b9f2d9241d4cff1a92b67b35d06955a69e"}
 typed-argument-parser = "^1.7.0"
 
 [tool.poetry.dev-dependencies]
