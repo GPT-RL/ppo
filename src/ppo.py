@@ -10,7 +10,7 @@ class PPO:
         clip_param,
         ppo_epoch,
         num_mini_batch,
-        value_loss_coef,
+        value_coef,
         entropy_coef,
         lr=None,
         eps=None,
@@ -24,7 +24,7 @@ class PPO:
         self.ppo_epoch = ppo_epoch
         self.num_mini_batch = num_mini_batch
 
-        self.value_loss_coef = value_loss_coef
+        self.value_loss_coef = value_coef
         self.entropy_coef = entropy_coef
 
         self.max_grad_norm = max_grad_norm

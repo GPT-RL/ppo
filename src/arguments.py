@@ -29,7 +29,8 @@ def get_args():
         "--gail-epoch", type=int, default=5, help="gail epochs (default: 5)"
     )
     parser.add_argument(
-        "--lr", type=float, default=7e-4, help="learning rate (default: 7e-4)"
+        "--lr", type=float, default=7e-4,
+        help="learning rate (default: 7e-4)"
     )
     parser.add_argument(
         "--eps",
@@ -173,6 +174,8 @@ def get_args():
         default=False,
         help="use a linear schedule on the learning rate",
     )
+    subparsers = parser.add_subparsers()
+    sweep_parser = subparsers.add_parser()
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
