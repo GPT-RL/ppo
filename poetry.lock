@@ -340,7 +340,7 @@ traitlets = "*"
 name = "mypy-extensions"
 version = "0.4.3"
 description = "Experimental type system extensions for programs checked with the mypy typechecker."
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 
@@ -592,7 +592,7 @@ numpy = "^1.21.0"
 [package.source]
 type = "git"
 url = "https://github.com/ethanabrooks/run-logger.git"
-reference = "5f8e90af949ac3dfbd291d1a1088938c5a82d1d3"
+reference = "main"
 resolved_reference = "5f8e90af949ac3dfbd291d1a1088938c5a82d1d3"
 
 [[package]]
@@ -783,12 +783,36 @@ torchhub = ["filelock", "huggingface-hub (==0.0.12)", "importlib-metadata", "num
 vision = ["pillow"]
 
 [[package]]
+name = "typed-argument-parser"
+version = "1.7.0"
+description = "Typed Argument Parser"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+typing_extensions = ">=3.7.4"
+typing-inspect = ">=0.7.1"
+
+[[package]]
 name = "typing-extensions"
 version = "3.10.0.0"
 description = "Backported and Experimental Type Hints for Python 3.5+"
 category = "main"
 optional = false
 python-versions = "*"
+
+[[package]]
+name = "typing-inspect"
+version = "0.7.1"
+description = "Runtime inspection utilities for typing module."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+mypy-extensions = ">=0.3.0"
+typing-extensions = ">=3.7.4"
 
 [[package]]
 name = "urllib3"
@@ -814,7 +838,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "1d8b9b3529a269b5984d2435db10d87473fdbea389b61a0f8fd8ae4a0633c7d0"
+content-hash = "50fdbb54ef10beed6c181ec96fa1f9a5fe87e3a9e2f5498e86c91b2f055973b2"
 
 [metadata.files]
 appdirs = [
@@ -1331,10 +1355,18 @@ transformers = [
     {file = "transformers-4.8.2-py3-none-any.whl", hash = "sha256:a81a7683013fb48690c47e4e2d12a6c6e744b4261ae085f9a98d09f6c3e61d98"},
     {file = "transformers-4.8.2.tar.gz", hash = "sha256:81cd2b53a14012802806f9b20a2819590ccde6740e9165c08a97b82267fdaecb"},
 ]
+typed-argument-parser = [
+    {file = "typed-argument-parser-1.7.0.tar.gz", hash = "sha256:f28146f8f762fdabfd1544dfc54de247e32f58505b855a7e94a000baa708774d"},
+]
 typing-extensions = [
     {file = "typing_extensions-3.10.0.0-py2-none-any.whl", hash = "sha256:0ac0f89795dd19de6b97debb0c6af1c70987fd80a2d62d1958f7e56fcc31b497"},
     {file = "typing_extensions-3.10.0.0-py3-none-any.whl", hash = "sha256:779383f6086d90c99ae41cf0ff39aac8a7937a9283ce0a414e5dd782f4c94a84"},
     {file = "typing_extensions-3.10.0.0.tar.gz", hash = "sha256:50b6f157849174217d0656f99dc82fe932884fb250826c18350e159ec6cdf342"},
+]
+typing-inspect = [
+    {file = "typing_inspect-0.7.1-py2-none-any.whl", hash = "sha256:b1f56c0783ef0f25fb064a01be6e5407e54cf4a4bf4f3ba3fe51e0bd6dcea9e5"},
+    {file = "typing_inspect-0.7.1-py3-none-any.whl", hash = "sha256:3cd7d4563e997719a710a3bfe7ffb544c6b72069b6812a02e9b414a8fa3aaa6b"},
+    {file = "typing_inspect-0.7.1.tar.gz", hash = "sha256:047d4097d9b17f46531bf6f014356111a1b6fb821a24fe7ac909853ca2a782aa"},
 ]
 urllib3 = [
     {file = "urllib3-1.26.6-py2.py3-none-any.whl", hash = "sha256:39fb8672126159acb139a7718dd10806104dec1e2f0f6c88aab05d17df10c8d4"},
