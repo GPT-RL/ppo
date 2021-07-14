@@ -2,19 +2,19 @@
 
 while [ -z "$rank" ]
 do
-  rank=$(redis-cli RPOP rank-queue)
+  rank=$(redis-cli -h redis RPOP rank-queue)
   sleep .1
 done
 
 while [ -z "$sweep_id" ]
 do
-  sweep_id=$(redis-cli GET "sweep_id")
+  sweep_id=$(redis-cli -h redis GET "sweep_id")
   sleep .1
 done
 
 for (( i=1; ; i++ ))
 do
-  if [ ! -z "$NUM_RUNS" ] && [ -z "$(redis-cli RPOP runs-queue)" ]
+  if [ ! -z "$NUM_RUNS" ] && [ -z "$(redis-cli -h redis RPOP runs-queue)" ]
   then
     break
   fi
