@@ -26,7 +26,7 @@ services:
     depends_on:
       - redis
     command:
-      - src/create_sweep.py
+      - param-sweep/create.py
       - --config=config.yml
       - --name=${NAME}
       - --project=gpt-rl

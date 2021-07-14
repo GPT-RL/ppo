@@ -73,10 +73,10 @@ RUN python3.8 -m pip install poetry && poetry install \
   && unzip ROMS.zip \
   && /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8/bin/python -m atari_py.import_roms ROMS/
 
-FROM base AS runtime
-
-WORKDIR "/project"
-COPY --from=python-deps /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8 /project/venv
-COPY . .
-
-ENTRYPOINT ["python"]
+#FROM base AS runtime
+#
+#WORKDIR "/project"
+#COPY --from=python-deps /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8 /project/venv
+#COPY . .
+#
+#ENTRYPOINT ["python"]
