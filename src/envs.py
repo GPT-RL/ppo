@@ -1,5 +1,3 @@
-import os
-
 import gym
 import numpy as np
 import torch
@@ -85,7 +83,6 @@ def make_vec_envs(
     seed,
     num_processes,
     gamma,
-    log_dir,
     device,
     allow_early_resets,
     num_frame_stack=None,

@@ -22,16 +22,15 @@ services:
       - runs-queue
       - ${NUM_RUNS}
   sweep:
-    build: .
+    image: ethanabrooks/create-sweep:latest
     depends_on:
       - redis
     command:
-      - param-sweep/create.py
       - --config=config.yml
       - --name=${NAME}
       - --project=gpt-rl
       - --method=${SWEEP_METHOD}
-      - --redis
+      - redis
     environment:
       - HASURA_URI
       - LOG_PATH
@@ -47,4 +46,14 @@ services:
       - SCRIPT
       - NUM_RUNS
     entrypoint:
-      - param-sweep/run-sweep.sh
+      - ./execute-sweep.sh
+    volumes:
+      - "${PWD}/logs:/tmp/bsuite"
+      - "${HOME}/.cache/GPT/:/root/.cache/GPT"
+      - "${HOME}/.cache/huggingface/:/root/.cache/huggingface"
+    deploy:
+      replicas: ${REPLICAS}
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]

@@ -14,7 +14,7 @@ h5py = "^3.3.0"
 atari-py = "<0.3.0"
 transformers = "^4.8.2"
 pybullet = "^3.1.7"
-sweep-logger = {git = "https://github.com/ethanabrooks/sweep-logger.git", rev = "c222e0ea16858cf397ed86aab35606dfdcbe4267"}
+sweep-logger = {git = "https://github.com/ethanabrooks/sweep-logger.git", rev = "8ee4fc6da1b92e505bbee0e4a73b367fffdc9dd8"}
 typed-argument-parser = "^1.7.0"
 
 [tool.poetry.dev-dependencies]

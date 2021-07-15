@@ -13,9 +13,9 @@ from envs import make_vec_envs
 from evaluation import evaluate
 from model import Policy
 from ppo import PPO
-from run_logger import Logger, get_logger
 from spec import spec
 from storage import RolloutStorage
+from sweep_logger import Logger, get_logger
 from tap import Tap
 
 EPISODE_RETURN = "episode return"

@@ -6,10 +6,10 @@ from envs import make_vec_envs
 
 
 def evaluate(
-    actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir, device
+    actor_critic, obs_rms, env_name, seed, num_processes, device
 ):
     eval_envs = make_vec_envs(
-        env_name, seed + num_processes, num_processes, None, eval_log_dir, device, True
+        env_name, seed + num_processes, num_processes, None, device, True
     )
 
     vec_norm = utils.get_vec_normalize(eval_envs)
