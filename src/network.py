@@ -163,7 +163,7 @@ class NNBase(nn.Module):
 
 class GPTBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(self).__init__(recurrent, hidden_size, hidden_size)
+        super().__init__(recurrent, hidden_size, hidden_size)
 
         init_ = lambda m: init(
             m,
