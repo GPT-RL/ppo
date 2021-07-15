@@ -6,7 +6,7 @@ def _flatten_helper(T, N, _tensor):
     return _tensor.view(T * N, *_tensor.size()[2:])
 
 
-class RolloutStorage(object):
+class Rollouts(object):
     def __init__(
         self,
         num_steps,

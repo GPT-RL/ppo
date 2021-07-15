@@ -5,9 +5,7 @@ import utils
 from envs import make_vec_envs
 
 
-def evaluate(
-    actor_critic, obs_rms, env_name, seed, num_processes, device
-):
+def evaluate(agent, obs_rms, env_name, seed, num_processes, device):
     eval_envs = make_vec_envs(
         env_name, seed + num_processes, num_processes, None, device, True
     )
@@ -21,13 +19,13 @@ def evaluate(
 
     obs = eval_envs.reset()
     eval_recurrent_hidden_states = torch.zeros(
-        num_processes, actor_critic.recurrent_hidden_state_size, device=device
+        num_processes, agent.recurrent_hidden_state_size, device=device
     )
     eval_masks = torch.zeros(num_processes, 1, device=device)
 
     while len(eval_episode_rewards) < 10:
         with torch.no_grad():
-            _, action, _, eval_recurrent_hidden_states = actor_critic.act(
+            _, action, _, eval_recurrent_hidden_states = agent.act(
                 obs, eval_recurrent_hidden_states, eval_masks, deterministic=True
             )
 

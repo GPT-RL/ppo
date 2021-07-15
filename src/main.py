@@ -8,16 +8,16 @@ from typing import Optional
 
 import numpy as np
 import torch
-import utils
-from envs import make_vec_envs
-from evaluation import evaluate
-from ppo import PPO
-from spec import spec
-from storage import RolloutStorage
 from sweep_logger import Logger, get_logger
 from tap import Tap
 
-from network import GPTBase, Policy
+import utils
+from agent import Agent
+from envs import make_vec_envs
+from evaluation import evaluate
+from ppo import PPO
+from rollouts import Rollouts
+from spec import spec
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
@@ -33,7 +33,6 @@ class Run(Tap):
 
     def configure(self) -> None:
         self.add_argument("name", type=str)  # positional
-        self.set_defaults(func=Trainer.train_with_logger)
 
 
 class Sweep(Tap):
@@ -41,7 +40,6 @@ class Sweep(Tap):
 
     def configure(self) -> None:
         self.add_argument("sweep_id", type=int)
-        self.set_defaults(func=Trainer.train_with_logger)
 
 
 class Args(Tap):
@@ -55,17 +53,11 @@ class Args(Tap):
     gae: bool = False  # use Generalized Advantage Estimation
     gae_lambda: float = 0.94  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
-    # what size of pretrained GPT to use
-    # (see https://huggingface.co/transformers/pretrained_models.html for list of sizes.)
-    gpt_size: str = None
     log_interval: int = 10  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
     log_level: str = "INFO"
     lr: float = 7e-4  # learning rate
     max_grad_norm: float = 0.5  # clip gradient norms
-    num_embeddings: int = (
-        1  # How many embeddings should the perception module generate as input for GPT?
-    )
     num_env_steps: int = 1e9  # total number of environment steps
     num_mini_batch: int = 5  # number of mini-batches per update
     num_processes: int = 16  # number of parallel environments
@@ -80,14 +72,13 @@ class Args(Tap):
 
     def configure(self) -> None:
         self.add_subparsers(dest="subcommand")
-        self.set_defaults(func=Trainer.train)
         self.add_subparser("run", Run)
         self.add_subparser("sweep", Sweep)
 
 
 class Trainer:
-    @staticmethod
-    def train(args: Args, logger: Optional[Logger] = None):
+    @classmethod
+    def train(cls, args: Args, logger: Optional[Logger] = None):
         logging.getLogger().setLevel(args.log_level)
 
         torch.manual_seed(args.seed)
@@ -109,27 +100,15 @@ class Trainer:
             allow_early_resets=False,
         )
 
-        base = None
-        base_kwargs = dict(recurrent=args.recurrent_policy)
-        if args.gpt_size is not None:
-            base = GPTBase
-            base_kwargs.update(
-                dict(
-                    gpt_size=args.gpt_size,
-                    n_embeddings=args.num_embeddings,
-                )
-            )
-
-        actor_critic = Policy(
-            obs_shape=envs.observation_space.shape,
-            action_space=envs.action_space,
-            base=base,
-            **base_kwargs,
+        obs_shape = envs.observation_space.shape
+        action_space = envs.action_space
+        agent = cls.make_agent(
+            obs_shape=obs_shape, action_space=action_space, args=args
         )
-        actor_critic.to(device)
+        agent.to(device)
 
-        agent = PPO(
-            actor_critic=actor_critic,
+        ppo = PPO(
+            agent=agent,
             clip_param=args.clip_param,
             ppo_epoch=args.ppo_epoch,
             num_mini_batch=args.num_mini_batch,
@@ -140,12 +119,12 @@ class Trainer:
             max_grad_norm=args.max_grad_norm,
         )
 
-        rollouts = RolloutStorage(
+        rollouts = Rollouts(
             num_steps=args.num_steps,
             num_processes=args.num_processes,
             obs_shape=envs.observation_space.shape,
             action_space=envs.action_space,
-            recurrent_hidden_state_size=actor_critic.recurrent_hidden_state_size,
+            recurrent_hidden_state_size=agent.recurrent_hidden_state_size,
         )
 
         obs = envs.reset()
@@ -160,7 +139,7 @@ class Trainer:
 
             if args.linear_lr_decay:
                 # decrease learning rate linearly
-                utils.update_linear_schedule(agent.optimizer, j, num_updates, args.lr)
+                utils.update_linear_schedule(ppo.optimizer, j, num_updates, args.lr)
 
             for step in range(args.num_steps):
                 # Sample actions
@@ -170,7 +149,7 @@ class Trainer:
                         action,
                         action_log_prob,
                         recurrent_hidden_states,
-                    ) = actor_critic.act(
+                    ) = agent.act(
                         inputs=rollouts.obs[step],
                         rnn_hxs=rollouts.recurrent_hidden_states[step],
                         masks=rollouts.masks[step],
@@ -203,7 +182,7 @@ class Trainer:
                 )
 
             with torch.no_grad():
-                next_value = actor_critic.get_value(
+                next_value = agent.get_value(
                     inputs=rollouts.obs[-1],
                     rnn_hxs=rollouts.recurrent_hidden_states[-1],
                     masks=rollouts.masks[-1],
@@ -217,7 +196,7 @@ class Trainer:
                 use_proper_time_limits=args.use_proper_time_limits,
             )
 
-            value_loss, action_loss, dist_entropy = agent.update(rollouts)
+            value_loss, action_loss, dist_entropy = ppo.update(rollouts)
 
             rollouts.after_update()
 
@@ -231,7 +210,7 @@ class Trainer:
 
                     torch.save(
                         [
-                            actor_critic,
+                            agent,
                             getattr(utils.get_vec_normalize(envs), "obs_rms", None),
                         ],
                         str(Path(args.save_path, args.env_name + ".pt")),
@@ -264,7 +243,7 @@ class Trainer:
             ):
                 obs_rms = utils.get_vec_normalize(envs).obs_rms
                 evaluate(
-                    actor_critic=actor_critic,
+                    agent=agent,
                     obs_rms=obs_rms,
                     env_name=args.env_name,
                     seed=args.seed,
@@ -272,8 +251,18 @@ class Trainer:
                     device=device,
                 )
 
+    @staticmethod
+    def make_agent(obs_shape, action_space, args) -> Agent:
+        return Agent(
+            obs_shape=obs_shape,
+            action_space=action_space,
+            recurrent=args.recurrent_policy,
+        )
+
     @classmethod
-    def train_with_logger(cls, args: Args):
+    def main(cls, args: Args):
+        if args.subcommand is None:
+            return cls.train(args)
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
         if host_machine := os.getenv("HOST_MACHINE"):
             metadata.update(host_machine=host_machine)
@@ -310,5 +299,4 @@ class Trainer:
 
 
 if __name__ == "__main__":
-    ARGS = Args(explicit_bool=True).parse_args()
-    ARGS.func(ARGS)
+    Trainer.main(Args(explicit_bool=True).parse_args())
