@@ -171,6 +171,10 @@ class GPTBase(NNBase):
         super().__init__(recurrent, hidden_size, hidden_size)
 
         self.gpt_main = GPT2Model.from_pretrained(gpt_size)
+        # Freeze GPT parameters
+        for p in self.gpt_main.parameters():
+            p.requires_grad_(False)
+
         embedding_size = self.gpt_main.config.n_embd
         n_embeddings = n_embeddings
 
@@ -192,6 +196,7 @@ class GPTBase(NNBase):
             # nn.ReLU(), Commenting this because I don't know if it makes sense for embedding values to be stricly positive.
             nn.Unflatten(-1, (embedding_size, n_embeddings)),
         )
+
         self.gpt_output = nn.Sequential(
             init_(nn.Linear(embedding_size, hidden_size)),
             nn.ReLU(),
