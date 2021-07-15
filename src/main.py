@@ -17,7 +17,7 @@ from storage import RolloutStorage
 from sweep_logger import Logger, get_logger
 from tap import Tap
 
-from network import Policy, GPT2Base
+from network import GPTBase, Policy
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
@@ -112,11 +112,11 @@ class Trainer:
         base = None
         base_kwargs = dict(recurrent=args.recurrent_policy)
         if args.gpt_size is not None:
-            base = GPT2Base
+            base = GPTBase
             base_kwargs.update(
                 dict(
                     gpt_size=args.gpt_size,
-                    n_embeddings=args.n_embeddings,
+                    n_embeddings=args.num_embeddings,
                 )
             )
 
@@ -124,7 +124,7 @@ class Trainer:
             obs_shape=envs.observation_space.shape,
             action_space=envs.action_space,
             base=base,
-            base_kwargs=base_kwargs,
+            **base_kwargs,
         )
         actor_critic.to(device)
 

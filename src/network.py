@@ -1,9 +1,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers import GPT2Model
-
 from distributions import Bernoulli, Categorical, DiagGaussian
+from transformers import GPT2Model
 from utils import init
 
 
@@ -13,10 +12,8 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
+    def __init__(self, obs_shape, action_space, base=None, **kwargs):
         super(Policy, self).__init__()
-        if base_kwargs is None:
-            base_kwargs = {}
         if base is None:
             if len(obs_shape) == 3:
                 base = CNNBase
@@ -25,7 +22,7 @@ class Policy(nn.Module):
             else:
                 raise NotImplementedError
 
-        self.base = base(obs_shape[0], **base_kwargs)
+        self.base = base(obs_shape[0], **kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
