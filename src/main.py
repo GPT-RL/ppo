@@ -17,7 +17,7 @@ from storage import RolloutStorage
 from sweep_logger import Logger, get_logger
 from tap import Tap
 
-from network import Policy
+from network import Policy, GPT2Base
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
@@ -55,11 +55,17 @@ class Args(Tap):
     gae: bool = False  # use Generalized Advantage Estimation
     gae_lambda: float = 0.94  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
+    # what size of pretrained GPT to use
+    # (see https://huggingface.co/transformers/pretrained_models.html for list of sizes.)
+    gpt_size: str = None
     log_interval: int = 10  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
     log_level: str = "INFO"
     lr: float = 7e-4  # learning rate
     max_grad_norm: float = 0.5  # clip gradient norms
+    num_embeddings: int = (
+        1  # How many embeddings should the perception module generate as input for GPT?
+    )
     num_env_steps: int = 1e9  # total number of environment steps
     num_mini_batch: int = 5  # number of mini-batches per update
     num_processes: int = 16  # number of parallel environments
@@ -103,10 +109,22 @@ class Trainer:
             allow_early_resets=False,
         )
 
+        base = None
+        base_kwargs = dict(recurrent=args.recurrent_policy)
+        if args.gpt_size is not None:
+            base = GPT2Base
+            base_kwargs.update(
+                dict(
+                    gpt_size=args.gpt_size,
+                    n_embeddings=args.n_embeddings,
+                )
+            )
+
         actor_critic = Policy(
             obs_shape=envs.observation_space.shape,
             action_space=envs.action_space,
-            base_kwargs=dict(recurrent=args.recurrent_policy),
+            base=base,
+            base_kwargs=base_kwargs,
         )
         actor_critic.to(device)
 

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from transformers import GPT2Model
 
 from distributions import Bernoulli, Categorical, DiagGaussian
 from utils import init
@@ -162,8 +163,19 @@ class NNBase(nn.Module):
 
 
 class GPTBase(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=512):
+    def __init__(
+        self,
+        num_inputs,
+        recurrent=False,
+        hidden_size=512,
+        gpt_size: str = "gpt2-medium",
+        n_embeddings: int = 1,
+    ):
         super().__init__(recurrent, hidden_size, hidden_size)
+
+        self.gpt_main = GPT2Model.from_pretrained(gpt_size)
+        embedding_size = self.gpt_main.config.n_embd
+        n_embeddings = n_embeddings
 
         init_ = lambda m: init(
             m,
@@ -171,7 +183,6 @@ class GPTBase(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain("relu"),
         )
-
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
@@ -180,18 +191,36 @@ class GPTBase(NNBase):
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init_(nn.Linear(32 * 7 * 7, embedding_size * n_embeddings)),
+            # nn.ReLU(), Commenting this because I don't know if it makes sense for embedding values to be stricly positive.
+            nn.Unflatten(-1, (embedding_size, n_embeddings)),
+        )
+        self.gpt_output = nn.Sequential(
+            init_(nn.Linear(embedding_size, hidden_size)),
             nn.ReLU(),
         )
-        # TODO: insert GPT here
 
         init_ = lambda m: init(
             m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0)
         )
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self.critic_linear = (init_(nn.Linear(hidden_size, 1)),)
 
         self.train()
+
+    def forward(self, inputs, rnn_hxs, masks):
+        perception = self.main(inputs / 255.0)
+        x = self.gpt_main(
+            inputs_embeds=perception,
+            use_cache=False,
+            output_attentions=False,
+            output_hidden_states=False,
+        ).last_hidden_state[:, -1]
+        x = self.gpt_output(x)
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return self.critic_linear(x), x, rnn_hxs
 
 
 class CNNBase(NNBase):
