@@ -25,6 +25,8 @@ services:
     image: ethanabrooks/create-sweep:latest
     depends_on:
       - redis
+    volumes:
+      - .:/home
     command:
       - --config=config.yml
       - --name=${NAME}
