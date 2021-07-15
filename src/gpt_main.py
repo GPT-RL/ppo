@@ -7,7 +7,7 @@ from gpt_agent import Agent
 class Args(main.Args):
     gpt_size: Literal[
         "small", "medium", "large", "xl"
-    ]  # what size of pretrained GPT to use
+    ] = "medium"  # what size of pretrained GPT to use
     num_embeddings: int = (
         1  # How many embeddings should the perception module generate as input for GPT?
     )
