@@ -26,9 +26,9 @@ services:
     depends_on:
       - redis
     volumes:
-      - .:/home
+      - .:/config
     command:
-      - --config=config.yml
+      - --config=/config/config.yml
       - --name=${NAME}
       - --project=gpt-rl
       - --method=${SWEEP_METHOD}

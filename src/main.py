@@ -11,12 +11,13 @@ import torch
 import utils
 from envs import make_vec_envs
 from evaluation import evaluate
-from model import Policy
 from ppo import PPO
 from spec import spec
 from storage import RolloutStorage
 from sweep_logger import Logger, get_logger
 from tap import Tap
+
+from network import Policy
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
