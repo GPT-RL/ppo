@@ -104,3 +104,4 @@ trained_models/
 .fuse_hidden*
 ROMS
 .idea/
+config.yaml
