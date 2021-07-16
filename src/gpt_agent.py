@@ -38,7 +38,12 @@ class Base(NNBase):
         super().__init__(recurrent, hidden_size, hidden_size)
 
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
-        self.gpt_main = GPT2Model.from_pretrained(f"gpt2{gpt_size}")
+        self.gpt_main = GPT2Model.from_pretrained(
+            f"gpt2{gpt_size}",
+            use_cache=False,
+            output_attentions=False,
+            output_hidden_states=False,
+        )
         # Freeze GPT parameters
         for p in self.gpt_main.parameters():
             p.requires_grad_(False)
@@ -58,8 +63,8 @@ class Base(NNBase):
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, embedding_size * num_embeddings)),
-            nn.Unflatten(-1, (embedding_size, num_embeddings)),
+            init_(nn.Linear(32 * 7 * 7, num_embeddings * embedding_size)),
+            nn.Unflatten(-1, (num_embeddings, embedding_size)),
         )
         self.gpt_output = nn.Sequential(
             init_(nn.Linear(embedding_size, hidden_size)),
@@ -75,12 +80,7 @@ class Base(NNBase):
 
     def forward(self, inputs, rnn_hxs, masks):
         perception = self.main(inputs / 255.0)
-        x = self.gpt_main(
-            inputs_embeds=perception,
-            use_cache=False,
-            output_attentions=False,
-            output_hidden_states=False,
-        ).last_hidden_state[:, -1]
+        x = self.gpt_main(inputs_embeds=perception).last_hidden_state[:, -1]
         x = self.gpt_output(x)
 
         if self.is_recurrent:
