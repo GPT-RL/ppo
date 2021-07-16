@@ -299,4 +299,6 @@ class Trainer:
 
 
 if __name__ == "__main__":
+    import os
+
     Trainer.main(Args(explicit_bool=True).parse_args())

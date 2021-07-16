@@ -48,7 +48,9 @@ services:
       - SCRIPT
       - NUM_RUNS
     entrypoint:
-      - ./execute-sweep.sh
+      - python
+    command:
+      - ./execute_sweep.py
     volumes:
       - "${PWD}/logs:/tmp/bsuite"
       - "${HOME}/.cache/GPT/:/root/.cache/GPT"

@@ -15,10 +15,6 @@ ENV PYTHONFAULTHANDLER 1
 # use ipdb for breakpoints
 ENV PYTHONBREAKPOINT=ipdb.set_trace
 
-# source virtualenv
-ENV VIRTUAL_ENV=/project/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
 # common dependencies
 RUN apt-get update -q \
  && DEBIAN_FRONTEND="noninteractive" \
@@ -52,7 +48,7 @@ RUN apt-get update -q \
     apt-get install -yq \
 
       # required by poetry
-      python \  
+      python \ 
       python3-pip \ 
 
       # required for redis
@@ -67,16 +63,19 @@ RUN apt-get update -q \
 WORKDIR "/deps"
 
 COPY pyproject.toml poetry.lock /deps/
-RUN python3.8 -m pip install poetry && poetry install \
-  && wget "http://www.atarimania.com/roms/Roms.rar" \
-  && unrar e Roms.rar \
-  && unzip ROMS.zip \
-  && /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8/bin/python -m atari_py.import_roms ROMS/
+RUN pip install poetry \
+ && poetry install \
+ && wget "http://www.atarimania.com/roms/Roms.rar" \
+ && unrar e Roms.rar \
+ && unzip ROMS.zip \
+ && /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8/bin/python -m atari_py.import_roms ROMS/
 
 FROM base AS runtime
 
 WORKDIR "/project"
-COPY --from=python-deps /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8 /project/venv
+ENV VIRTUAL_ENV=/root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8/
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+COPY --from=python-deps $VIRTUAL_ENV $VIRTUAL_ENV
 COPY . .
 
 ENTRYPOINT ["python"]
