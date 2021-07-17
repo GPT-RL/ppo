@@ -23,9 +23,10 @@ EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
 VALUE_LOSS = "value loss"
 FPS = "fps"
-TIME = "time"
-STEP = "step"
 ENTROPY = "entropy"
+TIME = "time"
+TIME_DELTA = "time-delta"
+STEP = "step"
 
 
 class Run(Tap):
@@ -47,7 +48,7 @@ class Args(Tap):
     clip_param: float = 0.2  # PPO clip parameter
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
-    env_name: str = "PongNoFrameskip-v4"  # env ID for gym
+    env_name: str = "BreakoutNoFrameskip-v4"  # env ID for gym
     eval_interval: Optional[int] = None  # how many updates to evaluate between
     eps: float = 1e-5  # RMSProp epsilon
     gae: bool = False  # use Generalized Advantage Estimation
@@ -226,6 +227,7 @@ class Trainer:
                     VALUE_LOSS: value_loss,
                     FPS: fps,
                     TIME: now * 1000000,
+                    TIME_DELTA: now - start,
                     STEP: total_num_steps,
                     ENTROPY: dist_entropy,
                 }
@@ -275,16 +277,17 @@ class Trainer:
                 metadata=metadata,
                 sweep_id=getattr(args, "sweep_id", None),
                 charts=[
-                    spec(x="step", y=y)
-                    for y in (
-                        EPISODE_RETURN,
-                        ACTION_LOSS,
-                        VALUE_LOSS,
-                        FPS,
-                        TIME,
-                        STEP,
-                        ENTROPY,
-                    )
+                    spec(x=TIME_DELTA, y=EPISODE_RETURN),
+                    *[
+                        spec(x="step", y=y)
+                        for y in (
+                            EPISODE_RETURN,
+                            ACTION_LOSS,
+                            VALUE_LOSS,
+                            FPS,
+                            ENTROPY,
+                        )
+                    ],
                 ],
             )
             if parameters is not None:
