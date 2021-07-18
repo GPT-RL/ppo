@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from collections import deque
 from pathlib import Path
@@ -282,8 +281,6 @@ class Trainer:
                         spec(x="step", y=y)
                         for y in (
                             EPISODE_RETURN,
-                            ACTION_LOSS,
-                            VALUE_LOSS,
                             FPS,
                             ENTROPY,
                         )
