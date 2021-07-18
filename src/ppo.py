@@ -39,6 +39,7 @@ class PPO:
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        gradient_norm = 0
 
         for e in range(self.ppo_epoch):
             if self.agent.is_recurrent:
@@ -99,6 +100,14 @@ class PPO:
                     - dist_entropy * self.entropy_coef
                 ).backward()
                 nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
+                gradient_norm += (
+                    sum(
+                        p.grad.detach().data.norm(2).item() ** 2
+                        for p in self.agent.parameters()
+                        if p.grad is not None
+                    )
+                    ** 0.5
+                )
                 self.optimizer.step()
 
                 value_loss_epoch += value_loss.item()
@@ -110,5 +119,6 @@ class PPO:
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        gradient_norm /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, gradient_norm

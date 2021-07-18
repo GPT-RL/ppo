@@ -23,6 +23,7 @@ ACTION_LOSS = "action loss"
 VALUE_LOSS = "value loss"
 FPS = "fps"
 ENTROPY = "entropy"
+GRADIENT_NORM = "gradient norm"
 TIME = "time"
 TIME_DELTA = "time-delta"
 STEP = "step"
@@ -43,7 +44,7 @@ class Sweep(Tap):
 
 
 class Args(Tap):
-    alpha: float = 0.99  # RMSProp alpha
+    alpha: float = 0.99  # Adam alpha
     clip_param: float = 0.1  # PPO clip parameter
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
@@ -196,7 +197,7 @@ class Trainer:
                 use_proper_time_limits=args.use_proper_time_limits,
             )
 
-            value_loss, action_loss, dist_entropy = ppo.update(rollouts)
+            value_loss, action_loss, dist_entropy, gradient_norm = ppo.update(rollouts)
 
             rollouts.after_update()
 
@@ -227,6 +228,7 @@ class Trainer:
                     FPS: fps,
                     TIME: now * 1000000,
                     TIME_DELTA: now - start,
+                    GRADIENT_NORM: gradient_norm,
                     STEP: total_num_steps,
                     ENTROPY: dist_entropy,
                 }
@@ -283,6 +285,7 @@ class Trainer:
                             EPISODE_RETURN,
                             FPS,
                             ENTROPY,
+                            GRADIENT_NORM,
                         )
                     ],
                 ],
