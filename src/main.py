@@ -44,31 +44,31 @@ class Sweep(Tap):
 
 class Args(Tap):
     alpha: float = 0.99  # RMSProp alpha
-    clip_param: float = 0.2  # PPO clip parameter
+    clip_param: float = 0.1  # PPO clip parameter
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
     env_name: str = "BreakoutNoFrameskip-v4"  # env ID for gym
     eval_interval: Optional[int] = None  # how many updates to evaluate between
     eps: float = 1e-5  # RMSProp epsilon
     gae: bool = False  # use Generalized Advantage Estimation
-    gae_lambda: float = 0.94  # GAE lambda parameter
+    gae_lambda: float = 0.95  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
     log_interval: int = 100  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
     log_level: str = "INFO"
-    lr: float = 7e-4  # learning rate
+    lr: float = 2.5e-4  # learning rate
     max_grad_norm: float = 0.5  # clip gradient norms
     num_env_steps: int = 1e9  # total number of environment steps
-    num_mini_batch: int = 5  # number of mini-batches per update
-    num_processes: int = 16  # number of parallel environments
-    num_steps: int = 5  # number of forward steps in A2C
-    ppo_epoch: int = 5  # number of PPO updates
+    num_mini_batch: int = 4  # number of mini-batches per update
+    num_processes: int = 8  # number of parallel environments
+    num_steps: int = 128  # number of forward steps in A2C
+    ppo_epoch: int = 3  # number of PPO updates
     recurrent_policy: bool = False  # use recurrence in the policy
     save_interval: int = 100  # how many updates to save between
     save_path: Optional[str] = None  # path to save parameters if saving locally
-    seed: int = 0  # clip gradient norms
+    seed: int = 0  # random seed
     use_proper_time_limits: bool = False  # compute returns with time limits
-    value_coef: float = 0.5  # value loss coefficient
+    value_coef: float = 1  # value loss coefficient
 
     def configure(self) -> None:
         self.add_subparsers(dest="subcommand")
