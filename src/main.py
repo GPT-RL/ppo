@@ -4,6 +4,8 @@ from collections import deque
 from pathlib import Path
 from pprint import pformat
 from typing import Optional
+import os
+
 
 import numpy as np
 import torch
@@ -302,6 +304,4 @@ class Trainer:
 
 
 if __name__ == "__main__":
-    import os
-
     Trainer.main(Args(explicit_bool=True).parse_args())
