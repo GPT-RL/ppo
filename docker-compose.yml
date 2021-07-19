@@ -3,23 +3,27 @@ version: "3.8"
 services:
   redis:
     image: redis:alpine
-  rank-queue:
-    image: ethanabrooks/sequence-queue:latest
+  rank-counter:
+    image: redis:alpine
     depends_on:
       - redis
-    entrypoint:
-      - /data/entrypoint.sh
     command:
-      - rank-queue
+      - redis-cli
+      - -h
+      - redis
+      - set
+      - rank-counter
       - ${REPLICAS}
-  runs-queue:
-    image: ethanabrooks/sequence-queue:latest
+  runs-counter:
+    image: redis:alpine
     depends_on:
       - redis
-    entrypoint:
-      - /data/entrypoint.sh
     command:
-      - runs-queue
+      - redis-cli
+      - -h
+      - redis
+      - set
+      - runs-counter
       - ${NUM_RUNS}
   sweep:
     image: ethanabrooks/create-sweep:latest
@@ -39,7 +43,8 @@ services:
   agent:
     build: .
     depends_on:
-      - rank-queue
+      - rank-counter
+      - runs-counter
       - sweep
     environment:
       - HOST_MACHINE
