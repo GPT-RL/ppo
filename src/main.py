@@ -53,7 +53,7 @@ class Args(Tap):
     env_name: str = "BreakoutNoFrameskip-v4"  # env ID for gym
     eval_interval: Optional[int] = None  # how many updates to evaluate between
     eps: float = 1e-5  # RMSProp epsilon
-    gae: bool = False  # use Generalized Advantage Estimation
+    gae: bool = True  # use Generalized Advantage Estimation
     gae_lambda: float = 0.95  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
     log_interval: int = 100  # how many updates to log between
