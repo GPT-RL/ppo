@@ -50,7 +50,7 @@ class Args(Tap):
     clip_param: float = 0.1  # PPO clip parameter
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
-    env_name: str = "BreakoutNoFrameskip-v4"  # env ID for gym
+    env: str = "BreakoutNoFrameskip-v4"  # env ID for gym
     eval_interval: Optional[int] = None  # how many updates to evaluate between
     eps: float = 1e-5  # RMSProp epsilon
     gae: bool = True  # use Generalized Advantage Estimation
@@ -95,7 +95,7 @@ class Trainer:
         device = torch.device("cuda:0" if args.cuda else "cpu")
 
         envs = make_vec_envs(
-            env_name=args.env_name,
+            env_name=args.env,
             seed=args.seed,
             num_processes=args.num_processes,
             gamma=args.gamma,
@@ -216,7 +216,7 @@ class Trainer:
                             agent,
                             getattr(utils.get_vec_normalize(envs), "obs_rms", None),
                         ],
-                        str(Path(args.save_path, args.env_name + ".pt")),
+                        str(Path(args.save_path, args.env + ".pt")),
                     )
 
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
@@ -250,7 +250,7 @@ class Trainer:
                 evaluate(
                     agent=agent,
                     obs_rms=obs_rms,
-                    env_name=args.env_name,
+                    env_name=args.env,
                     seed=args.seed,
                     num_processes=args.num_processes,
                     device=device,
