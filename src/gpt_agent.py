@@ -1,5 +1,5 @@
 import torch.nn as nn
-from transformers import GPT2Model
+from transformers import GPT2Config, GPT2Model
 
 import agent
 from agent import Flatten, NNBase
@@ -32,17 +32,29 @@ class Base(NNBase):
         num_inputs,
         gpt_size: str,
         num_embeddings: int,
+        randomize_parameters: bool,
         hidden_size=512,
         recurrent=False,
     ):
         super().__init__(recurrent, hidden_size, hidden_size)
 
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
-        self.gpt_main = GPT2Model.from_pretrained(
-            f"gpt2{gpt_size}",
-            use_cache=False,
-            output_attentions=False,
-            output_hidden_states=False,
+        self.gpt_main = (
+            GPT2Model(
+                GPT2Config.from_pretrained(
+                    f"gpt2{gpt_size}",
+                    use_cache=False,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                )
+            )
+            if randomize_parameters
+            else GPT2Model.from_pretrained(
+                f"gpt2{gpt_size}",
+                use_cache=False,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
         )
         # Freeze GPT parameters
         for p in self.gpt_main.parameters():

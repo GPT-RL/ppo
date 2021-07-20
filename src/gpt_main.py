@@ -11,6 +11,7 @@ class Args(main.Args):
     num_embeddings: int = (
         1  # How many embeddings should the perception module generate as input for GPT?
     )
+    randomize_parameters: bool = False
 
 
 class Trainer(main.Trainer):
@@ -22,6 +23,7 @@ class Trainer(main.Trainer):
             recurrent=args.recurrent_policy,
             gpt_size=args.gpt_size,
             num_embeddings=args.num_embeddings,
+            randomize_parameters=args.randomize_parameters,
         )
 
 
