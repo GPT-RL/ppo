@@ -1,4 +1,8 @@
+from typing import Optional, Tuple
+
+import torch
 import torch.nn as nn
+from torch import Tensor
 from transformers import GPT2Config, GPT2Model
 
 import agent
@@ -26,6 +30,22 @@ class Agent(agent.Agent):
             raise NotImplementedError
 
 
+class GPTCell(nn.Module):
+    def __init__(self, context_size, gpt: GPT2Model):
+        super().__init__()
+        self.gpt = gpt
+        self.context_size = context_size
+
+    def forward(
+        self, input: Tensor, hx: Optional[Tensor] = None
+    ) -> Tuple[Tensor, Tensor]:  # noqa: F811
+        hx = hx.reshape(-1, self.context_size, self.gpt.config.n_embd)
+        hx = torch.cat([hx, input.reshape(1, -1, 1)])
+        hx = hx[:, 1:]
+        output = self.gpt(inputs_embeds=hx)
+        return output, hx
+
+
 class Base(NNBase):
     def __init__(
         self,
@@ -39,10 +59,11 @@ class Base(NNBase):
         super().__init__(recurrent, hidden_size, hidden_size)
 
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
-        self.gpt_main = (
+        gpt_size = f"gpt2{gpt_size}"
+        self.gpt = (
             GPT2Model(
                 GPT2Config.from_pretrained(
-                    f"gpt2{gpt_size}",
+                    gpt_size,
                     use_cache=False,
                     output_attentions=False,
                     output_hidden_states=False,
@@ -50,16 +71,17 @@ class Base(NNBase):
             )
             if randomize_parameters
             else GPT2Model.from_pretrained(
-                f"gpt2{gpt_size}",
+                gpt_size,
                 use_cache=False,
                 output_attentions=False,
                 output_hidden_states=False,
             )
         )
+        self.rnn = GPTCell(gpt=self.gpt, context_size=num_embeddings)
         # Freeze GPT parameters
-        for p in self.gpt_main.parameters():
+        for p in self.gpt.parameters():
             p.requires_grad_(False)
-        embedding_size = self.gpt_main.config.n_embd
+        embedding_size = self.gpt.config.n_embd
 
         init_ = lambda m: init(
             m,
@@ -92,10 +114,11 @@ class Base(NNBase):
 
     def forward(self, inputs, rnn_hxs, masks):
         perception = self.main(inputs / 255.0)
-        x = self.gpt_main(inputs_embeds=perception).last_hidden_state[:, -1]
-        x = self.gpt_output(x)
 
         if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)
+        else:
+            x = self.gpt(inputs_embeds=perception).last_hidden_state[:, -1]
+            x = self.gpt_output(x)
 
         return self.critic_linear(x), x, rnn_hxs

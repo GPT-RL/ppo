@@ -83,8 +83,8 @@ class NNBase(nn.Module):
         self._recurrent = recurrent
 
         if recurrent:
-            self.gru = nn.GRU(recurrent_input_size, hidden_size)
-            for name, param in self.gru.named_parameters():
+            self.rnn = nn.GRU(recurrent_input_size, hidden_size)
+            for name, param in self.rnn.named_parameters():
                 if "bias" in name:
                     nn.init.constant_(param, 0)
                 elif "weight" in name:
@@ -106,7 +106,7 @@ class NNBase(nn.Module):
 
     def _forward_gru(self, x, hxs, masks):
         if x.size(0) == hxs.size(0):
-            x, hxs = self.gru(x.unsqueeze(0), (hxs * masks).unsqueeze(0))
+            x, hxs = self.rnn(x.unsqueeze(0), (hxs * masks).unsqueeze(0))
             x = x.squeeze(0)
             hxs = hxs.squeeze(0)
         else:
@@ -142,7 +142,7 @@ class NNBase(nn.Module):
                 start_idx = has_zeros[i]
                 end_idx = has_zeros[i + 1]
 
-                rnn_scores, hxs = self.gru(
+                rnn_scores, hxs = self.rnn(
                     x[start_idx:end_idx], hxs * masks[start_idx].view(1, -1, 1)
                 )
 
