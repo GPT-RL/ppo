@@ -1,11 +1,10 @@
 import logging
+import os
 import time
 from collections import deque
 from pathlib import Path
 from pprint import pformat
 from typing import Optional
-import os
-
 
 import numpy as np
 import torch
@@ -27,7 +26,7 @@ FPS = "fps"
 ENTROPY = "entropy"
 GRADIENT_NORM = "gradient norm"
 TIME = "time"
-TIME_DELTA = "time-delta"
+HOURS = "hours"
 STEP = "step"
 
 
@@ -229,7 +228,7 @@ class Trainer:
                     VALUE_LOSS: value_loss,
                     FPS: fps,
                     TIME: now * 1000000,
-                    TIME_DELTA: now - start,
+                    HOURS: (now - start) / 3600,
                     GRADIENT_NORM: gradient_norm,
                     STEP: total_num_steps,
                     ENTROPY: dist_entropy,
@@ -280,7 +279,7 @@ class Trainer:
                 metadata=metadata,
                 sweep_id=getattr(args, "sweep_id", None),
                 charts=[
-                    spec(x=TIME_DELTA, y=EPISODE_RETURN),
+                    spec(x=HOURS, y=EPISODE_RETURN),
                     *[
                         spec(x="step", y=y)
                         for y in (
