@@ -8,6 +8,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+import yaml
 from sweep_logger import Logger, get_logger
 from tap import Tap
 
@@ -71,6 +72,7 @@ class Args(Tap):
     seed: int = 0  # random seed
     use_proper_time_limits: bool = False  # compute returns with time limits
     value_coef: float = 1  # value loss coefficient
+    config: Optional[str] = None  # If given, yaml config from which to load params
 
     def configure(self) -> None:
         self.add_subparsers(dest="subcommand")
@@ -265,6 +267,10 @@ class Trainer:
 
     @classmethod
     def main(cls, args: Args):
+        if args.config is not None:
+            with Path(args.config).open() as f:
+                config = yaml.load(f, yaml.FullLoader)
+                args = args.from_dict(config)
         if args.subcommand is None:
             return cls.train(args)
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
