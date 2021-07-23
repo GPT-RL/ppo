@@ -267,10 +267,21 @@ class Trainer:
 
     @classmethod
     def main(cls, args: Args):
+        excluded = {
+            "subcommand",
+            "log_level",
+            "log_interval",
+            "save_interval",
+            "save_path",
+            "logger",
+            "sweep_id",
+        }
         if args.config is not None:
             with Path(args.config).open() as f:
                 config = yaml.load(f, yaml.FullLoader)
-                args = args.from_dict(config)
+                args = args.from_dict(
+                    {k: v for k, v in config.items() if k not in excluded}
+                )
         if args.subcommand is None:
             return cls.train(args)
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
@@ -301,15 +312,7 @@ class Trainer:
             )
             if parameters is not None:
                 for k, v in parameters.items():
-                    if k not in [
-                        "subcommand",
-                        "log_level",
-                        "log_interval",
-                        "save_interval",
-                        "save_path",
-                        "logger",
-                        "sweep_id",
-                    ]:
+                    if k not in excluded:
                         setattr(args, k, v)
             logger.update_metadata(
                 dict(parameters=args.as_dict(), run_id=logger.run_id)
