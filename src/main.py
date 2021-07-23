@@ -67,7 +67,7 @@ class Args(Tap):
     num_steps: int = 128  # number of forward steps in A2C
     ppo_epoch: int = 3  # number of PPO updates
     recurrent_policy: bool = False  # use recurrence in the policy
-    save_interval: int = 100  # how many updates to save between
+    save_interval: int = 1000  # how many updates to save between
     save_path: Optional[str] = None  # path to save parameters if saving locally
     seed: int = 0  # random seed
     use_proper_time_limits: bool = False  # compute returns with time limits
