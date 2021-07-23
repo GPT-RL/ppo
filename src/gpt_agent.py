@@ -12,9 +12,12 @@ from utils import init
 
 
 class Agent(agent.Agent):
-    def __init__(self, obs_shape, action_space, **kwargs):
+    def __init__(self, obs_shape, action_space, save_interval, save_path, **kwargs):
         nn.Module.__init__(self)
 
+        self.step = 0
+        self.save_path = save_path
+        self.save_interval = save_interval
         self.base = Base(obs_shape[0], **kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
@@ -28,6 +31,28 @@ class Agent(agent.Agent):
             self.dist = Bernoulli(self.base.output_size, num_outputs)
         else:
             raise NotImplementedError
+
+    def act(self, inputs, rnn_hxs, masks, deterministic=False):
+        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        dist = self.dist(actor_features)
+
+        if deterministic:
+            action = dist.mode()
+        else:
+            action = dist.sample()
+
+        action_log_probs = dist.log_probs(action)
+        if self.step % self.save_interval == 0 and self.save_path is not None:
+            torch.save(
+                dict(
+                    inputs=inputs,
+                    perception=self.base.perception(inputs),
+                    action_log_probs=action_log_probs,
+                ),
+                self.save_path,
+            )
+        self.step += 1
+        return value, action, action_log_probs, rnn_hxs
 
 
 class GPTCell(nn.Module):
@@ -89,7 +114,7 @@ class Base(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain("relu"),
         )
-        self.main = nn.Sequential(
+        self.perception = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
@@ -113,8 +138,7 @@ class Base(NNBase):
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
-        perception = self.main(inputs / 255.0)
-
+        perception = self.perception(inputs / 255.0)
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)
         else:

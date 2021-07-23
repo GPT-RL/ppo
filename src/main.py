@@ -215,7 +215,7 @@ class Trainer:
                             agent,
                             getattr(utils.get_vec_normalize(envs), "obs_rms", None),
                         ],
-                        str(Path(args.save_path, args.env + ".pt")),
+                        args.save_path
                     )
 
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:

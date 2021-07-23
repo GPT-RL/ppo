@@ -24,6 +24,8 @@ class Trainer(main.Trainer):
             gpt_size=args.gpt_size,
             num_embeddings=args.num_embeddings,
             randomize_parameters=args.randomize_parameters,
+            save_interval=args.save_interval,
+            save_path=args.save_path,
         )
 
 
