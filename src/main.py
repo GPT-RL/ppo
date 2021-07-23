@@ -281,21 +281,23 @@ class Trainer:
 
         logger: Logger
         with get_logger("hasura") as logger:
+            charts = [
+                spec(x=HOURS, y=EPISODE_RETURN),
+                *[
+                    spec(x="step", y=y)
+                    for y in (
+                        EPISODE_RETURN,
+                        FPS,
+                        ENTROPY,
+                        GRADIENT_NORM,
+                    )
+                ],
+            ]
+            sweep_id = getattr(args, "sweep_id", None)
             parameters = logger.create_run(
                 metadata=metadata,
-                sweep_id=getattr(args, "sweep_id", None),
-                charts=[
-                    spec(x=HOURS, y=EPISODE_RETURN),
-                    *[
-                        spec(x="step", y=y)
-                        for y in (
-                            EPISODE_RETURN,
-                            FPS,
-                            ENTROPY,
-                            GRADIENT_NORM,
-                        )
-                    ],
-                ],
+                sweep_id=sweep_id,
+                charts=charts,
             )
             if parameters is not None:
                 for k, v in parameters.items():
