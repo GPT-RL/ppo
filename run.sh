@@ -7,7 +7,7 @@ docker run --rm -it\
   --env-file .env\
   --gpus all\
   -e HOST_MACHINE="$(hostname -s)"\
-  -v "$(pwd)/logs:/tmp/bsuite"\
+  -v "$(pwd)/logs:/tmp/logs"\
   -v "$HOME/.cache/GPT/:/root/.cache/GPT" \
   -v "$HOME/.cache/huggingface/:/root/.cache/huggingface" \
   $name "$@"
