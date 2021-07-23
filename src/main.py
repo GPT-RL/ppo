@@ -293,7 +293,15 @@ class Trainer:
             )
             if parameters is not None:
                 for k, v in parameters.items():
-                    if k not in ["subcommand", "log_level", "logger"]:
+                    if k not in [
+                        "subcommand",
+                        "log_level",
+                        "log_interval",
+                        "save_interval",
+                        "save_path",
+                        "logger",
+                        "sweep_id",
+                    ]:
                         setattr(args, k, v)
             logger.update_metadata(
                 dict(parameters=args.as_dict(), run_id=logger.run_id)
