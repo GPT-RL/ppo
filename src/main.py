@@ -207,18 +207,8 @@ class Trainer:
             # save for every interval-th episode or for the last epoch
             if j % args.save_interval == 0 or j == num_updates - 1:
                 if args.save_path:
-                    try:
-                        os.makedirs(args.save_path)
-                    except OSError:
-                        pass
-
-                    torch.save(
-                        [
-                            agent,
-                            getattr(utils.get_vec_normalize(envs), "obs_rms", None),
-                        ],
-                        args.save_path
-                    )
+                    Path(args.save_path).parent.mkdir(parents=True, exist_ok=True)
+                    cls.save(agent, args, envs)
 
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
                 total_num_steps = (j + 1) * args.num_processes * args.num_steps
@@ -256,6 +246,16 @@ class Trainer:
                     num_processes=args.num_processes,
                     device=device,
                 )
+
+    @staticmethod
+    def save(agent, args, envs):
+        torch.save(
+            [
+                agent,
+                getattr(utils.get_vec_normalize(envs), "obs_rms", None),
+            ],
+            args.save_path,
+        )
 
     @staticmethod
     def make_agent(obs_shape, action_space, args) -> Agent:

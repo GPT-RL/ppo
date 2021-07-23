@@ -1,6 +1,10 @@
 from typing import Literal
 
+import torch
+from transformers import GPT2Model
+
 import main
+import utils
 from gpt_agent import Agent
 
 
@@ -26,6 +30,18 @@ class Trainer(main.Trainer):
             randomize_parameters=args.randomize_parameters,
             save_interval=args.save_interval,
             save_path=args.save_path,
+        )
+
+    @staticmethod
+    def save(agent: Agent, args, envs):
+        gpt: GPT2Model = agent.base.gpt
+        gpt_params = gpt.named_parameters()
+        torch.save(
+            dict(
+                **{k: v for k, v in agent.named_parameters() if k not in gpt_params},
+                obs_rms=getattr(utils.get_vec_normalize(envs), "obs_rms", None),
+            ),
+            args.save_path,
         )
 
 
