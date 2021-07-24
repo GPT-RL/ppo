@@ -275,6 +275,8 @@ class Trainer:
             "save_path",
             "logger",
             "sweep_id",
+            "config",
+            "name",
         }
         if args.config is not None:
             with Path(args.config).open() as f:
