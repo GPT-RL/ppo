@@ -29,6 +29,9 @@ begin
 	Gadfly.set_default_plot_size(16cm, 14cm)
 end
 
+# ╔═╡ 0da5a4ba-6b23-4f23-8165-1bd6183abbc1
+html"<button onclick='present()'>Present</button>"
+
 # ╔═╡ ba990146-058e-440e-b172-4d35b2b63985
 md"""
 ## Looking Back
@@ -56,8 +59,7 @@ md"""
 """
 
 # ╔═╡ 731054d8-e5df-45d0-bd4f-91083884f0c8
-md"""
-## What is the published PPO benchmark on each Atari game?
+md"""## What is the published PPO benchmark on each Atari game?
 We have added a purple horizontal line to our graphs indicating the 10-million-step performance reported in the [PPO paper](https://arxiv.org/pdf/1707.06347.pdf).
 """
 
@@ -193,6 +195,20 @@ This report compares the performance of a standard PPO baseline against a "GPT-i
 | xl           | 1558M      | 1600           |
 """
 
+# ╔═╡ 33909132-16c2-4eb3-97d3-607010a82e52
+md"""
+## Next Steps
+- How to choose best hyperparameters (one set across all games for each `num_embeddings`).
+- Graph comparing the speed of different GPT sizes (e.g. run 1 million samples for each size and see how long it takes).
+- "Time Steps" -> "Steps"
+- Display interesting hyperparameters for the runs below each graph (e.g. how many embs for the first few graphs in this notebook).
+"""
+
+# ╔═╡ 5027f577-6604-40e0-a40c-17110a1bc3fa
+md"""
+## TODO:
+"""
+
 # ╔═╡ 623ed8e1-7f9e-4092-bf39-b9a3d90a7d23
 # Colormap Gallery: https://colorcet.com/gallery.html
 colors(n) = cmap("I1"; N=n);
@@ -214,6 +230,9 @@ begin
 		println(io, "</html>")
 	end
 end;
+
+# ╔═╡ 9af550be-4ef4-4938-a710-41f96392b05a
+
 
 # ╔═╡ 41bd06a2-e7bd-46c6-9249-6e69223b0e11
 begin
@@ -306,6 +325,7 @@ function sweep_runs(sweep_ids::AbstractVector{Int}, max_step::Int)
 							"alpha",
 							"clip_param",
 							"cuda",
+							"linguistic_analysis_path",
 							"entropy",
 							"eps",
 							"eval_interval",
@@ -427,7 +447,7 @@ end
 begin
 	Gadfly.with_theme(gadfly_theme) do
 		plot(
-			sweep_runs([672, 684], 50000000),
+			sweep_runs([672, 687], 50000000),
 			x=:step, y="episode return",
 			yintercept=[274.8],
 			group=:run_id,
@@ -554,8 +574,9 @@ end
 window_size = "11";
 
 # ╔═╡ Cell order:
+# ╟─0da5a4ba-6b23-4f23-8165-1bd6183abbc1
 # ╟─ba990146-058e-440e-b172-4d35b2b63985
-# ╟─731054d8-e5df-45d0-bd4f-91083884f0c8
+# ╠═731054d8-e5df-45d0-bd4f-91083884f0c8
 # ╟─a15380dc-fb70-42ed-8025-77ba49dfb073
 # ╟─5084f38e-b69a-4ee5-90c3-f23d1e6abad4
 # ╟─76f3a217-3303-4952-ab6e-d546c8c05ffe
@@ -567,23 +588,26 @@ window_size = "11";
 # ╟─03f1dfc7-970e-4920-9df9-79dd9f048e65
 # ╟─0be25163-f9c1-41bc-82cf-9f63ff8e609a
 # ╟─654ad80a-a802-49d5-8373-b0b4056fd8f1
-# ╟─67944dbb-0ebb-44d9-b6f3-79e8d5610f61
+# ╠═67944dbb-0ebb-44d9-b6f3-79e8d5610f61
 # ╟─ab745b36-164c-4534-be1f-a703a2010f3e
-# ╟─f4368e0e-dd79-4a80-bae0-84a09de65e97
-# ╟─9000d2d6-353d-499f-ae30-0338dc85bfe9
-# ╟─0a801028-935d-463a-b09c-01fca6eca913
-# ╟─8420320c-222d-4144-9669-5f4f2a3b8b11
-# ╟─3fd9c768-3dcc-4aa5-8671-c83ab39bd887
+# ╠═f4368e0e-dd79-4a80-bae0-84a09de65e97
+# ╠═9000d2d6-353d-499f-ae30-0338dc85bfe9
+# ╠═0a801028-935d-463a-b09c-01fca6eca913
+# ╠═8420320c-222d-4144-9669-5f4f2a3b8b11
+# ╠═3fd9c768-3dcc-4aa5-8671-c83ab39bd887
 # ╟─9b367184-ecfa-40b1-b439-d6f517d022eb
 # ╟─3838787a-f138-45ec-9a58-7879aeab9b99
 # ╟─8798b46c-1b0b-4d34-93ef-1d5062f8a632
-# ╟─16ce1ff4-3a0e-48e5-ae84-30afb618804c
-# ╟─623ed8e1-7f9e-4092-bf39-b9a3d90a7d23
-# ╟─5d3bfc57-6a5a-41e5-8f63-6902e4958936
-# ╟─6e3ef066-d115-11eb-2338-013a707dfe8a
-# ╟─41bd06a2-e7bd-46c6-9249-6e69223b0e11
-# ╟─94185c13-b6d2-4337-b5ce-336f5e128032
-# ╟─ce12c840-ece3-48bd-8696-40c1f9802695
-# ╟─c5b77c36-436f-4682-8d52-945ae25fb47c
-# ╟─0f54629c-e045-47bf-90a5-36e44c05b8f0
+# ╠═33909132-16c2-4eb3-97d3-607010a82e52
+# ╠═5027f577-6604-40e0-a40c-17110a1bc3fa
+# ╠═16ce1ff4-3a0e-48e5-ae84-30afb618804c
+# ╠═623ed8e1-7f9e-4092-bf39-b9a3d90a7d23
+# ╠═5d3bfc57-6a5a-41e5-8f63-6902e4958936
+# ╠═6e3ef066-d115-11eb-2338-013a707dfe8a
+# ╟─9af550be-4ef4-4938-a710-41f96392b05a
+# ╠═41bd06a2-e7bd-46c6-9249-6e69223b0e11
+# ╠═94185c13-b6d2-4337-b5ce-336f5e128032
+# ╠═ce12c840-ece3-48bd-8696-40c1f9802695
+# ╠═c5b77c36-436f-4682-8d52-945ae25fb47c
+# ╠═0f54629c-e045-47bf-90a5-36e44c05b8f0
 # ╟─bbed8889-d401-4167-9370-9927aabbc83b

@@ -13,9 +13,7 @@ begin
 	using JSON
 	using Chain
 	using Tables
-	using CairoMakie
-	using AlgebraOfGraphics
-	CairoMakie.activate!(type = "svg")
+	using Match
 end
 
 # ╔═╡ f6396d66-cdd3-4fa5-afaa-7a43895250e0
@@ -24,10 +22,7 @@ begin
 end
 
 # ╔═╡ 41bd06a2-e7bd-46c6-9249-6e69223b0e11
-begin
-	HASRUA_ENDPOINT_URL = "http://hasura_graphql-engine_1:8080/v1/graphql"
-	HASURA_ADMIN_SECRET = "hNuxFSTJMk28GMiFDpZDbviKtelFQamcb20UJiYZSIZ4LYsyLCCwQFYA6Y8HRSUo"
-end;
+HASRUA_ENDPOINT_URL = "http://rldl12.eecs.umich.edu:1200/v1/graphql"
 
 # ╔═╡ 94185c13-b6d2-4337-b5ce-336f5e128032
 function gql_query(query:: String; variables:: Dict = nothing)
@@ -36,7 +31,7 @@ function gql_query(query:: String; variables:: Dict = nothing)
 		HASRUA_ENDPOINT_URL;
 		verbose=3,
 		body= JSON.json(Dict("query" => query, "variables" => variables)) ,
-		headers=Dict("x-hasura-admin-secret" => HASURA_ADMIN_SECRET),
+		# headers=Dict("x-hasura-admin-secret" => HASURA_ADMIN_SECRET),
 	)
 	@chain r begin
 		_.body
@@ -47,36 +42,68 @@ function gql_query(query:: String; variables:: Dict = nothing)
 end
 
 # ╔═╡ ed56319c-fd7e-478e-a673-f799debbf7b3
-function get_sweep(ids::Vector{Int64})::Vector{AbstractDict}
+function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 	query = """
-query getSweep(\$ids: [Int!]!) {
-  run(where: {sweep_id: {_in: \$ids}, run_logs: {id: {_is_null: false}}}) {
-    run_logs(order_by: {id: desc}) {
-      log
-    }
-    metadata
-    id
-  }
-}
-	"""
-	gql_query(query; variables=Dict("ids" => ids))["run"]
-end
+		query getSweepRuns(\$ids: [Int!], \$max_step: Int!) {
+		  logs_less_than_step(args: {max_step: \$max_step}, where: {run: {sweep_id: {_in: \$ids}}}) {
+			log
+			run_id
+			run {
+			  metadata
+			  sweep_id
+			}
+		  }
+		}
+  	"""
+	rows = @chain gql_query(query; variables=Dict("ids" => sweep_ids, "max_step" => max_step)) begin
+		_["logs_less_than_step"]		
+		map(d -> Dict(
+				"run_id" => d["run_id"],
+				"sweep_id" => d["run"]["sweep_id"],
+				d["log"]...,
+				d["run"]["metadata"]["parameters"]...
+				), _)
+		map(d -> Dict(
+				d...,
+				[k => v for (k1, v1, k2, v2) in [
+							(
+								"hours", get(d, "time-delta", 0) / 3600, 
+								"time-delta", get(d, "hours", 0) * 3600,
+							),
+						] 
+						for (k, v) in [
+								(k1, get(d, k1, v1)), 
+								(k2, get(d, k2, v2)),
+								]]...,				
+				[name => get(d, name, false) for name in [
+							"randomize_parameters"
+						]]...,
+				[name => get(d, name, nothing) for name in [
+							"config",
+						]]... 
+				), _)
+		collect
+	end
+	vcat(DataFrame.(rows)...)
+end;
 
 # ╔═╡ da091e45-0d08-490a-ba85-ee9acb6700bc
-sweep = get_sweep([17, 19, 22, 23])
+sweeps = get_sweep([674, 675, 676, 677], 10000000)
 
 # ╔═╡ c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
-dicts = [
-	Dict(
-		"episode_return" => log["log"]["episode return"],
-		"step" => log["log"]["step"],
-		"run_id" => run_dict["id"],
-		run_dict["metadata"]["parameters"]...
-	) 
-	for run_dict in sweep
-		for log in run_dict["run_logs"]
-			if 25000000 < log["log"]["step"] < 30000000
-		]
+begin
+	filtered = filter(:step => >=(9000000), sweeps)
+	gdf = groupby(filtered, [:env])
+	transform(gdf, ["env", "episode return"] => (env, ret) ->begin
+			@match env begin
+				"BeamRider-v0" => "breakout" #ret /1590
+				"PongNoFrameskip-v0" => "pong" #(ret + 20) / (20.7 + 20)
+				"Seaquest-v0" => "sequent" #ret / 1204.5
+				"Qbert-v0" => "q" #ret / 14293.3
+				_ => env
+			end
+		end)
+end
 
 # ╔═╡ 63ed4848-ca9a-48bb-bd02-35b4bf69d039
 dframe = vcat(DataFrame.(dicts)...)
@@ -154,8 +181,8 @@ parameters = [
 
 
 # ╔═╡ Cell order:
-# ╟─6e3ef066-d115-11eb-2338-013a707dfe8a
-# ╟─41bd06a2-e7bd-46c6-9249-6e69223b0e11
+# ╠═6e3ef066-d115-11eb-2338-013a707dfe8a
+# ╠═41bd06a2-e7bd-46c6-9249-6e69223b0e11
 # ╠═94185c13-b6d2-4337-b5ce-336f5e128032
 # ╠═ed56319c-fd7e-478e-a673-f799debbf7b3
 # ╠═da091e45-0d08-490a-ba85-ee9acb6700bc
