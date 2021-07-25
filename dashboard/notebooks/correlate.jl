@@ -54,8 +54,9 @@ function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 			}
 		  }
 		}
-  	"""
-	rows = @chain gql_query(query; variables=Dict("ids" => sweep_ids, "max_step" => max_step)) begin
+  	""" 
+	@chain query begin
+		gql_query(_; variables=Dict("ids" => sweep_ids, "max_step" => max_step))
 		_["logs_less_than_step"]		
 		map(d -> Dict(
 				"run_id" => d["run_id"],
@@ -83,26 +84,44 @@ function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 						]]... 
 				), _)
 		collect
+		vcat(DataFrame.(_)...)
 	end
-	vcat(DataFrame.(rows)...)
 end;
 
 # ╔═╡ da091e45-0d08-490a-ba85-ee9acb6700bc
 sweeps = get_sweep([674, 675, 676, 677], 10000000)
 
-# ╔═╡ c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
+# ╔═╡ 1a6b7810-977d-4a82-ab14-b24e154ad491
+Set(1) == Set([1])
+
+# ╔═╡ 7e2ac3d5-9b72-4859-96a7-b6b8711e14b3
+min_returns = @chain sweeps begin
+	dropmissing(_, "episode return")
+	groupby(_, [:env])
+	combine(_, "episode return" => minimum)
+	Dict(k=>v for (k,v) in	eachrow(_))
+end
+
+# ╔═╡ 5a29110f-deca-4812-9240-ab445ed665c8
+
+
+# ╔═╡ 3e2890ce-8b1c-4241-aecf-856f16ee3e5c
 begin
-	filtered = filter(:step => >=(9000000), sweeps)
-	gdf = groupby(filtered, [:env])
-	transform(gdf, ["env", "episode return"] => (env, ret) ->begin
-			@match env begin
-				"BeamRider-v0" => "breakout" #ret /1590
-				"PongNoFrameskip-v0" => "pong" #(ret + 20) / (20.7 + 20)
-				"Seaquest-v0" => "sequent" #ret / 1204.5
-				"Qbert-v0" => "q" #ret / 14293.3
-				_ => env
+	x = (a=1, b=2)
+	(:a, :b) = x
+end
+
+# ╔═╡ c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
+@chain sweeps begin
+	filter(:step => >=(9000000), _)
+	groupby(_, [:env])
+	transform(_, ["env", "episode return"] => (env, ret) ->begin
+			@match Set(env) begin
+				Set(x) => x
+				_ => throw(DomainError(Set(env)))
 			end
 		end)
+	_[!, ["env_episode return_function", "env", "episode return"]]
 end
 
 # ╔═╡ 63ed4848-ca9a-48bb-bd02-35b4bf69d039
@@ -186,6 +205,10 @@ parameters = [
 # ╠═94185c13-b6d2-4337-b5ce-336f5e128032
 # ╠═ed56319c-fd7e-478e-a673-f799debbf7b3
 # ╠═da091e45-0d08-490a-ba85-ee9acb6700bc
+# ╠═1a6b7810-977d-4a82-ab14-b24e154ad491
+# ╠═7e2ac3d5-9b72-4859-96a7-b6b8711e14b3
+# ╠═5a29110f-deca-4812-9240-ab445ed665c8
+# ╠═3e2890ce-8b1c-4241-aecf-856f16ee3e5c
 # ╠═c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
 # ╟─63ed4848-ca9a-48bb-bd02-35b4bf69d039
 # ╟─2fdc2937-098a-4dfe-bba5-58a9164337e7
