@@ -32,8 +32,8 @@ STEP = "step"
 
 
 class LoggerArgs(Tap):
-    graphql_endpoint: str
-    host_machine: str
+    graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
+    host_machine: str = os.getenv("HOST_MACHINE")
 
 
 class Run(LoggerArgs):
@@ -289,13 +289,13 @@ class Trainer:
         if args.subcommand is None:
             return cls.train(args)
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
-        if host_machine := args.host_machine:
-            metadata.update(host_machine=host_machine)
+        if args.host_machine:
+            metadata.update(host_machine=args.host_machine)
         if name := getattr(args, "name", None):
             metadata.update(name=name)
 
         logger: Logger
-        with HasuraLogger(graphql_endpoint=args.graphql_endpoint) as logger:
+        with HasuraLogger(args.graphql_endpoint) as logger:
             charts = [
                 spec(x=HOURS, y=EPISODE_RETURN),
                 *[

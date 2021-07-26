@@ -14,19 +14,8 @@ services:
       - set
       - rank-counter
       - ${REPLICAS}
-  max-runs:
-    image: redis:alpine
-    depends_on:
-      - redis
-    command:
-      - redis-cli
-      - -h
-      - redis
-      - set
-      - max-runs
-      - ${MAX_RUNS}
   sweep:
-    image: ethanabrooks/create-sweep:latest
+    image: ethanabrooks/create-sweep:262670ae8640
     depends_on:
       - redis
     volumes:
@@ -37,17 +26,20 @@ services:
       - --name=${NAME}
       - --project=gpt-rl
       - --method=${SWEEP_METHOD}
+      - --remaining-runs=${MAX_RUNS}
       - redis
   agent:
     build: .
     depends_on:
       - rank-counter
-      - max-runs
       - sweep
+    environment:
+      - GRAPHQL_ENDPOINT
+      - HOST_MACHINE
     entrypoint:
       - execute-sweep
       - --graphql-endpoint=${GRAPHQL_ENDPOINT}
-      - --command=python ${SCRIPT} sweep --graphql_endpoint=${GRAPHQL_ENDPOINT} --host_machine=${HOST_MACHINE} --sweep
+      - --command=python ${SCRIPT} sweep --sweep_id
     volumes:
       - "${PWD}/logs:/tmp/logs"
       - "${HOME}/.cache/GPT/:/root/.cache/GPT"
