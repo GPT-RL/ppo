@@ -605,7 +605,7 @@ redis = "^3.5.3"
 type = "git"
 url = "https://github.com/ethanabrooks/run-logger.git"
 reference = "main"
-resolved_reference = "103bdcf60f7b47bfdc071f5ffc061b339df9fd61"
+resolved_reference = "0c0060c07a6b6609645c5a75da97f3dffbcbef84"
 
 [[package]]
 name = "rx"
@@ -690,7 +690,7 @@ run-logger = {git = "https://github.com/ethanabrooks/run-logger.git", rev = "mai
 type = "git"
 url = "https://github.com/ethanabrooks/sweep-logger.git"
 reference = "main"
-resolved_reference = "3e932f34713820ee0c0347bf9fb38bc32588cf3a"
+resolved_reference = "1c3a9dc1a6539232cf32013f23ce662e6fb13af0"
 
 [[package]]
 name = "tokenizers"
@@ -765,7 +765,7 @@ test = ["pytest"]
 
 [[package]]
 name = "transformers"
-version = "4.9.0"
+version = "4.9.1"
 description = "State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch"
 category = "main"
 optional = false
@@ -1365,8 +1365,8 @@ traitlets = [
     {file = "traitlets-5.0.5.tar.gz", hash = "sha256:178f4ce988f69189f7e523337a3e11d91c786ded9360174a3d9ca83e79bc5396"},
 ]
 transformers = [
-    {file = "transformers-4.9.0-py3-none-any.whl", hash = "sha256:42d5f5fec3559947ce4f555f727553689ed31aa64173ad70072ed6a11dc8bb9f"},
-    {file = "transformers-4.9.0.tar.gz", hash = "sha256:c62617d174ccad5890f9c41ddaf9e0089d1ce4c64d1d324fd2ea1e2f2185f07a"},
+    {file = "transformers-4.9.1-py3-none-any.whl", hash = "sha256:86f3c46efecf114c6886d361c1d6cca14738f0e9d1effadb1e9252770cba55a0"},
+    {file = "transformers-4.9.1.tar.gz", hash = "sha256:1c30e38b2e0da15e110d9bb9a627f78de9569b9c6036d6533baf783015c339be"},
 ]
 typed-argument-parser = [
     {file = "typed-argument-parser-1.7.0.tar.gz", hash = "sha256:f28146f8f762fdabfd1544dfc54de247e32f58505b855a7e94a000baa708774d"},

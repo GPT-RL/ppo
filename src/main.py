@@ -272,7 +272,6 @@ class Trainer:
         excluded = {
             "subcommand",
             "log_level",
-            "log_interval",
             "save_interval",
             "save_path",
             "logger",
