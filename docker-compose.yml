@@ -14,7 +14,7 @@ services:
       - set
       - rank-counter
       - ${REPLICAS}
-  runs-counter:
+  max-runs:
     image: redis:alpine
     depends_on:
       - redis
@@ -23,8 +23,8 @@ services:
       - -h
       - redis
       - set
-      - runs-counter
-      - ${NUM_RUNS}
+      - max-runs
+      - ${MAX_RUNS}
   sweep:
     image: ethanabrooks/create-sweep:latest
     depends_on:
@@ -33,29 +33,23 @@ services:
       - .:/config
     command:
       - --config=/config/config.yml
+      - --graphql-endpoint=${GRAPHQL_ENDPOINT}
       - --name=${NAME}
       - --project=gpt-rl
       - --method=${SWEEP_METHOD}
       - redis
-    environment:
-      - HASURA_URI
-      - LOG_PATH
   agent:
     build: .
     depends_on:
       - rank-counter
-      - runs-counter
+      - max-runs
       - sweep
-    environment:
-      - HOST_MACHINE
-      - HASURA_URI
-      - LOG_PATH
-      - SCRIPT
-      - NUM_RUNS
     entrypoint:
       - execute-sweep
+      - --graphql-endpoint=${GRAPHQL_ENDPOINT}
+      - --command=python ${SCRIPT} sweep --graphql_endpoint=${GRAPHQL_ENDPOINT} --host_machine=${HOST_MACHINE} --sweep
     volumes:
-      - "${PWD}/logs:/tmp/bsuite"
+      - "${PWD}/logs:/tmp/logs"
       - "${HOME}/.cache/GPT/:/root/.cache/GPT"
       - "${HOME}/.cache/huggingface/:/root/.cache/huggingface"
     deploy:

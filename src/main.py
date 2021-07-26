@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 import torch
 import yaml
-from sweep_logger import Logger, get_logger
+from run_logger import HasuraLogger, Logger
 from tap import Tap
 
 import utils
@@ -31,18 +31,20 @@ HOURS = "hours"
 STEP = "step"
 
 
-class Run(Tap):
+class LoggerArgs(Tap):
+    graphql_endpoint: str
+    host_machine: str
+
+
+class Run(LoggerArgs):
     name: str
 
     def configure(self) -> None:
         self.add_argument("name", type=str)  # positional
 
 
-class Sweep(Tap):
+class Sweep(LoggerArgs):
     sweep_id: int = None
-
-    def configure(self) -> None:
-        self.add_argument("sweep_id", type=int)
 
 
 class Args(Tap):
@@ -287,13 +289,13 @@ class Trainer:
         if args.subcommand is None:
             return cls.train(args)
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
-        if host_machine := os.getenv("HOST_MACHINE"):
+        if host_machine := args.host_machine:
             metadata.update(host_machine=host_machine)
         if name := getattr(args, "name", None):
             metadata.update(name=name)
 
         logger: Logger
-        with get_logger("hasura") as logger:
+        with HasuraLogger(graphql_endpoint=args.graphql_endpoint) as logger:
             charts = [
                 spec(x=HOURS, y=EPISODE_RETURN),
                 *[
