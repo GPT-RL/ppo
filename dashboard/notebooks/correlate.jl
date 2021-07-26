@@ -13,12 +13,7 @@ begin
 	using JSON
 	using Chain
 	using Tables
-	using Match
-end
-
-# ╔═╡ f6396d66-cdd3-4fa5-afaa-7a43895250e0
-begin
-	using YAML
+	using MLStyle
 end
 
 # ╔═╡ 41bd06a2-e7bd-46c6-9249-6e69223b0e11
@@ -58,13 +53,16 @@ function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 	@chain query begin
 		gql_query(_; variables=Dict("ids" => sweep_ids, "max_step" => max_step))
 		_["logs_less_than_step"]		
-		map(d -> Dict(
+		map(_) do d
+			Dict(
 				"run_id" => d["run_id"],
 				"sweep_id" => d["run"]["sweep_id"],
 				d["log"]...,
 				d["run"]["metadata"]["parameters"]...
-				), _)
-		map(d -> Dict(
+			)
+		end
+		map(_) do d
+			Dict(
 				d...,
 				[k => v for (k1, v1, k2, v2) in [
 							(
@@ -82,7 +80,8 @@ function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 				[name => get(d, name, nothing) for name in [
 							"config",
 						]]... 
-				), _)
+			)
+		end
 		collect
 		vcat(DataFrame.(_)...)
 	end
@@ -92,43 +91,59 @@ end;
 sweeps = get_sweep([674, 675, 676, 677], 10000000)
 
 # ╔═╡ 1a6b7810-977d-4a82-ab14-b24e154ad491
-Set(1) == Set([1])
+EPISODE_RETURN = "episode return"
 
 # ╔═╡ 7e2ac3d5-9b72-4859-96a7-b6b8711e14b3
 min_returns = @chain sweeps begin
-	dropmissing(_, "episode return")
+	dropmissing(_, EPISODE_RETURN)
 	groupby(_, [:env])
-	combine(_, "episode return" => minimum)
-	Dict(k=>v for (k,v) in	eachrow(_))
+	combine(_, EPISODE_RETURN => minimum)
+	Dict(k=>v for (k,v) in eachrow(_))
 end
 
 # ╔═╡ 5a29110f-deca-4812-9240-ab445ed665c8
-
-
-# ╔═╡ 3e2890ce-8b1c-4241-aecf-856f16ee3e5c
-begin
-	x = (a=1, b=2)
-	(:a, :b) = x
-end
+max_returns = Dict(
+	"BeamRider-v0" => 1590, 
+	"PongNoFrameskip-v0" => 20.7, 
+	"Seaquest-v0" => 1204.5,
+	"Qbert-v0" => 14293.3
+) # from PPO paper
 
 # ╔═╡ c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
-@chain sweeps begin
+dframe = @chain sweeps begin
 	filter(:step => >=(9000000), _)
 	groupby(_, [:env])
-	transform(_, ["env", "episode return"] => (env, ret) ->begin
-			@match Set(env) begin
-				Set(x) => x
-				_ => throw(DomainError(Set(env)))
-			end
-		end)
-	_[!, ["env_episode return_function", "env", "episode return"]]
+	transform(_, ["env", EPISODE_RETURN] =>
+		function (envs, ret) 
+			@match [Set(envs)...] (
+				[env] => (ret .- min_returns[env]) ./ max_returns[env] 							)
+		end => [EPISODE_RETURN])
+	_[!, filter(names(_)) do name
+			!(name in [
+				"action loss",
+				"config",
+				"cuda",
+				"entropy",
+				"eval_interval",
+				"fps",
+				"gradient norm",
+				"hours",
+				"log_interval",
+				"log_level",
+				"num_env_steps",
+				"recurrent_policy",
+				"run_id",
+				"save_interval",
+				"save_path",
+				"step",
+				"subcommand",
+				"sweep_id",
+				"time", 
+				"time-delta",
+				"value loss",
+			])
+		end]
 end
-
-# ╔═╡ 63ed4848-ca9a-48bb-bd02-35b4bf69d039
-dframe = vcat(DataFrame.(dicts)...)
-
-# ╔═╡ 2fdc2937-098a-4dfe-bba5-58a9164337e7
-eltype(dframe[:, "subcommand"]) == String
 
 # ╔═╡ 2735fbc7-a318-4b4e-8ceb-0e65084cf972
 function filter_by_type(ty) 
@@ -136,15 +151,16 @@ function filter_by_type(ty)
 end
 
 # ╔═╡ 1fe4e26a-2786-4094-a7e5-0154b461e874
-begin
-	grouped = groupby(dframe, :run_id)
-	df = combine(grouped, 
+df = @chain dframe begin
+	groupby(_, "run ID")
+	combine(_, 
 		filter_by_type(Float64) .=> first,
 		filter_by_type(Int64) .=> first,
-		:episode_return .=> mean, 
+		EPISODE_RETURN .=> mean .=> :episode_return_mean,
 		)
-	sort!(df, [:episode_return_mean], rev=true)
-	df
+	_[!, filter(n -> !(n in  ["run ID", "episode return_first"]), names(_))]
+	sort!(_, [:episode_return_mean], rev=true)
+	rename(name -> replace(name, "_first" => ""), _)
 end
 
 # ╔═╡ 490d6756-f769-4a13-9438-ad724aa013ee
@@ -164,11 +180,15 @@ end
 
 # ╔═╡ c3e89733-4a83-48d4-bf34-9f4f7895b798
 function get_cor_df(df)
-	return_index = findfirst(name -> name == "episode_return_mean", names(df))
-	cor_mat = cor(Matrix(df))
+
 	cor_df = DataFrame()
-	cor_df.name = [replace(name, "_first" => "") for name in names(df)]
+	
+	cor_df.name = names(df)
+	
+	cor_mat = cor(Matrix(df))
+	return_index = findfirst(name -> name == "episode_return_mean", names(df))
 	cor_df.correlation = cor_mat[:, return_index]
+	
 	sort!(cor_df, [:correlation], )
 	cor_df
 end
@@ -185,19 +205,8 @@ md"# Discrete Correlation"
 # ╔═╡ 6c27eed0-e73d-4a44-b286-dca6ac404dbd
 get_cor_df(bool_df)
 
-# ╔═╡ c1c3f1d7-6f54-460f-8f20-f73ed183f8fe
-df[:, [:episode_return_mean, :run_id]]
-
-# ╔═╡ fc6f061c-777f-4948-ae88-58467410cf68
-run_ids = df[1:4, :run_id]
-
-# ╔═╡ 3059d226-95e7-439d-9f3a-81836d18eb8a
-parameters = [
-	run_dict["metadata"]["parameters"]
-	for run_dict in sweep
-		if run_dict["id"] in run_ids
-		]
-
+# ╔═╡ 8b15faf7-0d54-481f-a513-311e963dd8c1
+Dict(k => unique(df, k)[!, k] for k in names(df))
 
 # ╔═╡ Cell order:
 # ╠═6e3ef066-d115-11eb-2338-013a707dfe8a
@@ -208,19 +217,13 @@ parameters = [
 # ╠═1a6b7810-977d-4a82-ab14-b24e154ad491
 # ╠═7e2ac3d5-9b72-4859-96a7-b6b8711e14b3
 # ╠═5a29110f-deca-4812-9240-ab445ed665c8
-# ╠═3e2890ce-8b1c-4241-aecf-856f16ee3e5c
 # ╠═c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
-# ╟─63ed4848-ca9a-48bb-bd02-35b4bf69d039
-# ╟─2fdc2937-098a-4dfe-bba5-58a9164337e7
-# ╟─2735fbc7-a318-4b4e-8ceb-0e65084cf972
+# ╠═2735fbc7-a318-4b4e-8ceb-0e65084cf972
 # ╠═1fe4e26a-2786-4094-a7e5-0154b461e874
 # ╟─490d6756-f769-4a13-9438-ad724aa013ee
-# ╠═c3e89733-4a83-48d4-bf34-9f4f7895b798
-# ╠═f43f3cf4-b9e4-4c21-bf95-96a0c494c99b
-# ╟─a4cb4dbe-b880-4a4a-9b91-ccf6eaff1b07
-# ╠═5fb3a66b-49a2-41f6-aea5-65a2bd4d7240
+# ╟─c3e89733-4a83-48d4-bf34-9f4f7895b798
+# ╟─f43f3cf4-b9e4-4c21-bf95-96a0c494c99b
+# ╠═a4cb4dbe-b880-4a4a-9b91-ccf6eaff1b07
+# ╟─5fb3a66b-49a2-41f6-aea5-65a2bd4d7240
 # ╟─6c27eed0-e73d-4a44-b286-dca6ac404dbd
-# ╠═c1c3f1d7-6f54-460f-8f20-f73ed183f8fe
-# ╠═fc6f061c-777f-4948-ae88-58467410cf68
-# ╠═3059d226-95e7-439d-9f3a-81836d18eb8a
-# ╠═f6396d66-cdd3-4fa5-afaa-7a43895250e0
+# ╠═8b15faf7-0d54-481f-a513-311e963dd8c1
