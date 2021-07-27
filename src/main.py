@@ -316,6 +316,7 @@ class Trainer:
             if parameters is not None:
                 for k, v in parameters.items():
                     if k not in excluded:
+                        assert hasattr(args, k)
                         setattr(args, k, v)
             logger.update_metadata(
                 dict(parameters=args.as_dict(), run_id=logger.run_id)
