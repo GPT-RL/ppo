@@ -156,6 +156,7 @@ df = @chain dframe begin
 	combine(_, 
 		filter_by_type(Float64) .=> first,
 		filter_by_type(Int64) .=> first,
+		filter_by_type(Bool) .=> first,
 		EPISODE_RETURN .=> mean .=> :episode_return_mean,
 		)
 	_[!, filter(n -> !(n in  ["run ID", "episode return_first"]), names(_))]
@@ -220,7 +221,7 @@ Dict(k => unique(df, k)[!, k] for k in names(df))
 # ╠═c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
 # ╠═2735fbc7-a318-4b4e-8ceb-0e65084cf972
 # ╠═1fe4e26a-2786-4094-a7e5-0154b461e874
-# ╟─490d6756-f769-4a13-9438-ad724aa013ee
+# ╠═490d6756-f769-4a13-9438-ad724aa013ee
 # ╟─c3e89733-4a83-48d4-bf34-9f4f7895b798
 # ╟─f43f3cf4-b9e4-4c21-bf95-96a0c494c99b
 # ╠═a4cb4dbe-b880-4a4a-9b91-ccf6eaff1b07
