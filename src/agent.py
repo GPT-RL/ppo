@@ -57,7 +57,6 @@ class Agent(nn.Module):
             action = dist.sample()
 
         action_log_probs = dist.log_probs(action)
-        dist_entropy = dist.entropy().mean()
 
         return value, action, action_log_probs, rnn_hxs
 
@@ -101,6 +100,10 @@ class NNBase(nn.Module):
         return 1
 
     @property
+    def initial_hxs(self):
+        return torch.zeros(1, self.recurrent_hidden_state_size)
+
+    @property
     def output_size(self):
         return self._hidden_size
 
@@ -142,8 +145,9 @@ class NNBase(nn.Module):
                 start_idx = has_zeros[i]
                 end_idx = has_zeros[i + 1]
 
+                masks = masks[start_idx].view(1, -1, 1)
                 rnn_scores, hxs = self.rnn(
-                    x[start_idx:end_idx], hxs * masks[start_idx].view(1, -1, 1)
+                    x[start_idx:end_idx], hxs * masks + self.initial_hxs * (1 - masks)
                 )
 
                 outputs.append(rnn_scores)

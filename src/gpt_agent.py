@@ -64,10 +64,12 @@ class GPTCell(nn.Module):
     def forward(
         self, input: Tensor, hx: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor]:  # noqa: F811
-        hx = hx.reshape(-1, self.context_size, self.gpt.config.n_embd)
+        n_embd = self.gpt.config.n_embd
+        hx = hx.reshape(-1, self.context_size, (n_embd + 1))
         hx = torch.cat([hx, input.reshape(1, -1, 1)])
         hx = hx[:, 1:]
-        output = self.gpt(inputs_embeds=hx)
+        inputs_embeds, attention_mask = torch.split(hx, [n_embd, 1], dim=-1)
+        output = self.gpt(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
         return output, hx
 
 
@@ -106,7 +108,7 @@ class Base(NNBase):
         # Freeze GPT parameters
         for p in self.gpt.parameters():
             p.requires_grad_(False)
-        embedding_size = self.gpt.config.n_embd
+        self.embedding_size = embedding_size = self.gpt.config.n_embd
 
         init_ = lambda m: init(
             m,
@@ -136,6 +138,17 @@ class Base(NNBase):
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
 
         self.train()
+
+    @property
+    def recurrent_hidden_state_size(self):
+        return self.context_size * (self.embedding_size + 1)  # +1 for mask
+
+    @property
+    def initial_hxs(self):
+        hx = torch.zeros(1, self.recurrent_hidden_state_size)
+        hx = hx.reshape(-1, self.context_size, (self.embedding_size + 1))
+        hx[:, :-1, -1] = 1
+        return hx
 
     def forward(self, inputs, rnn_hxs, masks):
         perception = self.perception(inputs / 255.0)
