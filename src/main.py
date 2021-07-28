@@ -58,6 +58,7 @@ class Args(Tap):
     gae: bool = True  # use Generalized Advantage Estimation
     gae_lambda: float = 0.95  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
+    hidden_size: int = 512
     log_interval: int = 100  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
     log_level: str = "INFO"

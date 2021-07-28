@@ -141,6 +141,8 @@ class Rollouts(object):
                 )
             )
             mini_batch_size = batch_size // num_mini_batch
+        else:
+            assert batch_size % mini_batch_size == 0
         sampler = BatchSampler(
             SubsetRandomSampler(range(batch_size)), mini_batch_size, drop_last=True
         )
@@ -168,9 +170,9 @@ class Rollouts(object):
             "to be greater than or equal to the number of "
             "PPO mini batches ({}).".format(num_processes, num_mini_batch)
         )
-        num_envs_per_batch = num_processes // num_mini_batch
+        batch_size = num_processes // num_mini_batch
         perm = torch.randperm(num_processes)
-        for start_ind in range(0, num_processes, num_envs_per_batch):
+        for start_ind in range(0, num_processes, batch_size):
             obs_batch = []
             recurrent_hidden_states_batch = []
             actions_batch = []
@@ -180,7 +182,7 @@ class Rollouts(object):
             old_action_log_probs_batch = []
             adv_targ = []
 
-            for offset in range(num_envs_per_batch):
+            for offset in range(batch_size):
                 ind = perm[start_ind + offset]
                 obs_batch.append(self.obs[:-1, ind])
                 recurrent_hidden_states_batch.append(
@@ -193,7 +195,7 @@ class Rollouts(object):
                 old_action_log_probs_batch.append(self.action_log_probs[:, ind])
                 adv_targ.append(advantages[:, ind])
 
-            T, N = self.num_steps, num_envs_per_batch
+            T, N = self.num_steps, batch_size
             # These are all tensors of size (T, N, -1)
             obs_batch = torch.stack(obs_batch, 1)
             actions_batch = torch.stack(actions_batch, 1)

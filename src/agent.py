@@ -42,7 +42,9 @@ class Agent(nn.Module):
     @property
     def recurrent_hidden_state_size(self):
         """Size of rnn_hx."""
-        return self.base.recurrent_hidden_state_size
+        if self.is_recurrent:
+            return self.base.recurrent_hidden_state_size
+        return 2
 
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError

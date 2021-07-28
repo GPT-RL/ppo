@@ -6,7 +6,7 @@ from torch import Tensor
 from transformers import GPT2Config, GPT2Model
 
 import agent
-from agent import Flatten, NNBase
+from agent import NNBase
 from distributions import Bernoulli, Categorical, DiagGaussian
 from utils import init
 
@@ -78,13 +78,17 @@ class Base(NNBase):
         self,
         num_inputs,
         gpt_size: str,
-        num_embeddings: int,
         randomize_parameters: bool,
-        hidden_size=512,
+        hidden_size: int,
+        action_hidden_size: Optional[int],
+        kernel: int,
+        stride: int,
         recurrent=False,
     ):
         super().__init__(recurrent, hidden_size, hidden_size)
 
+        self.stride = stride
+        self.kernel = kernel
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
         gpt_size = f"gpt2{gpt_size}"
         self.gpt = (
@@ -104,7 +108,7 @@ class Base(NNBase):
                 output_hidden_states=False,
             )
         )
-        self.rnn = GPTCell(gpt=self.gpt, context_size=num_embeddings)
+        # self.rnn = GPTCell(gpt=self.gpt, context_size=num_embeddings)
         # Freeze GPT parameters
         for p in self.gpt.parameters():
             p.requires_grad_(False)
@@ -116,32 +120,40 @@ class Base(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain("relu"),
         )
-        self.perception = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, num_embeddings * embedding_size)),
-            nn.Unflatten(-1, (num_embeddings, embedding_size)),
+        self.perception = init_(
+            nn.Conv2d(
+                num_inputs,
+                embedding_size,
+                kernel_size=self.kernel,
+                stride=self.stride,
+            )
         )
-        self.gpt_output = nn.Sequential(
-            init_(nn.Linear(embedding_size, hidden_size)),
-            nn.ReLU(),
+        self.action = (
+            None
+            if action_hidden_size is None
+            else nn.Sequential(
+                init_(nn.Linear(embedding_size, action_hidden_size)),
+                nn.ReLU(),
+            )
         )
 
         init_ = lambda m: init(
             m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0)
         )
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self._output_size = (
+            embedding_size if action_hidden_size is None else action_hidden_size
+        )
+        self.critic_linear = init_(nn.Linear(self._output_size, 1))
 
         self.train()
 
     @property
     def recurrent_hidden_state_size(self):
         return self.context_size * (self.embedding_size + 1)  # +1 for mask
+
+    @property
+    def output_size(self):
+        return self._output_size
 
     @property
     def initial_hxs(self):
@@ -151,11 +163,15 @@ class Base(NNBase):
         return hx
 
     def forward(self, inputs, rnn_hxs, masks):
-        perception = self.perception(inputs / 255.0)
+        inputs = inputs / 255.0
+        inputs = torch.nn.functional.layer_norm(inputs, normalized_shape=inputs.shape)
+        perception = self.perception(inputs)
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)
         else:
-            x = self.gpt(inputs_embeds=perception).last_hidden_state[:, -1]
-            x = self.gpt_output(x)
+            inputs_embeds = perception.reshape(inputs.size(0), -1, self.embedding_size)
+            x = self.gpt(inputs_embeds=inputs_embeds).last_hidden_state[:, -1]
+            if self.action is not None:
+                x = self.action(x)
 
         return self.critic_linear(x), x, rnn_hxs
