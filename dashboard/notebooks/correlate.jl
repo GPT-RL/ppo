@@ -88,7 +88,9 @@ function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 end;
 
 # ╔═╡ da091e45-0d08-490a-ba85-ee9acb6700bc
-sweeps = get_sweep([674, 675, 676, 677], 10000000)
+sweeps = filter(get_sweep([784], 10000000)) do row
+				row.env == "Seaquest-v0"
+			end
 
 # ╔═╡ 1a6b7810-977d-4a82-ab14-b24e154ad491
 EPISODE_RETURN = "episode return"
@@ -111,7 +113,7 @@ max_returns = Dict(
 
 # ╔═╡ c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
 dframe = @chain sweeps begin
-	filter(:step => >=(9000000), _)
+	filter(:step => >=(8000000), _)
 	groupby(_, [:env])
 	transform(_, ["env", EPISODE_RETURN] =>
 		function (envs, ret) 
@@ -218,8 +220,8 @@ Dict(k => unique(df, k)[!, k] for k in names(df))
 # ╠═1a6b7810-977d-4a82-ab14-b24e154ad491
 # ╠═7e2ac3d5-9b72-4859-96a7-b6b8711e14b3
 # ╠═5a29110f-deca-4812-9240-ab445ed665c8
-# ╠═c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
 # ╠═2735fbc7-a318-4b4e-8ceb-0e65084cf972
+# ╠═c838c44c-4bd8-4eb0-a18b-ceaaa5bdce93
 # ╠═1fe4e26a-2786-4094-a7e5-0154b461e874
 # ╠═490d6756-f769-4a13-9438-ad724aa013ee
 # ╟─c3e89733-4a83-48d4-bf34-9f4f7895b798

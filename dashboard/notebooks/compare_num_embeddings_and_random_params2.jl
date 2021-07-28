@@ -37,9 +37,8 @@ md"""
 ## Looking Back
 
 ### Updates from last time
-Compared
-  - Performance on current source code to previous source code
-  - Graphs colored by `num_embeddings` parameter but results were inconclusive because parameters were randomly sampled.
+  - Compared performance on current source code to previous source code
+  - Showed graphs colored by `num_embeddings` parameter but results were inconclusive because parameters were randomly sampled.
 
 ### Goals set last time
 - Compare pretrained GPT to GPT with randomized parameters
@@ -70,9 +69,17 @@ md"""
 The following graph compares the performance of our GPT architecture with and without randomized (but still frozen) GPT parameters. The randomized parameter architecture is still running, so results are currently inconclusive.
 """
 
+# ╔═╡ 942d8c47-bb2f-410c-aeea-cb2e0190cfcf
+md"""
+| ` num_embeddings` | pretrained | random |
+|-------------------|------------|--------|
+| Breakout          | 8          | 2      |
+| Beamrider         | 4          | 4      |
+"""
+
 # ╔═╡ ab745b36-164c-4534-be1f-a703a2010f3e
 md"""
-## Graph comparing GPT architectures by number of embeddings
+## Choose best hyperparameters (one set across all games for each num_embeddings)
 Currently the parameter sweep is still in progress. I am performing grid-search on the following:
 -  `env`:
     - Seaquest-v0
@@ -96,19 +103,40 @@ Currently the parameter sweep is still in progress. I am performing grid-search 
     - 2
     - 4
     - 8
-So far only the grid search on Seaquest is complete:
+Grid search is not complete, but there does seem to already be some correlation between performance and `num_embeddings`.
 """
+
+# ╔═╡ 43695fbb-f8f2-4c05-a149-7ae545b2c738
+md"##"
+
+# ╔═╡ a0b13a5c-0337-43ba-89b1-e277954d4d94
+md"##"
+
+# ╔═╡ 7d96dcb9-3d63-4d14-b092-411109a7fac0
+md"##"
+
+# ╔═╡ ce675911-0344-43b6-8a8d-6750ddbb1924
+max_returns = Dict(
+	"BeamRider-v0" => 1590, 
+	"PongNoFrameskip-v0" => 20.7, 
+	"BreakoutNoFrameskip-v0" => 274.8, 
+	"Seaquest-v0" => 1204.5,
+	"Qbert-v0" => 14293.3
+) ;# from PPO paper
+
+# ╔═╡ 42b94309-0cf6-4220-9c91-1fa9ba1b37af
+EPISODE_RETURN = "episode return";
+
+# ╔═╡ ab24c6bd-2721-4162-a8c2-fd7aabab1155
+md"##"
 
 # ╔═╡ 3838787a-f138-45ec-9a58-7879aeab9b99
 md"""
 ## Linguistic Analysis
-We are currently rerunning the best BeamRider run, saving
-- the input observation
-- the perception output
-- the action logits
-at set intervals.
+We performed analysis on the best BeamRider run using GPT-2 `medium`, which can be viewed [here](https://colab.research.google.com/drive/1heCWKd8oyOSMLtaVxpezIaSQZ9ODnyeP#scrollTo=nSrYCATp_oKa).
 
-We chose BeamRider because we significantly outperformed the baseline on this task. When the run is complete we will run linguistic analysis on the saved data.
+A high level summary of that we found:
+ - a
 """
 
 # ╔═╡ 8798b46c-1b0b-4d34-93ef-1d5062f8a632
@@ -182,7 +210,7 @@ colors(n) = cmap("I1"; N=n);
 
 # ╔═╡ 16ce1ff4-3a0e-48e5-ae84-30afb618804c
 begin
-	num_embeddings = [1,2,4,6,8]
+	num_embeddings = [1,2,4,8]
 	color_scale = Scale.color_discrete_hue(colors, levels=reverse(num_embeddings))
 end;
 
@@ -234,6 +262,8 @@ gadfly_theme = :default;
 
 # ╔═╡ 0f54629c-e045-47bf-90a5-36e44c05b8f0
 function sweep_runs(sweep_ids::AbstractVector{Int}, max_step::Int)
+	set_default_plot_size(18cm, 15cm)
+
 	query = """
 		query getSweepRuns(\$ids: [Int!], \$max_step: Int!) {
 		  logs_less_than_step(args: {max_step: \$max_step}, where: {run: {sweep_id: {_in: \$ids}}}) {
@@ -382,7 +412,7 @@ begin
 			Geom.hline(style=:dot,color="#b88fff"),
 			Scale.color_discrete(colors),
 			Guide.colorkey(title="Random Parameters"),
-			Guide.title("Breakout"),
+			Guide.title("BeamRider"),
 			alpha=[0.5]
 		) |> HTMLDocument
 	end
@@ -396,10 +426,56 @@ begin
 				row.env == "Seaquest-v0"
 			end,
 			x=:step, y="episode return",
+			yintercept=[1204.5],
+			group=:run_id,
+			color="num_embeddings",
+			Guide.xlabel("Step"),
+			Guide.ylabel("Episode Return"),
+			Geom.line,
+			Geom.hline(style=:dot,color="purple"),
+			color_scale,
+			Guide.colorkey(title="#embeddings"),
+			Guide.title("Seaquest"),
+			alpha=[0.5]
+		) |> HTMLDocument
+	end
+end
+
+# ╔═╡ e8572b0c-6556-4c22-aa0f-cddbbda8b954
+begin
+	Gadfly.with_theme(gadfly_theme) do
+		plot(
+			filter(sweep_runs([784], 10000000)) do row
+				row.env == "BeamRider-v0"
+			end,
+			x=:step, y="episode return",
+			yintercept=[1590],
+			group=:run_id,
+			color="num_embeddings",
+			Guide.xlabel("Step"),
+			Guide.ylabel("Episode Return"),
+			Geom.line,
+			Geom.hline(style=:dot,color="purple"),
+			color_scale,
+			Guide.colorkey(title="#embeddings"),
+			Guide.title("BeamRider"),
+			alpha=[0.5]
+		) |> HTMLDocument
+	end
+end
+
+# ╔═╡ acdc2e20-8bb2-41f7-95db-973fd969490b
+begin
+	Gadfly.with_theme(gadfly_theme) do
+		plot(
+			filter(sweep_runs([784], 10000000)) do row
+				row.env == "BreakoutNoFrameskip-v0"
+			end,
+			x=:step, y="episode return",
 			yintercept=[274.8],
 			group=:run_id,
 			color="num_embeddings",
-			Guide.xlabel("Time Step"),
+			Guide.xlabel("Step"),
 			Guide.ylabel("Episode Return"),
 			Geom.line,
 			Geom.hline(style=:dot,color="purple"),
@@ -410,6 +486,140 @@ begin
 		) |> HTMLDocument
 	end
 end
+
+# ╔═╡ 4e37c894-cdd4-48b2-a25a-cf7cda2d6d7b
+sweeps = sweep_runs([784], 10000000) ;
+
+# ╔═╡ df070706-0482-4804-84cd-03f9655dac88
+min_returns = @chain sweeps begin
+	dropmissing(_, EPISODE_RETURN)
+	groupby(_, [:env])
+	combine(_, EPISODE_RETURN => minimum)
+	Dict(k=>v for (k,v) in eachrow(_))
+end;
+
+# ╔═╡ 132deac0-130a-4bab-8ae9-460f5a66a776
+dframe = @chain sweeps begin
+	filter(:step => >=(8000000), _)
+	groupby(_, [:env])
+	transform(_, ["env", EPISODE_RETURN] =>
+		function (envs, ret) 
+			@match [Set(envs)...] (
+				[env] => (ret .- min_returns[env]) ./ max_returns[env]
+			)
+		end => [EPISODE_RETURN])
+	_[!, filter(names(_)) do name
+			!(name in [
+				"action loss",
+				"config",
+				"cuda",
+				"entropy",
+				"env",
+				"eval_interval",
+				"fps",
+				"gradient norm",
+				"hours",
+				"log_interval",
+				"log_level",
+				"num_env_steps",
+				"recurrent_policy",
+				"run_id",
+				"save_interval",
+				"save_path",
+				"step",
+				"subcommand",
+				"sweep_id",
+				"time", 
+				"time-delta",
+				"value loss",
+			])
+		end]
+end;
+
+# ╔═╡ cadd8b9d-791d-41d6-9f6c-b549d3bbd45f
+function filter_by_type(ty) 
+	filter(name -> eltype(dframe[:, name]) == ty, names(dframe))
+end;
+
+# ╔═╡ b0d1c3b7-3cd6-4cd6-81b5-ad09f3d5cd10
+df = @chain dframe begin
+	groupby(_, "run ID")
+	combine(_, 
+		filter_by_type(Float64) .=> first,
+		filter_by_type(Int64) .=> first,
+		filter_by_type(Bool) .=> first,
+		EPISODE_RETURN .=> mean .=> :episode_return_mean,
+		"env_name" .=> first .=> :env,
+		)
+	_[!, filter(n -> !(n in  ["run ID", "episode return_first"]), names(_))]
+	sort!(_, [:episode_return_mean], rev=true)
+	rename(name -> replace(name, "_first" => ""), _)
+end;
+
+# ╔═╡ 2a1fcf4d-19bb-40d9-90d1-62155843b853
+begin
+	bool_df = DataFrame()
+	for name in names(df)
+		if !occursin("episode_return", name)
+			for value in df[:, name]
+				new_name = string(replace(name, "_first"=>""), " = ", value)
+				bool_df[:, :($new_name)] = df[:, name] .== value
+			end
+		end
+	end
+    bool_df.episode_return_mean = df.episode_return_mean
+	bool_df
+end;
+
+# ╔═╡ 98c0fea9-f348-4e30-81c5-4e2f1e5e239e
+function get_cor_df(env)
+	
+	filtered = @chain df begin
+		filter(row -> row.env == env, _)
+		_[!, filter(name -> name != "env", names(_))]
+	end
+	
+	bool_df = DataFrame()
+	for name in names(df)
+		if !occursin("episode_return", name)
+			for value in df[:, name]
+				new_name = string(replace(name, "_first"=>""), " = ", value)
+				bool_df[:, :($new_name)] = df[:, name] .== value
+			end
+		end
+	end
+    bool_df.episode_return_mean = df.episode_return_mean
+	
+	cor_mat = cor(Matrix(bool_df))
+	return_index = findfirst(name -> name == "episode_return_mean", names(bool_df))
+	
+	correlation = cor_mat[:, return_index]
+	
+	name = names(bool_df)
+	mapping = Dict(zip(name, correlation))
+	[
+		mapping["num_embeddings = 1"], 
+		mapping["num_embeddings = 2"],
+		mapping["num_embeddings = 4"],
+		mapping["num_embeddings = 8"],
+	]
+end;
+
+# ╔═╡ 8bf7862f-9be4-44de-9d14-b8056d9d27c2
+cor_df = vcat([
+		DataFrame(
+			num_embeddings=[1, 2, 4, 8],
+			env=repeat([env], 4),
+			correlation=get_cor_df(env)
+			) for env in [
+				"Seaquest-v0",
+				"BreakoutNoFrameskip-v4", 
+				"BeamRider-v0",
+			]
+		]...)
+
+# ╔═╡ 5a968482-35cc-4afa-b658-0ab130a47508
+plot(cor_df, x=:num_embeddings, y=:correlation, color=:env, Geom.point, Geom.line)
 
 # ╔═╡ bbed8889-d401-4167-9370-9927aabbc83b
 # @bind window_size Select(string.(collapse_runs ? (100:100:500) : (1:10)), default=collapse_runs ? "200" : "5")
@@ -425,9 +635,27 @@ window_size = "11";
 # ╟─654ad80a-a802-49d5-8373-b0b4056fd8f1
 # ╟─67944dbb-0ebb-44d9-b6f3-79e8d5610f61
 # ╠═de9db738-822c-4bd6-8516-a35bd7369929
+# ╟─942d8c47-bb2f-410c-aeea-cb2e0190cfcf
 # ╟─ab745b36-164c-4534-be1f-a703a2010f3e
-# ╟─c85805a8-725d-4a84-8e8a-e1f3f1ddeae5
-# ╟─3838787a-f138-45ec-9a58-7879aeab9b99
+# ╟─43695fbb-f8f2-4c05-a149-7ae545b2c738
+# ╠═c85805a8-725d-4a84-8e8a-e1f3f1ddeae5
+# ╟─a0b13a5c-0337-43ba-89b1-e277954d4d94
+# ╟─e8572b0c-6556-4c22-aa0f-cddbbda8b954
+# ╟─7d96dcb9-3d63-4d14-b092-411109a7fac0
+# ╟─acdc2e20-8bb2-41f7-95db-973fd969490b
+# ╟─4e37c894-cdd4-48b2-a25a-cf7cda2d6d7b
+# ╟─df070706-0482-4804-84cd-03f9655dac88
+# ╟─ce675911-0344-43b6-8a8d-6750ddbb1924
+# ╟─cadd8b9d-791d-41d6-9f6c-b549d3bbd45f
+# ╟─42b94309-0cf6-4220-9c91-1fa9ba1b37af
+# ╟─132deac0-130a-4bab-8ae9-460f5a66a776
+# ╟─b0d1c3b7-3cd6-4cd6-81b5-ad09f3d5cd10
+# ╟─2a1fcf4d-19bb-40d9-90d1-62155843b853
+# ╟─98c0fea9-f348-4e30-81c5-4e2f1e5e239e
+# ╟─ab24c6bd-2721-4162-a8c2-fd7aabab1155
+# ╠═8bf7862f-9be4-44de-9d14-b8056d9d27c2
+# ╠═5a968482-35cc-4afa-b658-0ab130a47508
+# ╠═3838787a-f138-45ec-9a58-7879aeab9b99
 # ╟─8798b46c-1b0b-4d34-93ef-1d5062f8a632
 # ╠═33909132-16c2-4eb3-97d3-607010a82e52
 # ╟─16ce1ff4-3a0e-48e5-ae84-30afb618804c
