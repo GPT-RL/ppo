@@ -47,7 +47,7 @@ class Agent(agent.Agent):
                 dict(
                     inputs=inputs,
                     perception=self.base.perception(inputs),
-                    action_log_probs=action_log_probs,
+                    probs=dist.probs,
                 ),
                 self.save_path,
             )
