@@ -120,13 +120,12 @@ class Base(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain("relu"),
         )
-        self.perception = init_(
-            nn.Conv2d(
-                num_inputs,
-                embedding_size,
-                kernel_size=self.kernel,
-                stride=self.stride,
-            )
+        self.perception = nn.Sequential(
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, embedding_size, 3, stride=1)),
         )
         self.action = (
             None
@@ -164,7 +163,7 @@ class Base(NNBase):
 
     def forward(self, inputs, rnn_hxs, masks):
         inputs = inputs / 255.0
-        inputs = torch.nn.functional.layer_norm(inputs, normalized_shape=inputs.shape)
+        # inputs = torch.nn.functional.layer_norm(inputs, normalized_shape=inputs.shape)
         perception = self.perception(inputs)
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)
