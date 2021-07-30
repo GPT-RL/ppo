@@ -2,13 +2,14 @@ import pickle
 import random
 from pathlib import Path
 from itertools import chain
+from typing import Tuple
 
 import pandas as pd
 import numpy as np
 import torch
 import umap
 from tap import Tap
-from transformers import GPT2Model, GPT2TokenizerFast
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
 BASE_PATH = Path("/root/.cache/GPT/linguistic_analysis")
 UMAP_CONFIGS = [
@@ -28,16 +29,16 @@ class Args(Tap):
     seed: int = 1234
     n_random_embs: int = 5000
     top_k_neighbors: int = 5
+    lm_batch_size: int = 8
 
     def configure(self):
         self.add_argument("input_path")
         self.add_argument("output_path")
 
 
-def quantile_summary(df: pd.DataFrame) -> pd.DataFrame:
-    result = df.describe()
-    result = result.loc[result.index != "count"].transpose()
-    result.index.name = "quantile"
+def get_summary(df: pd.DataFrame, index_name: str) -> pd.DataFrame:
+    result = df.describe().transpose()
+    result.index.name = index_name
     result.reset_index(inplace=True)
     return result
 
@@ -54,10 +55,35 @@ def relative_quantile_summary(
     pairwise_dists: torch.Tensor, quantiles: torch.Tensor
 ) -> pd.DataFrame:
     q = torch.quantile(pairwise_dists, quantiles, dim=1)
-    q = pd.DataFrame(
-        q.cpu().numpy().T, columns=quantiles.cpu().numpy().round(2).tolist()
-    )
-    return quantile_summary(q)
+    q = pd.DataFrame(q.cpu().numpy().T, columns=quantile_labels)
+    return get_summary(q, "quantile")
+
+
+def get_neighbors(
+    pairwise_dists, top_k: int, batch_size: int, seq_len: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    unflatten = torch.nn.Unflatten(0, (batch_size, seq_len))
+    neighbor_dists, neighbors = torch.topk(pairwise_dists, top_k, dim=1)
+    neighbor_dists = unflatten(neighbor_dists).cpu().numpy()
+    neighbors = unflatten(neighbors).cpu().numpy()
+    return (neighbors, neighbor_dists)
+
+
+def model_lps(model: GPT2LMHeadModel, neighbors: torch.Tensor) -> torch.Tensor:
+    # TODO: how to choose from the neighbors. should use same strategy as for perception.
+
+    # For each position in the sequence, calculate the probability distribution of
+    # the next token.
+    logits = model(input_ids=batch).logits
+    lps = torch.nn.functional.log_softmax(logits[:, :-1], dim=-1)
+
+    # Extract the log-probability that was assigned to the token that actually appears
+    # next.
+    indices = batch[:, 1:, None]
+    lps = lps.gather(-1, indices)
+
+    # Calculate the log-probability of each sequence.
+    return lps.sum(dim=1).squeeze()
 
 
 def main(args: Args):
@@ -78,7 +104,7 @@ def main(args: Args):
     # Load tokenizer, model, and embeddings.
     tokenizer = GPT2TokenizerFast.from_pretrained(args.gpt_size)
     token_texts = tokenizer.batch_decode([[i] for i in range(tokenizer.vocab_size)])
-    model = GPT2Model.from_pretrained(args.gpt_size)
+    model = GPT2LMHeadModel.from_pretrained(args.gpt_size)
     embs = model.get_input_embeddings().weight.detach().cuda()
     np_embs = embs.cpu().numpy()
 
@@ -117,6 +143,7 @@ def main(args: Args):
 
     # Pairwise distances
     quantiles = torch.linspace(0, 1, 11).cuda()
+    quantile_labels = quantiles.cpu().numpy().round(2).tolist()
     if not args.gpt_dists_path.exists():
         # Calculate pairwise distances between GPT rand_dists.
         # Divide by the norm to make computing the cosine distances easier
@@ -135,11 +162,9 @@ def main(args: Args):
         summaries = torch.stack(summaries, dim=0)
 
         # Summarise the distances.
-        gpt_summary = pd.DataFrame(
-            summaries.cpu().numpy(), columns=quantiles.cpu().numpy().round(2).tolist()
-        )
+        gpt_summary = pd.DataFrame(summaries.cpu().numpy(), columns=quantile_labels)
         del summaries
-        gpt_summary = quantile_summary(gpt_summary)
+        gpt_summary = get_summary(gpt_summary, "quantile")
         gpt_summary["embedding"] = "GPT-2"
 
         # Calculate the pairwise distances between GPT embeddings and random vectors.
@@ -163,12 +188,39 @@ def main(args: Args):
     perception_summary.to_csv(args.output_path / "pairwise-distance-summary.csv")
 
     # For each perception embedding, find the top-k nearest GPT embeddings.
-    unflatten = torch.nn.Unflatten(0, (batch_size, seq_len))
-    neighbor_dists, neighbors = torch.topk(
-        perception_pairwise, args.top_k_neighbors, dim=1
+    neighbors, neighbor_dists = get_neighbors(
+        perception_pairwise, args.top_k_neighbors, batch_size, seq_len
     )
-    neighbor_dists = unflatten(neighbor_dists).cpu().numpy()
-    neighbors = unflatten(neighbors).cpu().numpy()
+
+    ############# TODO: Does it make sense to aggregate twice here? Maybe don't need quantiles.
+    lm_lp_stats = model_lps(model, neighbors).quantile(quantiles).detach().cpu().numpy()
+    lm_lp_stats = pd.DataFrame(lm_lp_stats, columns=quantile_labels)
+    lm_lp_stats["embedding"] = "Perception"
+    ########################################
+
+    # Calculate the log-prob of random sequences of vectors under the model.
+    n_batches = np.ciel(args.n_random_embs / (args.lm_batch_size * seq_len))
+    sequence_lps = []
+    for _ in range(n_batches):
+        # Generate random sequences of embeddings and find their nearest neighbors.
+        rand_embs = torch.rand(
+            (args.lm_batch_size * seq_len, model.config.n_embd),
+        ).cuda()
+        rand_pairwise = pairwise_cosine_distances(rand_embs, embs)
+        del rand_embs
+        neighbors, _ = get_neighbors(
+            rand_pairwise, args.top_k_neighbors, args.lm_batch_size, seq_len
+        )
+        del rand_pairwise
+        # Calculate the log-probability of each sequence.
+        sequence_lps.append(model_lps(model, neighbors))
+    rand_stats = (
+        pd.DataFrame(dict(random=torch.cat(sequence_lps).detach().cpu().numpy()))
+        .describe()
+        .transpose()
+    )
+    rand_stats["embedding"] = "Random"
+    lm_lp_stats = lm_lp_stats.append(rand_stats)
 
 
 if __name__ == "__main__":
