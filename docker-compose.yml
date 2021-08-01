@@ -39,7 +39,7 @@ services:
     entrypoint:
       - execute-sweep
       - --graphql-endpoint=${GRAPHQL_ENDPOINT}
-      - --command=python ${SCRIPT} sweep --sweep_id
+      - --command=python ${SCRIPT} sweep --sweep
     volumes:
       - "${PWD}/logs:/tmp/logs"
       - "${HOME}/.cache/GPT/:/root/.cache/GPT"
