@@ -123,9 +123,9 @@ class Base(NNBase):
         self.perception = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
             nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, embedding_size, 3, stride=1)),
+            init_(nn.Conv2d(32, 64, 8, stride=4)),
+            # nn.ReLU(),
+            # init_(nn.Conv2d(64, embedding_size, 3, stride=1)),
         )
         self.action = (
             None
