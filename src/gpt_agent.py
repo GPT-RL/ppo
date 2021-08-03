@@ -168,9 +168,7 @@ class Base(NNBase):
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)
         else:
-            inputs_embeds = perception.reshape(
-                inputs.size(0), self.embedding_size, -1
-            ).transpose(1, 2)
+            inputs_embeds = perception.reshape(inputs.size(0), -1, self.embedding_size)
             x = self.gpt(inputs_embeds=inputs_embeds).last_hidden_state[:, -1]
             if self.action is not None:
                 x = self.action(x)
