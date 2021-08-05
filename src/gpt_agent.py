@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
@@ -12,11 +13,12 @@ from utils import init
 
 
 class Agent(agent.Agent):
-    def __init__(self, obs_shape, action_space, save_interval, save_path, **kwargs):
+    def __init__(self, obs_shape, action_space, save_interval, save_dir, **kwargs):
         nn.Module.__init__(self)
 
         self.step = 0
-        self.save_path = save_path
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
+        self.save_path = Path(save_dir, "linguistic-analysis.pkl")
         self.save_interval = save_interval
         self.base = Base(obs_shape[0], **kwargs)
 
@@ -42,7 +44,11 @@ class Agent(agent.Agent):
             action = dist.sample()
 
         action_log_probs = dist.log_probs(action)
-        if self.step % self.save_interval == 0 and self.save_path is not None:
+        if (
+            self.save_interval is not None
+            and self.step % self.save_interval == 0
+            and self.save_path is not None
+        ):
             torch.save(
                 dict(
                     inputs=inputs,
@@ -81,14 +87,13 @@ class Base(NNBase):
         randomize_parameters: bool,
         hidden_size: int,
         action_hidden_size: Optional[int],
-        kernel: int,
-        stride: int,
+        transpose: bool,
+        one_layer: bool,
         recurrent=False,
     ):
         super().__init__(recurrent, hidden_size, hidden_size)
 
-        self.stride = stride
-        self.kernel = kernel
+        self.transpose = transpose
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
         gpt_size = f"gpt2{gpt_size}"
         self.gpt = (
@@ -121,11 +126,15 @@ class Base(NNBase):
             nn.init.calculate_gain("relu"),
         )
         self.perception = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 8, stride=4)),
-            # nn.ReLU(),
-            # init_(nn.Conv2d(64, embedding_size, 3, stride=1)),
+            *(
+                [init_(nn.Conv2d(num_inputs, embedding_size, 64, stride=8))]
+                if one_layer
+                else [
+                    init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+                    nn.ReLU(),
+                    init_(nn.Conv2d(32, embedding_size, 16, stride=2)),
+                ]
+            )
         )
         self.action = (
             None
@@ -168,7 +177,13 @@ class Base(NNBase):
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)
         else:
-            inputs_embeds = perception.reshape(inputs.size(0), -1, self.embedding_size)
+            inputs_embeds = (
+                perception.reshape(inputs.size(0), self.embedding_size, -1).transpose(
+                    2, 1
+                )
+                if self.transpose
+                else perception.reshape(inputs.size(0), -1, self.embedding_size)
+            )
             x = self.gpt(inputs_embeds=inputs_embeds).last_hidden_state[:, -1]
             if self.action is not None:
                 x = self.action(x)
