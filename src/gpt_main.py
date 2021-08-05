@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from pprint import pformat
 from typing import Literal, Optional
 
@@ -16,11 +17,13 @@ class Args(main.Args):
         "small", "medium", "large", "xl"
     ] = "medium"  # what size of pretrained GPT to use
     kernel: int = 16
-    linguistic_analysis_path: Optional[
+    linguistic_analysis_save_interval: Optional[
         str
     ] = None  # path to save linguistic analysis data
     randomize_parameters: bool = False
     stride: int = 8
+    transpose: bool = True
+    one_layer: bool = False
 
 
 class Trainer(main.Trainer):
@@ -31,13 +34,13 @@ class Trainer(main.Trainer):
             action_space=action_space,
             gpt_size=args.gpt_size,
             hidden_size=args.hidden_size,
-            kernel=args.kernel,
             obs_shape=obs_shape,
+            one_layer=args.one_layer,
             randomize_parameters=args.randomize_parameters,
             recurrent=args.recurrent_policy,
-            save_interval=args.save_interval,
-            save_path=args.linguistic_analysis_path,
-            stride=args.stride,
+            save_interval=args.linguistic_analysis_save_interval,
+            save_dir=args.save_dir,
+            transpose=args.transpose,
         )
 
     @staticmethod
@@ -49,14 +52,15 @@ class Trainer(main.Trainer):
         }
         logging.info("Saving parameters:")
         logging.info(pformat([*non_gpt_params]))
+        save_path = Path(args.save_dir, f"checkpoint.pkl")
         torch.save(
             dict(
                 **non_gpt_params,
                 obs_rms=getattr(utils.get_vec_normalize(envs), "obs_rms", None),
             ),
-            args.save_path,
+            save_path,
         )
-        logging.info(f"Saved to {args.save_path}")
+        logging.info(f"Saved to {save_path}")
 
 
 if __name__ == "__main__":

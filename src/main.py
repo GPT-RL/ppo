@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 import torch
 import yaml
-from run_logger import HasuraLogger, Logger
+from sweep_logger import HasuraLogger, Logger
 from tap import Tap
 
 import utils
@@ -70,8 +70,8 @@ class Args(Tap):
     num_steps: int = 128  # number of forward steps in A2C
     ppo_epoch: int = 3  # number of PPO updates
     recurrent_policy: bool = False  # use recurrence in the policy
-    save_interval: int = 1000  # how many updates to save between
-    save_path: Optional[str] = None  # path to save parameters if saving locally
+    save_interval: Optional[int] = None  # how many updates to save between
+    save_dir: str = "/tmp/logs"  # path to save parameters if saving locally
     seed: int = 0  # random seed
     use_proper_time_limits: bool = False  # compute returns with time limits
     value_coef: float = 1  # value loss coefficient
@@ -94,6 +94,9 @@ class Trainer:
         if args.cuda and torch.cuda.is_available():
             torch.backends.cudnn.benchmark = False
             torch.backends.cudnn.deterministic = True
+
+        if logger is not None:
+            args.save_dir = Path(args.save_dir, str(logger.run_id))
 
         torch.set_num_threads(1)
         device = torch.device("cuda:0" if args.cuda else "cpu")
@@ -208,9 +211,13 @@ class Trainer:
             rollouts.after_update()
 
             # save for every interval-th episode or for the last epoch
-            if j % args.save_interval == 0 or j == num_updates - 1:
-                if args.save_path:
-                    Path(args.save_path).parent.mkdir(parents=True, exist_ok=True)
+            if (
+                args.save_interval is not None
+                and j % args.save_interval == 0
+                or j == num_updates - 1
+            ):
+                if args.save_dir:
+                    args.save_dir.mkdir(parents=True, exist_ok=True)
                     cls.save(agent, args, envs)
 
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
@@ -257,7 +264,7 @@ class Trainer:
                 agent,
                 getattr(utils.get_vec_normalize(envs), "obs_rms", None),
             ],
-            args.save_path,
+            Path(args.save_dir, f"checkpoint.pkl"),
         )
 
     @staticmethod
