@@ -98,10 +98,11 @@ def main(args: Args):
     # Load input data.
     with args.input_path.open("rb") as f:
         analysis_data = torch.load(f)
-    batch_size, seq_len, _ = analysis_data["perception"].shape
+
     observations = analysis_data["inputs"].detach().cpu().numpy().astype(np.uint8)
-    actions = analysis_data["action_log_probs"].detach().cpu().numpy()
+    actions = analysis_data["probs"].detach().cpu().numpy()
     perceptions = analysis_data["perception"]
+    batch_size, seq_len, _ = perceptions.shape
     flat_perceptions = torch.flatten(perceptions, start_dim=0, end_dim=1)
     np_perceptions = flat_perceptions.cpu().numpy()
     del analysis_data
@@ -147,7 +148,7 @@ def main(args: Args):
                 y=np.concatenate([embs_umap[:, 1], perception_umap[:, 1]], axis=0),
                 source=["GPT"] * len(embs_umap) + perception_labels,
                 token=token_texts + perception_labels,
-                umap=name.rstrip("-dist.pkl"),
+                umap=name.rstrip(".pkl"),
             )
         )
         umap_df = umap_df.append(df)
@@ -201,6 +202,7 @@ def main(args: Args):
     )
     perception_summary["embedding"] = "Perception"
     perception_summary = perception_summary.append(gpt_summary)
+    perception_summary.set_index("embedding", drop=True, inplace=True)
     perception_summary.to_csv(args.output_path / "pairwise-distance-summary.csv")
 
     # For each perception embedding, find the top-k nearest GPT embeddings.
@@ -211,7 +213,13 @@ def main(args: Args):
     # Find the log-probability of each sequence of GPT embeddings under the language model.
     perception_lps = model_lps(model, neighbors)
     lm_lp_summary = perception_lps.quantile(quantiles).detach().cpu().numpy()
-    lm_lp_summary = pd.DataFrame(lm_lp_summary[None, :], columns=quantile_labels)
+    lm_lp_summary = (
+        pd.DataFrame(lm_lp_summary[None, :], columns=quantile_labels)
+        .transpose()
+        .rename({0: "log_prob"}, axis="columns")
+    )
+    lm_lp_summary.index.name = "quantile"
+    lm_lp_summary.reset_index(inplace=True)
     lm_lp_summary["embedding"] = "Perception"
     lm_lp_summary.set_index("embedding", drop=True, inplace=True)
     perception_lps = perception_lps.detach().cpu().numpy()
@@ -234,21 +242,27 @@ def main(args: Args):
         sequence_lps.append(model_lps(model, neighbors))
 
     rand_lps = torch.cat(sequence_lps).quantile(quantiles).detach().cpu().numpy()
-    rand_summary = pd.DataFrame(rand_lps[None, :], columns=quantile_labels)
+    rand_summary = (
+        pd.DataFrame(rand_lps[None, :], columns=quantile_labels)
+        .transpose()
+        .rename({0: "log_prob"}, axis="columns")
+    )
+    rand_summary.index.name = "quantile"
+    rand_summary.reset_index(inplace=True)
     rand_summary["embedding"] = "Random"
     rand_summary.set_index("embedding", drop=True, inplace=True)
     lm_lp_summary = lm_lp_summary.append(rand_summary)
 
     lm_lp_summary.to_csv(args.output_path / "lm-lp-summary.csv")
 
-    with jsonlines.open(
-        str(args.output_path / "steps.jsonl"), mode="w"
-    ) as writer:
+    with jsonlines.open(str(args.output_path / "steps.jsonl"), mode="w") as writer:
         for obs, ns, lp, acts in zip(observations, neighbors, perception_lps, actions):
             writer.write(
                 dict(
                     observation=obs.tolist(),
-                    perception_tokens=ns.tolist(),
+                    perception_tokens=[
+                        tokenizer.batch_decode(token_ids[:, None]) for token_ids in ns
+                    ],
                     perception_log_prob=lp.astype(float),
                     actions=acts.tolist(),
                 )
