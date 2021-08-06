@@ -4,6 +4,7 @@ services:
     build: .
     volumes:
       - "./notebooks:/workspace/notebooks"
+      - "$HOME/.cache/GPT/linguistic_analysis:/workspace/linguistic_analysis"
     ports:
       - "7777:7777"
     command:
