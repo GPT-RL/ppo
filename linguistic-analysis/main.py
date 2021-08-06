@@ -31,6 +31,7 @@ class Args(Tap):
     n_random_embs: int = 1000
     top_k_neighbors: int = 5
     lm_batch_size: int = 8
+    transposed: bool = False
 
     def configure(self):
         self.add_argument("input_path")
@@ -102,6 +103,14 @@ def main(args: Args):
     observations = analysis_data["inputs"].detach().cpu().numpy().astype(np.uint8)
     actions = analysis_data["probs"].detach().cpu().numpy()
     perceptions = analysis_data["perception"]
+
+    if len(perceptions.size()) == 4:
+        if args.transposed:
+            perceptions = perceptions.flatten(2, 3).transpose(1, 2)
+        else:
+            perceptions = perceptions.reshape(
+                perceptions.size(0), -1, perceptions.size(1)
+            )
     batch_size, seq_len, _ = perceptions.shape
     flat_perceptions = torch.flatten(perceptions, start_dim=0, end_dim=1)
     np_perceptions = flat_perceptions.cpu().numpy()
