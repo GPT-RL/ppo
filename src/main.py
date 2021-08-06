@@ -9,7 +9,6 @@ from typing import Optional
 import numpy as np
 import torch
 import yaml
-from sweep_logger import HasuraLogger, Logger
 from tap import Tap
 
 import utils
@@ -19,6 +18,7 @@ from evaluation import evaluate
 from ppo import PPO
 from rollouts import Rollouts
 from spec import spec
+from sweep_logger import HasuraLogger, Logger
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"

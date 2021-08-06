@@ -13,6 +13,7 @@ from gpt_agent import Agent
 
 class Args(main.Args):
     action_hidden_size: Optional[int] = None
+    data_parallel: bool = True
     gpt_size: Literal[
         "small", "medium", "large", "xl"
     ] = "medium"  # what size of pretrained GPT to use
@@ -32,6 +33,7 @@ class Trainer(main.Trainer):
         return Agent(
             action_hidden_size=args.action_hidden_size,
             action_space=action_space,
+            data_parallel=args.data_parallel,
             gpt_size=args.gpt_size,
             hidden_size=args.hidden_size,
             obs_shape=obs_shape,

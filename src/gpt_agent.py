@@ -13,7 +13,9 @@ from utils import init
 
 
 class Agent(agent.Agent):
-    def __init__(self, obs_shape, action_space, save_interval, save_dir, **kwargs):
+    def __init__(
+        self, obs_shape, action_space, save_interval, save_dir, data_parallel, **kwargs
+    ):
         nn.Module.__init__(self)
 
         self.step = 0
@@ -21,6 +23,8 @@ class Agent(agent.Agent):
         self.save_path = Path(save_dir, "linguistic-analysis.pkl")
         self.save_interval = save_interval
         self.base = Base(obs_shape[0], **kwargs)
+        if data_parallel:
+            self.base = DataParallel(self.base)
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
@@ -189,3 +193,11 @@ class Base(NNBase):
                 x = self.action(x)
 
         return self.critic_linear(x), x, rnn_hxs
+
+
+class DataParallel(nn.DataParallel):
+    def __getattr__(self, item):
+        try:
+            return super().__getattr__(item)
+        except AttributeError:
+            return getattr(self.module, item)
