@@ -1,5 +1,4 @@
 #! /usr/bin/env bash
-rm -rf logs
 mkdir -p logs ~/.cache/GPT ~/.cache/huggingface
 name=gpt
 docker build -t $name .
