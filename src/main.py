@@ -279,10 +279,6 @@ class Trainer:
     def main(cls, args: Args):
         excluded = {
             "subcommand",
-            "log_level",
-            "save_interval",
-            "save_path",
-            "logger",
             "sweep_id",
             "config",
             "name",
