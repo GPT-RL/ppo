@@ -127,7 +127,7 @@ class Base(NNBase):
         )
         self.perception = nn.Sequential(
             *(
-                [init_(nn.Conv2d(num_inputs, embedding_size, 64, stride=8))]
+                [init_(nn.Conv2d(num_inputs, embedding_size, 12, stride=12))]
                 if one_layer
                 else [
                     init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
