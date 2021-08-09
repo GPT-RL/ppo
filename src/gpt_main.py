@@ -43,24 +43,24 @@ class Trainer(main.Trainer):
             transpose=args.transpose,
         )
 
-    @staticmethod
-    def save(agent: Agent, args, envs):
-        gpt: GPT2Model = agent.base.gpt
-        gpt_params = {f"base.gpt.{k}": v for k, v in gpt.named_parameters()}
-        non_gpt_params = {
-            k: v for k, v in agent.named_parameters() if k not in gpt_params
-        }
-        logging.info("Saving parameters:")
-        logging.info(pformat([*non_gpt_params]))
-        save_path = Path(args.save_dir, f"checkpoint.pkl")
-        torch.save(
-            dict(
-                **non_gpt_params,
-                obs_rms=getattr(utils.get_vec_normalize(envs), "obs_rms", None),
-            ),
-            save_path,
-        )
-        logging.info(f"Saved to {save_path}")
+    # @staticmethod
+    # def save(agent: Agent, args, envs):
+        # gpt: GPT2Model = agent.base.gpt
+        # gpt_params = {f"base.gpt.{k}": v for k, v in gpt.named_parameters()}
+        # non_gpt_params = {
+            # k: v for k, v in agent.named_parameters() if k not in gpt_params
+        # }
+        # logging.info("Saving parameters:")
+        # logging.info(pformat([*non_gpt_params]))
+        # save_path = Path(args.save_dir, f"checkpoint.pkl")
+        # torch.save(
+            # dict(
+                # **non_gpt_params,
+                # obs_rms=getattr(utils.get_vec_normalize(envs), "obs_rms", None),
+            # ),
+            # save_path,
+        # )
+        # logging.info(f"Saved to {save_path}")
 
 
 if __name__ == "__main__":

@@ -96,28 +96,28 @@ class Base(NNBase):
         self.transpose = transpose
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
         gpt_size = f"gpt2{gpt_size}"
-        self.gpt = (
-            GPT2Model(
-                GPT2Config.from_pretrained(
-                    gpt_size,
-                    use_cache=False,
-                    output_attentions=False,
-                    output_hidden_states=False,
-                )
-            )
-            if randomize_parameters
-            else GPT2Model.from_pretrained(
-                gpt_size,
-                use_cache=False,
-                output_attentions=False,
-                output_hidden_states=False,
-            )
-        )
+        # self.gpt = (
+            # GPT2Model(
+                # GPT2Config.from_pretrained(
+                    # gpt_size,
+                    # use_cache=False,
+                    # output_attentions=False,
+                    # output_hidden_states=False,
+                # )
+            # )
+            # if randomize_parameters
+            # else GPT2Model.from_pretrained(
+                # gpt_size,
+                # use_cache=False,
+                # output_attentions=False,
+                # output_hidden_states=False,
+            # )
+        # )
         # self.rnn = GPTCell(gpt=self.gpt, context_size=num_embeddings)
         # Freeze GPT parameters
-        for p in self.gpt.parameters():
-            p.requires_grad_(False)
-        self.embedding_size = embedding_size = self.gpt.config.n_embd
+        # for p in self.gpt.parameters():
+            # p.requires_grad_(False)
+        self.embedding_size = embedding_size = 1024
 
         init_ = lambda m: init(
             m,
@@ -184,7 +184,8 @@ class Base(NNBase):
                 if self.transpose
                 else perception.reshape(inputs.size(0), -1, self.embedding_size)
             )
-            x = self.gpt(inputs_embeds=inputs_embeds).last_hidden_state[:, -1]
+            # x = self.gpt(inputs_embeds=inputs_embeds).last_hidden_state[:, -1]
+            x = inputs_embeds.sum(1)
             if self.action is not None:
                 x = self.action(x)
 
