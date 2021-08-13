@@ -15,14 +15,12 @@ services:
       - rank-counter
       - ${REPLICAS}
   sweep:
-    build: .
+    image: ethanabrooks/create-sweep@sha256:34b00a718054882b022e75980c24ec5ac9a456769ec394b4ea7c0baa87c77bfc
     depends_on:
       - redis
     volumes:
       - .:/config
-    entrypoint:
-      - python
-      - src/create_sweep.py
+    command:
       - --config=/config/config.yml
       - --graphql-endpoint=${GRAPHQL_ENDPOINT}
       - --name=${NAME}
@@ -39,8 +37,7 @@ services:
       - GRAPHQL_ENDPOINT
       - HOST_MACHINE
     entrypoint:
-      - python
-      - ./execute_sweep.py
+      - execute-sweep
       - --graphql-endpoint=${GRAPHQL_ENDPOINT}
       - --command=python ${SCRIPT} sweep --sweep
     volumes:
