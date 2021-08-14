@@ -45,6 +45,7 @@ class Args(Tap):
     gamma: float = 0.7  # Learning rate step gamma (default: 0.7)
     gpt_size: Literal["small", "medium", "large", "xl"] = None
     log_interval: int = 10
+    log_level: str = "INFO"
     lr: float = 1.0
     randomize_parameters: bool = False
     save_model: bool = False
@@ -79,15 +80,15 @@ class GPTNet(nn.Module):
                 output_hidden_states=False,
             )
         )
-        for p in self.gpt.parameters():
-            p.requires_grad_(False)
-        self.conv = nn.Conv2d(1, self.gpt.config.n_embd, 4, 4)
+        for name, p in self.gpt.named_parameters():
+            p.requires_grad_("wpe" in name or "ln" in name)
+        self.n_embd = self.gpt.config.n_embd
+        self.conv = nn.Conv2d(1, self.n_embd, 4, 4)
         self.out = nn.Linear(self.gpt.config.n_embd, 10)
 
     def forward(self, x):
-        breakpoint()
         x = self.conv(x)
-        x = x.reshape(x.size(0), self.embedding_size, -1).transpose(2, 1)
+        x = x.reshape(x.size(0), self.n_embd, -1).transpose(2, 1)
         x = self.gpt(inputs_embeds=x).last_hidden_state[:, -1]
         x = self.out(x)
         output = F.log_softmax(x, dim=1)
@@ -105,7 +106,6 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
-        breakpoint()
         x = self.conv1(x)
         x = F.relu(x)
         x = self.conv2(x)
@@ -178,6 +178,7 @@ def test(model, device, test_loader, epoch, logger: Optional[Logger]):
 
 
 def main(args: Args):
+    logging.getLogger().setLevel(args.log_level)
     excluded = {
         "subcommand",
         "sweep_id",
