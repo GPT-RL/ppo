@@ -41,7 +41,7 @@ class Args(Tap):
     config: Optional[str] = None
     cuda: bool = True
     dry_run: bool = False  # quickly check a single pass
-    epochs: int = 30
+    epochs: int = 14
     gamma: float = 0.7  # Learning rate step gamma (default: 0.7)
     gpt_size: Literal["small", "medium", "large", "xl"] = None
     log_interval: int = 10
@@ -146,9 +146,13 @@ def train(
         loss.backward()
         optimizer.step()
         if batch_idx % args.log_interval == 0:
-            log = {EPOCH: epoch, TRAIN_LOSS: loss.item()}
+            log = {
+                EPOCH: epoch,
+                TRAIN_LOSS: loss.item(),
+            }
             logging.info(pformat(log))
             if logger is not None:
+                log.update({"run ID": logger.run_id})
                 logger.log(log)
             if args.dry_run:
                 break
@@ -177,6 +181,9 @@ def test(model, device, test_loader, epoch, logger: Optional[Logger]):
         TEST_LOSS: test_loss,
         TEST_ACCURACY: 100.0 * correct / len(test_loader.dataset),
     }
+    if logger is not None:
+        log.update({"run ID": logger.run_id})
+        logger.log(log)
     logging.info(pformat(log))
     if logger is not None:
         logger.log(log)
