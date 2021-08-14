@@ -41,7 +41,7 @@ class Args(Tap):
     config: Optional[str] = None
     cuda: bool = True
     dry_run: bool = False  # quickly check a single pass
-    epochs: int = 14
+    epochs: int = 30
     gamma: float = 0.7  # Learning rate step gamma (default: 0.7)
     gpt_size: Literal["small", "medium", "large", "xl"] = None
     log_interval: int = 10
@@ -255,7 +255,10 @@ def run(args, logger: Logger = None):
         Net()
         if args.gpt_size is None
         else GPTNet(
-            gpt_size=args.gpt_size, randomize_parameters=args.randomize_parameters, train_ln=args.train_ln, train_wpe=args.train_wpe
+            gpt_size=args.gpt_size,
+            randomize_parameters=args.randomize_parameters,
+            train_ln=args.train_ln,
+            train_wpe=args.train_wpe,
         )
     ).to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
