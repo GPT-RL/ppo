@@ -51,6 +51,8 @@ class Args(Tap):
     save_model: bool = False
     seed: int = 1
     test_batch_size: int = 1000
+    train_ln: bool = True
+    train_wpe: bool = True
 
     def configure(self) -> None:
         self.add_subparsers(dest="subcommand")
@@ -59,7 +61,9 @@ class Args(Tap):
 
 
 class GPTNet(nn.Module):
-    def __init__(self, gpt_size: str, randomize_parameters):
+    def __init__(
+        self, gpt_size: str, randomize_parameters: bool, train_ln: bool, train_wpe: bool
+    ):
         super().__init__()
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
         gpt_size = f"gpt2{gpt_size}"
@@ -81,7 +85,8 @@ class GPTNet(nn.Module):
             )
         )
         for name, p in self.gpt.named_parameters():
-            p.requires_grad_("wpe" in name or "ln" in name)
+            requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
+            p.requires_grad_(requires_grad)
         self.n_embd = self.gpt.config.n_embd
         self.conv = nn.Conv2d(1, self.n_embd, 4, 4)
         self.out = nn.Linear(self.gpt.config.n_embd, 10)
@@ -250,7 +255,7 @@ def run(args, logger: Logger = None):
         Net()
         if args.gpt_size is None
         else GPTNet(
-            gpt_size=args.gpt_size, randomize_parameters=args.randomize_parameters
+            gpt_size=args.gpt_size, randomize_parameters=args.randomize_parameters, train_ln=args.train_ln, train_wpe=args.train_wpe
         )
     ).to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
