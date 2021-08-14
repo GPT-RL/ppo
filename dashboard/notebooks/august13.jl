@@ -48,121 +48,91 @@ md"""
 # Looking Back
 
 ### Updates from last time
-- linguistic analysis:
-  - Distribution of distances to GPT-2 embeddings.
-  - Log-probability of embedding sequences.
-  - View samples
-- Comparison of pretrained GPT2 with randomized weights:
-  - Negative result on Seaquest
-  - Probably negative result on smaller architecture
+- Additional negative result on QBert
+- Result suggesting similar performance from "No GPT" architecture.
 
 ### Goals set last time
-- Check if randomized weights in Abbeel paper were frozen.
-- Compare random vs. pretrained across 2 more environments.
-- Show progression of similarities over course of training (maybe just putting through neural network is sufficient to account for similarities).
-- Compare log-probability with bytes sampled from random corpus.
-- Compare log-probability with repeated words (maybe repetition is all that accounts for improved probability).
-- Pick a domain in which four embeddings improves over one embedding as a signal that repetition is not sufficient.
-- Record value as well as action in vew-samples analysis.
-- Check distance between input and GPT output.
-- Prime GPT with description?
-- Double check that GPT2 with random parameters is actually random.
-- Try with linear projection instead of patches.
-- Don't overfit on Atari: Try BabyAI.
+- Linguistic analysis:
+  - Show progression of similarities over course of training (maybe just putting through neural network is sufficient to account for similarities)
+  - Compare log-probability with bytes sampled from random corpus.
+  - Compare log-probability with repeated words (maybe repetition is all that accounts for improved probability)
+  - Pick a domain in which four embeddings improves over one embedding as a signal that repetition is not sufficient.
+  - Record value as well as action
+  - Check distance between input and GPT output.
+  - priming?
+- RL:
+  - Don't overfit on Atari: Try BabyAI!!
+  - Try hyperparam search on "No GPT"
+  - Try different domain on No GPT
+  - Do not act at every time-step
+  - Try Baby AI next
+  - Auxiliary task to reconstruct input?
+  - reproduce Abbeel result.
 """
 
 # ╔═╡ 5fc027ad-704f-4045-b281-08a128a204ea
 ling_analysis_colors = collect(Plots.palette(:tab10));
 
-# ╔═╡ cfc7da80-170d-4eac-8367-f4c4a4aeadb2
+# ╔═╡ e3648f92-3be9-4cf8-9c53-c8da7d8a495c
 md"""
-# Response to question about Abbeel paper
-
-> Hi Ethan,
->
-> Excited to hear you're interested in our work! In Section 3.4, the random weights were frozen. By the way, in our v2 version, Appendix D is a bit more explicit as to where exactly each number comes from.
->
-> Best,
-> Kevin
+# Additional Results with "No-GPT" architecture
 """
 
-# ╔═╡ cf3ec4b5-c187-422b-81e5-dd1f03b9d96c
+# ╔═╡ 36db8d48-40f4-4c99-b371-9786ea05bc1f
 md"""
-# Validation of Random Initialization 
-```python
-import argparse
+# "Two-Convolution, Multi-Embedding" Architecture
+- Convolution with 
+  - output-size $32$
+  - kernel-shape $8\times 8$
+  - stride $4\times 4$
+- ReLU
+- Convolution with 
+  - **output-size $1024$ (GPT embedding size)**
+  - kernel-shape $16\times 16$
+  - stride $2\times 2$
+  - This results in `num_embeddings = 9`
+- **GPT2 Medium Architecture**
+- single 64 neuron dense layer
+- one layer projecting to action and value
 
-from torch import Tensor
-from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
+Comparison of best run with randomized parameters is currently running.
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--random", type=bool)  # toggles random vs. pretrained
-random = parser.parse_args().random
-
-gpt_size = "gpt2-medium"
-tokenizer = GPT2Tokenizer.from_pretrained(gpt_size)  # convert string to tokens
-
-# initialize model
-model = (
-    GPT2LMHeadModel(
-        GPT2Config.from_pretrained(
-            gpt_size,
-            pad_token_id=tokenizer.eos_token_id,
-            use_cache=False,
-            output_attentions=False,
-            output_hidden_states=False,
-        )
-    )
-    if random
-    else GPT2LMHeadModel.from_pretrained(
-        gpt_size,
-        pad_token_id=tokenizer.eos_token_id,
-        use_cache=False,
-        output_attentions=False,
-        output_hidden_states=False,
-    )
-)
-
-# context sentence
-input_ids = Tensor(
-    tokenizer.encode("I enjoy walking with my cute dog", return_tensors="np")
-).long()
-
-# generate text until the output length (which includes the context length) reaches 50
-greedy_output = model.generate(input_ids, max_length=50)
-
-print("Output:\n" + 100 * "-")
-print(tokenizer.decode(greedy_output[0], skip_special_tokens=True))
-```
-```
-$ python generate_text.py --random
-
-Output:
-------------------------------------------------------------------------------------
-I enjoy walking with my cute dog suitable autonom//////////////// pac TBotle keyboards curtain skirtsmanufactynastygat renamed bachelor////////////////� airspace Matthew LevinEL9203 Comes9292 Eden Cyborg Denis Matthew Matthew mushroomfighter Shattered Remote orthodox unsu Matthewotlegregation eased92 Fram92
-
-$ python generate_text.py
-
-Output:
-------------------------------------------------------------------------------------
-I enjoy walking with my cute dog, but I'm not sure if I can do it with my cat. I'm not sure if I can do it with my cat.
-
-I'm not sure if I can do it with my cat.
-```
 """
 
-# ╔═╡ d9f3c726-79e9-4c43-95ad-b73e508630a7
+# ╔═╡ 28f09bbc-e85c-413b-a94a-846d14b06556
 md"""
-# Comparison of Pretrained and Random Parameters
-- On the original architecture, pretrained and random parameters seem to show equivalent performance on three Atari games
-- Smaller architectures are capable of learning Atari games.
-- One smaller architecture exhibited little to no advantage over the random parameters.
-- Smaller architectures are either still in hyperparameter search, or the comparison runs have not yet converged.
+# "Two-Convolution, Multi-Embedding" Architecture "No GPT variant"
+- Convolution with 
+  - output-size $32$
+  - kernel-shape $8\times 8$
+  - stride $4\times 4$
+- ReLU
+- Convolution with 
+  - **output-size $1024$ (GPT embedding size)**
+  - kernel-shape $16\times 16$
+  - stride $2\times 2$
+  - This results in `num_embeddings = 9`
+- **Sum-pool operator**
+- single 64 neuron dense layer
+- one layer projecting to action and value
+
+Comparison of best run with randomized parameters is currently running.
+
 """
 
-# ╔═╡ 1501042a-1ae2-44c6-a513-c36b4389fa72
-function original_architecture_description(env, pretrained, random)
-	return md"""
+# ╔═╡ 2224f4cf-ad95-445a-a9ed-355cef9da6e8
+md"#"
+
+# ╔═╡ bdbdda23-99c8-4565-91e5-e51c4a9e6c95
+md"#"
+
+# ╔═╡ f6755212-65bc-4c1f-8f91-bb42bdc182f2
+md"""
+# Jax implementation of GPT2
+"""
+
+# ╔═╡ 737eccff-ff97-44b2-8c3a-fc6dbff1df86
+description = md"""
 # "Original" Architecture
 - Convolution with 
   - output-size $32$
@@ -183,112 +153,39 @@ function original_architecture_description(env, pretrained, random)
 - **GPT2 Medium Architecture**
 - **one 512-neuron layer**
 - one layer projecting to action and value
-
-|  | pretrained | random |
-|-------------------|------------|--------|
-| ` num_embeddings`         | $(pretrained)          | $(random)      |
-"""
-end;
-
-# ╔═╡ 8fc7b1d2-15db-4356-b5f3-08c60ea2886c
-original_architecture_description("Qbert", 8, 8)
-
-# ╔═╡ ea7a2d4d-69e9-4046-bb78-c6e4c36fb4b6
-original_architecture_description("", 8, 8)
-
-# ╔═╡ 55ded444-4341-4132-9183-abb96671eea5
-original_architecture_description("BeamRider", 4, 4)
-
-# ╔═╡ e42a103e-292e-4fb8-b7c9-8cb47273d2cc
-original_architecture_description("Breakout", 8, 2)
-
-# ╔═╡ bca9cc5e-c243-4135-a350-393c50a99783
-md"""
-# Results with more minimal architectures
 """
 
-# ╔═╡ 187cff60-2820-43fd-9486-d0dd6f322fde
-md"""
-# "One-Convolution, Multi-Embedding" Architecture
-- Convolution with 
-  - **output-size $1024$**
-  - kernel-shape $12\times 12$
-  - stride $12\times 12$
-  - This results in `num_embeddings = 49`
-- **GPT2 Medium Architecture**
-- single layer chosen from 
-  - 32
-  - 64
-  - 128
-  - none
-- one layer projecting to action and value
+# ╔═╡ 3fabc2dc-63a3-41ce-9bc5-3c37faf05e44
+description
 
-Currently running.
-"""
-
-# ╔═╡ 36db8d48-40f4-4c99-b371-9786ea05bc1f
-md"""
-## "Two-Convolution, Multi-Embedding" Architecture
-- Convolution with 
-  - output-size $32$
-  - kernel-shape $8\times 8$
-  - stride $4\times 4$
-- ReLU
-- Convolution with 
-  - **output-size $1024$ (GPT embedding size)**
-  - kernel-shape $16\times 16$
-  - stride $2\times 2$
-  - This results in `num_embeddings = 9`
-- **GPT2 Medium Architecture**
-- single 64 neuron dense layer
-- one layer projecting to action and value
-
-Comparison of best run with randomized parameters is currently running.
-
-"""
-
-# ╔═╡ f739cd9f-f6fb-4203-8af6-801408c69c3d
-md"""
-## "Two-Convolution, Multi-Embedding" Architecture "No GPT variant"
-- Convolution with 
-  - output-size $32$
-  - kernel-shape $8\times 8$
-  - stride $4\times 4$
-- ReLU
-- Convolution with 
-  - **output-size $1024$ (GPT embedding size)**
-  - kernel-shape $16\times 16$
-  - stride $2\times 2$
-  - This results in `num_embeddings = 9`
-- **Sum-pool operator**
-- single 64 neuron dense layer
-- one layer projecting to action and value
-
-Comparison of best run with randomized parameters is currently running.
-
-"""
+# ╔═╡ af593e6f-fe37-4302-a726-b1ef3a7a1cf9
+md"#"
 
 # ╔═╡ a3ed2be4-b4c3-4490-8971-daac16b5967d
 md"""
 # To Do
-- Compare random vs. pretrained on one more environments.
-- Show progression of similarities over course of training (maybe just putting through neural network is sufficient to account for similarities)
-- Compare log-probability with bytes sampled from random corpus.
-- Compare log-probability with repeated words (maybe repetition is all that accounts for improved probability)
-- Pick a domain in which four embeddings improves over one embedding as a signal that repetition is not sufficient.
-- Record value as well as action
-- Check distance between input and GPT output.
-- priming?
-- Try with linear projection instead of patches.
-- Don't overfit on Atari: Try BabyAI!!
-
-- Try hyperparam search on No GPT
-- Try different domain on No GPT
-- Do not let GPT speak at every time-step
-- Try Baby AI next
-- Auxiliary task to reconstruct input?
-- reproduce Abbeel result.
-- Another machine!
+- Linguistic analysis:
+  - Show progression of similarities over course of training (maybe just putting through neural network is sufficient to account for similarities)
+  - Compare log-probability with bytes sampled from random corpus.
+  - Compare log-probability with repeated words (maybe repetition is all that accounts for improved probability)
+  - Pick a domain in which four embeddings improves over one embedding as a signal that repetition is not sufficient.
+  - Record value as well as action
+  - Check distance between input and GPT output.
+  - priming?
+- RL:
+  - Don't overfit on Atari: Try BabyAI!!
+  - Try hyperparam search on "No GPT"
+  - Try different domain on No GPT
+  - Do not act at every time-step
+  - Try Baby AI next
+  - Auxiliary task to reconstruct input?
+  - reproduce Abbeel result.
+  
+  - Use mean and std for graphs
+  - On supervised, ablate training of positional weights
+  - On supervised, ablate training of layernorm params
+  - 8 graphs
+  - compare with Abbeel
 """
 
 # ╔═╡ d121c942-2b52-4c5a-8739-a9afd6f402fd
@@ -393,11 +290,64 @@ function sweep_runs(sweep_ids::AbstractVector{Int}, max_step::Int)
 							"stride",
 							"one_layer", 
 							"transpose",
+							"actor_steps", 
+							"batch_size", 
+							"checkpoint_frequency", 
+							"decaying_lr_and_clip_param",
+							"entropy_coeff",
+							"lambda_",
+							"learning_rate",
+							"log_frequency",
+							"num_agents",
+							"num_epochs",
+							"total_frames",
+							"vf_coeff",
+							"workdir",
+							"action loss",
+							"alpha",
+							"cuda",
+							"entropy_coef",
+							"eps",
+							"eval_interval",
+							"gae",
+							"gae_lambda",
+							"hidden_size",
+							"linear_lr_decay",
+							"linguistic_analysis_save_interval",
+							"log_interval",
+							"lr",
+							"max_grad_norm",
+							"num_env_steps",
+							"num_mini_batch",
+							"num_processes",
+							"num_steps",
+							"ppo_epoch",
+							"recurrent_policy",
+							"save_dir",
+							"save_interval",
+							"use_proper_time_limits",
+							"value loss",
+							"value_coef",
 						]]... 
 				), _)
 		filter(d -> !isnothing(d["episode return"]), _)
 	end
 	vcat(DataFrame.(rows)...)
+end;
+
+# ╔═╡ 9f0af273-08b0-4bc2-939b-caf3bf423ac5
+torch_vs_jax_data = @chain sweep_runs([865, 832], 10000000) begin
+		groupby(_, [:sweep_id])
+		DataFrames.transform(_, 
+			[:sweep_id] => 
+			(ids) -> map(ids) do id
+				@match id begin
+					865 => "Jax version"
+					832 => "Torch version"
+					_ => throw(DomainError())
+				end
+			end
+		)
 end;
 
 # ╔═╡ f53e9f0c-b53d-4db6-abe2-2be82077bf38
@@ -428,6 +378,33 @@ ppo_scores = Dict(
 	"PongNoFrameskip-v4" => 20.7
 	)
 
+# ╔═╡ 49ae40f6-016d-4f23-b30c-bcafd1ecd6fe
+begin
+	data = torch_vs_jax_data
+	legend_title="Architecture"
+	color="sweep_id_function"
+	labels = nothing
+	env = first(data)[:env]
+	yintercept = ppo_scores[env]
+	Gadfly.with_theme(gadfly_theme) do
+		plot(
+			data,
+			x=:hours, y="episode return",
+			yintercept=[yintercept],
+			group=:run_id,
+			color=color,
+			Guide.xlabel("Hours"),
+			Guide.ylabel("Episode Return"),
+			Geom.line,
+			Geom.hline(style=:dot,color="#b88fff"),
+			Scale.color_discrete(colors, preserve_order=false),
+			Guide.colorkey(title=legend_title, labels=labels),
+			Guide.title(env),
+			alpha=[0.5]
+		) |> HTMLDocument
+	end
+end
+
 # ╔═╡ 0a6d3d99-37bc-40f4-95e5-91ef76b29844
 function plot_returns(;
 		data,
@@ -456,52 +433,16 @@ function plot_returns(;
 	end
 end
 
-# ╔═╡ 5839b81d-98ad-4672-ba05-2c92762c602a
-plot_returns(
-	data=filter(sweep_runs([831], 50000000)) do row
-		row.env == "Qbert-v0"
-	end, 
-	color=:randomize_parameters,
-	legend_title="Random Parameters"
-)
-
-# ╔═╡ fc36279e-2088-4eba-b48a-f05e82443540
-plot_returns(
-	data=sweep_runs([826], 50000000),  
-	color=:randomize_parameters,
-	legend_title="Random Parameters"
-)
-
-# ╔═╡ baf58341-a518-40ca-bafa-d2e4127b3089
-plot_returns(
-	data=sweep_runs([787, 690], 50000000), 
-	color=:randomize_parameters,
-	legend_title="Random Parameters"
-)
-
-# ╔═╡ e7bd101e-a647-4ffd-9770-27c350396831
-plot_returns(
-	data=sweep_runs([687, 672], 50000000), 
-	color=:randomize_parameters,
-	legend_title="Random Parameters"
-)
-
-# ╔═╡ fdc8f9ff-11e6-4a14-b4f5-44030672bd1d
-plot_returns(
-	data=sweep_runs([827], 50000000), 
-	color="run ID",
-	legend_title="Random Parameters"
-)
-
 # ╔═╡ 5a55fb1a-2b96-4d3c-b274-58adf26e975d
 begin
-	@chain sweep_runs([830, 828], 50000000) begin
+	@chain sweep_runs([860, 830, 828], 50000000) begin
 		groupby(_, [:sweep_id, :randomize_parameters])
 		DataFrames.transform(_, 
 			[:sweep_id, :randomize_parameters] => 
 			(ids, rps) -> map(zip(ids, rps)) do (id, rp)
 				@match (id, rp) begin
-					(830, _) => "No GPT"
+					(860, _) => "No GPT (after hyperparameter search)"
+					(830, _) => "No GPT (same hyperparameters as Pretrained)"
 					(_, true) => "Randomized GPT"
 					(_, false) => "Pretrained GPT"
 					_ => throw(DomainError())
@@ -516,15 +457,16 @@ begin
 	end
 end
 
-# ╔═╡ cf8c89cf-54ad-40ef-8900-ae0a8b28f469
+# ╔═╡ 129a0898-f69b-405d-9af4-5da7360a8235
 begin
-	@chain sweep_runs([830, 828], 50000000) begin
+	@chain sweep_runs([869, 861, 826], 5000000) begin
 		groupby(_, [:sweep_id, :randomize_parameters])
 		DataFrames.transform(_, 
 			[:sweep_id, :randomize_parameters] => 
 			(ids, rps) -> map(zip(ids, rps)) do (id, rp)
 				@match (id, rp) begin
-					(830, _) => "No GPT"
+					(861, _) => "No GPT (after hyperparameter search)"
+					(869, _) => "No GPT (same hyperparameters as Pretrained)"
 					(_, true) => "Randomized GPT"
 					(_, false) => "Pretrained GPT"
 					_ => throw(DomainError())
@@ -538,6 +480,13 @@ begin
 		)
 	end
 end
+
+# ╔═╡ 22ff27c0-3c7b-4c29-b3a1-c6dccf6e1e3f
+plot_returns(
+	data=torch_vs_jax_data, 
+	color="run ID",
+	legend_title="Architecture"
+)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1978,25 +1927,20 @@ version = "0.9.1+5"
 # ╟─0035970f-f027-4eea-91e2-113b22710002
 # ╟─c47d2950-cd1f-47a3-a213-b06a27eb0746
 # ╟─5fc027ad-704f-4045-b281-08a128a204ea
-# ╟─cfc7da80-170d-4eac-8367-f4c4a4aeadb2
-# ╟─cf3ec4b5-c187-422b-81e5-dd1f03b9d96c
-# ╟─d9f3c726-79e9-4c43-95ad-b73e508630a7
-# ╟─1501042a-1ae2-44c6-a513-c36b4389fa72
-# ╠═8fc7b1d2-15db-4356-b5f3-08c60ea2886c
-# ╟─5839b81d-98ad-4672-ba05-2c92762c602a
-# ╟─ea7a2d4d-69e9-4046-bb78-c6e4c36fb4b6
-# ╟─fc36279e-2088-4eba-b48a-f05e82443540
-# ╟─55ded444-4341-4132-9183-abb96671eea5
-# ╟─baf58341-a518-40ca-bafa-d2e4127b3089
-# ╟─e42a103e-292e-4fb8-b7c9-8cb47273d2cc
-# ╟─e7bd101e-a647-4ffd-9770-27c350396831
-# ╟─bca9cc5e-c243-4135-a350-393c50a99783
-# ╟─187cff60-2820-43fd-9486-d0dd6f322fde
-# ╟─fdc8f9ff-11e6-4a14-b4f5-44030672bd1d
+# ╟─e3648f92-3be9-4cf8-9c53-c8da7d8a495c
 # ╟─36db8d48-40f4-4c99-b371-9786ea05bc1f
+# ╟─28f09bbc-e85c-413b-a94a-846d14b06556
+# ╟─2224f4cf-ad95-445a-a9ed-355cef9da6e8
 # ╟─5a55fb1a-2b96-4d3c-b274-58adf26e975d
-# ╠═f739cd9f-f6fb-4203-8af6-801408c69c3d
-# ╟─cf8c89cf-54ad-40ef-8900-ae0a8b28f469
+# ╟─bdbdda23-99c8-4565-91e5-e51c4a9e6c95
+# ╟─129a0898-f69b-405d-9af4-5da7360a8235
+# ╟─9f0af273-08b0-4bc2-939b-caf3bf423ac5
+# ╟─f6755212-65bc-4c1f-8f91-bb42bdc182f2
+# ╟─737eccff-ff97-44b2-8c3a-fc6dbff1df86
+# ╠═22ff27c0-3c7b-4c29-b3a1-c6dccf6e1e3f
+# ╟─3fabc2dc-63a3-41ce-9bc5-3c37faf05e44
+# ╟─af593e6f-fe37-4302-a726-b1ef3a7a1cf9
+# ╟─49ae40f6-016d-4f23-b30c-bcafd1ecd6fe
 # ╠═a3ed2be4-b4c3-4490-8971-daac16b5967d
 # ╠═d121c942-2b52-4c5a-8739-a9afd6f402fd
 # ╠═0a6d3d99-37bc-40f4-95e5-91ef76b29844
