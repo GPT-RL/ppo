@@ -47,6 +47,7 @@ class Args(Tap):
     log_interval: int = 10
     log_level: str = "INFO"
     lr: float = 1.0
+    one_layer: bool = True
     randomize_parameters: bool = False
     save_model: bool = False
     seed: int = 1
@@ -62,7 +63,12 @@ class Args(Tap):
 
 class GPTNet(nn.Module):
     def __init__(
-        self, gpt_size: str, randomize_parameters: bool, train_ln: bool, train_wpe: bool
+        self,
+        gpt_size: str,
+        randomize_parameters: bool,
+        train_ln: bool,
+        train_wpe: bool,
+        one_layer: bool,
     ):
         super().__init__()
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
@@ -88,7 +94,15 @@ class GPTNet(nn.Module):
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
         self.n_embd = self.gpt.config.n_embd
-        self.conv = nn.Conv2d(1, self.n_embd, 4, 4)
+        self.conv = (
+            nn.Conv2d(1, self.n_embd, 4, 4)
+            if one_layer
+            else nn.Sequential(
+                nn.Conv2d(1, 32, 3, 1),
+                nn.ReLU(),
+                nn.Conv2d(32, self.n_embd, 4, 4),
+            )
+        )
         self.out = nn.Linear(self.gpt.config.n_embd, 10)
 
     def forward(self, x):
@@ -266,6 +280,7 @@ def run(args, logger: Logger = None):
             randomize_parameters=args.randomize_parameters,
             train_ln=args.train_ln,
             train_wpe=args.train_wpe,
+            one_layer=args.one_layer,
         )
     ).to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
