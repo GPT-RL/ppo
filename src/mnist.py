@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import logging
 import os
+import time
 from pathlib import Path
 from pprint import pformat
 from typing import Literal, Optional
@@ -149,7 +150,7 @@ HOURS = "hours"
 
 
 def train(
-    args, model, device, train_loader, optimizer, epoch, logger: Optional[Logger]
+    args, model, device, train_loader, optimizer, epoch, start, logger: Optional[Logger]
 ):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -163,6 +164,7 @@ def train(
             log = {
                 EPOCH: epoch,
                 TRAIN_LOSS: loss.item(),
+                HOURS: (time.time() - start) / 3600,
             }
             logging.info(pformat(log))
             if logger is not None:
@@ -172,7 +174,7 @@ def train(
                 break
 
 
-def test(model, device, test_loader, epoch, logger: Optional[Logger]):
+def test(model, device, test_loader, epoch, start, logger: Optional[Logger]):
     model.eval()
     test_loss = 0
     correct = 0
@@ -194,6 +196,7 @@ def test(model, device, test_loader, epoch, logger: Optional[Logger]):
         EPOCH: epoch,
         TEST_LOSS: test_loss,
         TEST_ACCURACY: 100.0 * correct / len(test_loader.dataset),
+        HOURS: (time.time() - start) / 3600,
     }
     if logger is not None:
         log.update({"run ID": logger.run_id})
@@ -285,9 +288,10 @@ def run(args, logger: Logger = None):
     ).to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
+    start = time.time()
     for epoch in range(1, args.epochs + 1):
-        test(model, device, test_loader, epoch, logger)
-        train(args, model, device, train_loader, optimizer, epoch, logger)
+        test(model, device, test_loader, epoch, start, logger)
+        train(args, model, device, train_loader, optimizer, epoch, start, logger)
         scheduler.step()
     if args.save_model:
         torch.save(model.state_dict(), "mnist_cnn.pt")
