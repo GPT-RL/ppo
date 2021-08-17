@@ -1,2 +1,2 @@
-docker-compose build
+docker-compose build --pull
 docker-compose -f docker-compose.yml -f join-existing-sweep.yml --env-file .env up --remove-orphans --force-recreate
