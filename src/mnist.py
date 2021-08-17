@@ -45,7 +45,7 @@ class Args(Tap):
     config: Optional[str] = None
     cuda: bool = True
     dry_run: bool = False  # quickly check a single pass
-    dataset: str = Literal["mnist", "xor"]
+    dataset: Literal["mnist", "xor"] = "mnist"
     epochs: int = 14
     gpt_size: Literal["small", "medium", "large", "xl"] = None
     log_interval: int = 100000
