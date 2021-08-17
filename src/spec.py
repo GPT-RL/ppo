@@ -51,6 +51,7 @@ def spec(x, y, color="run ID"):
     return {
         "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
         "data": {"name": "data"},
+        "transform": [{"filter": {"field": y, "valid": True}}],
         "hconcat": [
             subfigure(
                 params=[*params, {"name": "selection", "select": "interval"}],
