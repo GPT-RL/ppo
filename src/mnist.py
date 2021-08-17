@@ -273,6 +273,7 @@ def run(args, logger: Logger = None):
         )
         dataset2 = datasets.MNIST("../data", train=False, transform=transform)
         num_outputs = 10
+        guesses_per_item = 1
 
         def get_loss(out, tgt, reduction="mean"):
             return F.nll_loss(F.log_softmax(out, dim=1), tgt, reduction=reduction)
@@ -286,6 +287,7 @@ def run(args, logger: Logger = None):
         dataset = XOR("../data", args.seed)
         dataset1, dataset2 = torch.utils.data.random_split(dataset, [60000, 10000])
         num_outputs = 5
+        guesses_per_item = 5
 
         def get_loss(out, tgt, reduction="mean"):
             return F.mse_loss(torch.sigmoid(out), tgt, reduction=reduction)
@@ -336,7 +338,9 @@ def run(args, logger: Logger = None):
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
-            TEST_ACCURACY: 100.0 * correct / len(test_loader.dataset),
+            TEST_ACCURACY: 100.0
+            * correct
+            / (len(test_loader.dataset) * guesses_per_item),
             HOURS: (time.time() - start) / 3600,
         }
         if logger is not None:
