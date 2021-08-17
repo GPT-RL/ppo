@@ -17,4 +17,5 @@ COPY env.yml .
 RUN conda env update -n base -f env.yml \
  && pip install git+https://github.com/ethanabrooks/sweep-logger.git
 WORKDIR "/project"
+COPY . .
 ENTRYPOINT ["python"]

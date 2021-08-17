@@ -41,7 +41,6 @@ services:
       - --graphql-endpoint=${GRAPHQL_ENDPOINT}
       - --command=python ${SCRIPT} sweep --sweep
     volumes:
-      - "${PWD}:/project"
       - "${PWD}/logs:/tmp/logs"
       - "${HOME}/.cache/GPT/:/root/.cache/GPT"
       - "${HOME}/.cache/huggingface/:/root/.cache/huggingface"
