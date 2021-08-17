@@ -15,7 +15,6 @@ import torch.optim as optim
 import yaml
 from sweep_logger import HasuraLogger, Logger
 from tap import Tap
-from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
 from torch.utils.data.dataset import T_co
 from torchvision import datasets, transforms
@@ -42,17 +41,16 @@ class Sweep(LoggerArgs):
 
 
 class Args(Tap):
-    batch_size: int = 64
+    batch_size: int = 16
     config: Optional[str] = None
     cuda: bool = True
     dry_run: bool = False  # quickly check a single pass
     dataset: str = Literal["mnist", "xor"]
     epochs: int = 14
-    gamma: float = 0.7  # Learning rate step gamma (default: 0.7)
     gpt_size: Literal["small", "medium", "large", "xl"] = None
-    log_interval: int = 10
+    log_interval: int = 100000
     log_level: str = "INFO"
-    lr: float = 1.0
+    lr: float = 1e-3
     one_layer: bool = True
     randomize_parameters: bool = False
     save_model: bool = False
@@ -316,7 +314,6 @@ def run(args, logger: Logger = None):
         )
     ).to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
-    scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     start = time.time()
 
     for epoch in range(1, args.epochs + 1):
@@ -370,7 +367,6 @@ def run(args, logger: Logger = None):
                     logger.log(log)
                 if args.dry_run:
                     break
-        scheduler.step()
     if args.save_model:
         torch.save(model.state_dict(), "mnist_cnn.pt")
 
