@@ -101,14 +101,13 @@ class GPTNet(nn.Module):
             p.requires_grad_(requires_grad)
         self.n_embd = self.gpt.config.n_embd
         if len(input_shape) == 1:
-            input_size = input_shape[0]
             self.net = (
-                nn.Linear(input_size, input_size * self.n_embd)
+                nn.Sequential(nn.Conv1d(1, self.n_embd, 1, 1))
                 if one_layer
                 else nn.Sequential(
-                    nn.Linear(input_size, 32),
+                    nn.Conv1d(1, 32, 1, 1),
                     nn.ReLU(),
-                    nn.Linear(32, input_size * self.n_embd),
+                    nn.Conv1d(32, self.n_embd, 1, 1),
                 )
             )
         elif len(input_shape) == 3:
@@ -126,6 +125,7 @@ class GPTNet(nn.Module):
         self.out = nn.Linear(self.gpt.config.n_embd, num_outputs)
 
     def forward(self, x):
+        x = x.reshape(x.size(0), -1, x.size(-1))
         x = self.net(x)
         x = x.reshape(x.size(0), self.n_embd, -1).transpose(2, 1)
         x = self.gpt(inputs_embeds=x).last_hidden_state[:, -1]
