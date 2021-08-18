@@ -348,6 +348,8 @@ def run(args, logger: Logger = None):
             logger.log(log)
 
         model.train()
+        tick = None
+        frames = 0
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
@@ -355,12 +357,19 @@ def run(args, logger: Logger = None):
             loss = get_loss(output, target)
             loss.backward()
             optimizer.step()
+            frames += len(data)
             if batch_idx % args.log_interval == 0:
+                now = time.time()
                 log = {
                     EPOCH: epoch,
                     TRAIN_LOSS: loss.item(),
-                    HOURS: (time.time() - start) / 3600,
+                    HOURS: (now - start) / 3600,
                 }
+                if tick is not None:
+                    fps = frames / (now - tick)
+                    log.update({FPS: fps})
+                tick = now
+                frames = 0
                 logging.info(pformat(log))
                 if logger is not None:
                     log.update({"run ID": logger.run_id})
