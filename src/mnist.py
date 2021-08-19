@@ -16,6 +16,7 @@ import torch.optim as optim
 import yaml
 from sweep_logger import HasuraLogger, Logger
 from tap import Tap
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
 from torch.utils.data.dataset import T_co
 from torchvision import datasets, transforms
@@ -48,6 +49,7 @@ class Args(Tap):
     dry_run: bool = False  # quickly check a single pass
     dataset: Literal["mnist", "xor"] = "mnist"
     epochs: int = 14
+    gamma: Optional[float] = None  # Learning rate step gamma (default: 0.7)
     gpt_size: Literal["small", "medium", "large", "xl"] = None
     log_interval: int = 100000
     log_level: str = "INFO"
@@ -335,6 +337,9 @@ def run(args, logger: Logger = None):
             raise InvalidDatasetError()
     model = model.to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
+    scheduler = (
+        None if args.gamma is None else StepLR(optimizer, step_size=1, gamma=args.gamma)
+    )
     start = time.time()
 
     for epoch in range(1, args.epochs + 1):
@@ -397,6 +402,8 @@ def run(args, logger: Logger = None):
                     logger.log(log)
                 if args.dry_run:
                     break
+        if scheduler is not None:
+            scheduler.step()
     if args.save_model:
         torch.save(model.state_dict(), "mnist_cnn.pt")
 
