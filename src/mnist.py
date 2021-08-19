@@ -7,6 +7,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import List, Literal, Optional
 
+import abc
 import numpy as np
 import torch
 import torch.nn as nn
@@ -77,6 +78,7 @@ class GPTNet(nn.Module):
         one_layer: bool,
     ):
         super().__init__()
+        self.one_layer = one_layer
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
         gpt_size = f"gpt2{gpt_size}"
         self.gpt = (
@@ -100,39 +102,52 @@ class GPTNet(nn.Module):
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
         self.n_embd = self.gpt.config.n_embd
-        if len(input_shape) == 1:
-            self.net = (
-                nn.Sequential(nn.Conv1d(1, self.n_embd, 1, 1))
-                if one_layer
-                else nn.Sequential(
-                    nn.Conv1d(1, 32, 1, 1),
-                    nn.ReLU(),
-                    nn.Conv1d(32, self.n_embd, 1, 1),
-                )
-            )
-        elif len(input_shape) == 3:
-            self.net = (
-                nn.Conv2d(1, self.n_embd, 4, 4)
-                if one_layer
-                else nn.Sequential(
-                    nn.Conv2d(1, 32, 3, 1),
-                    nn.ReLU(),
-                    nn.Conv2d(32, self.n_embd, 4, 4),
-                )
-            )
-        else:
-            raise InvalidDatasetError()
-        self.out = nn.Linear(self.gpt.config.n_embd, num_outputs)
 
     def forward(self, x):
-        x = x.reshape(x.size(0), -1, x.size(-1))
         x = self.net(x)
         x = x.reshape(x.size(0), self.n_embd, -1).transpose(2, 1)
         x = self.gpt(inputs_embeds=x).last_hidden_state[:, -1]
+        return x
+
+
+class GPTNetMNIST(GPTNet):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.net = (
+            nn.Conv2d(1, self.n_embd, 4, 4)
+            if self.one_layer
+            else nn.Sequential(
+                nn.Conv2d(1, 32, 3, 1),
+                nn.ReLU(),
+                nn.Conv2d(32, self.n_embd, 4, 4),
+            )
+        )
+        self.out = nn.Linear(self.gpt.config.n_embd, 10)
+
+    def forward(self, x):
+        x = super().forward(x)
         x = self.out(x)
         return x
-        # output = F.log_softmax(x, dim=1)
-        # return output
+
+
+class GPTNetXOR(GPTNet):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.net = (
+            nn.Conv1d(1, self.n_embd, 1, 1)
+            if self.one_layer
+            else nn.Sequential(
+                nn.Conv1d(1, 32, 1, 1),
+                nn.ReLU(),
+                nn.Conv1d(32, self.n_embd, 1, 1),
+            )
+        )
+        self.out = nn.Linear(self.gpt.config.n_embd, 5)
+
+    def forward(self, x):
+        x = super().forward(x.unsqueeze(1))
+        x = self.out(x)
+        return x
 
 
 class Net(nn.Module):
@@ -300,10 +315,10 @@ def run(args, logger: Logger = None):
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
     sample_input, _ = dataset1[0]
 
-    model = (
-        Net(input_shape=sample_input.shape, num_outputs=num_outputs)
-        if args.gpt_size is None
-        else GPTNet(
+    if args.gpt_size is None:
+        model = Net(input_shape=sample_input.shape, num_outputs=num_outputs)
+    else:
+        kwargs = dict(
             input_shape=sample_input.shape,
             num_outputs=num_outputs,
             gpt_size=args.gpt_size,
@@ -312,7 +327,13 @@ def run(args, logger: Logger = None):
             train_wpe=args.train_wpe,
             one_layer=args.one_layer,
         )
-    ).to(device)
+        if args.dataset == "mnist":
+            model = GPTNetMNIST(**kwargs)
+        elif args.dataset == "xor":
+            model = GPTNetXOR(**kwargs)
+        else:
+            raise InvalidDatasetError()
+    model = model.to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     start = time.time()
 
