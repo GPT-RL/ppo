@@ -15,7 +15,7 @@ ENV PYTHONBREAKPOINT=ipdb.set_trace
 
 COPY env.yml .
 RUN conda env update -n base -f env.yml \
- && pip install git+https://github.com/ethanabrooks/sweep-logger.git@087a2a7869224203a3dba40f800571faa2c0f117
+ && pip install git+https://github.com/ethanabrooks/sweep-logger.git@1878b871e2f25b123d65729c546113d39d146a15
 WORKDIR "/project"
 COPY . .
 ENTRYPOINT ["python"]
