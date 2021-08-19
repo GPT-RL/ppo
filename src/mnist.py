@@ -54,7 +54,7 @@ class Args(Tap):
     log_interval: int = 100000
     log_level: str = "INFO"
     lr: float = 1e-3
-    one_layer: bool = True
+    architecture: Literal["1conv", "2conv", "1linear"] = "1conv"
     randomize_parameters: bool = False
     save_model: bool = False
     seed: int = 1
@@ -77,10 +77,12 @@ class GPTNet(nn.Module):
         randomize_parameters: bool,
         train_ln: bool,
         train_wpe: bool,
-        one_layer: bool,
+        architecture: str,
     ):
         super().__init__()
-        self.one_layer = one_layer
+        self.num_outputs = num_outputs
+        self.input_shape = input_shape
+        self.architecture = architecture
         gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
         gpt_size = f"gpt2{gpt_size}"
         self.gpt = (
@@ -104,8 +106,11 @@ class GPTNet(nn.Module):
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
         self.n_embd = self.gpt.config.n_embd
+        self.out = nn.Linear(self.gpt.config.n_embd, self.num_outputs)
 
     def forward(self, x):
+        if self.architecture == "1linear":
+            x = x.reshape(x.size(0), -1)
         x = self.net(x)
         x = x.reshape(x.size(0), self.n_embd, -1).transpose(2, 1)
         x = self.gpt(inputs_embeds=x).last_hidden_state[:, -1]
@@ -115,16 +120,19 @@ class GPTNet(nn.Module):
 class GPTNetMNIST(GPTNet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.net = (
-            nn.Conv2d(1, self.n_embd, 4, 4)
-            if self.one_layer
-            else nn.Sequential(
+        if self.architecture == "1conv":
+            self.net = nn.Conv2d(1, self.n_embd, 4, 4)
+        elif self.architecture == "2conv":
+            self.net = nn.Sequential(
                 nn.Conv2d(1, 32, 3, 1),
                 nn.ReLU(),
                 nn.Conv2d(32, self.n_embd, 4, 4),
             )
-        )
-        self.out = nn.Linear(self.gpt.config.n_embd, 10)
+        elif self.architecture == "1linear":
+            _, *dims = self.input_shape
+            self.net = nn.Linear(int(np.prod(dims)), self.n_embd)
+        else:
+            raise InvalidArchitectureError()
 
     def forward(self, x):
         x = super().forward(x)
@@ -135,16 +143,19 @@ class GPTNetMNIST(GPTNet):
 class GPTNetXOR(GPTNet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.net = (
-            nn.Conv1d(1, self.n_embd, 1, 1)
-            if self.one_layer
-            else nn.Sequential(
+        if self.architecture == "1conv":
+            self.net = nn.Conv1d(1, self.n_embd, 1, 1)
+        elif self.architecture == "2conv":
+            self.net = nn.Sequential(
                 nn.Conv1d(1, 32, 1, 1),
                 nn.ReLU(),
                 nn.Conv1d(32, self.n_embd, 1, 1),
             )
-        )
-        self.out = nn.Linear(self.gpt.config.n_embd, 5)
+        elif self.architecture == "1linear":
+            _, *dims = self.input_shape
+            self.net = nn.Linear(int(np.prod(dims)), self.n_embd)
+        else:
+            raise InvalidArchitectureError()
 
     def forward(self, x):
         x = super().forward(x.unsqueeze(1))
@@ -211,6 +222,10 @@ TEST_LOSS = "test loss"
 TEST_ACCURACY = "test accuracy"
 FPS = "fps"
 HOURS = "hours"
+
+
+class InvalidArchitectureError(RuntimeError):
+    pass
 
 
 class InvalidDatasetError(RuntimeError):
@@ -327,7 +342,7 @@ def run(args, logger: Logger = None):
             randomize_parameters=args.randomize_parameters,
             train_ln=args.train_ln,
             train_wpe=args.train_wpe,
-            one_layer=args.one_layer,
+            architecture=args.architecture,
         )
         if args.dataset == "mnist":
             model = GPTNetMNIST(**kwargs)
