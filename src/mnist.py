@@ -60,6 +60,7 @@ class Args(Tap):
     seed: int = 1
     test_batch_size: int = 1000
     train_ln: bool = True
+    train_ln_1: bool = True
     train_wpe: bool = True
 
     def configure(self) -> None:
@@ -76,6 +77,7 @@ class GPTNet(nn.Module):
         gpt_size: str,
         randomize_parameters: bool,
         train_ln: bool,
+        train_ln_1: bool,
         train_wpe: bool,
         architecture: str,
     ):
@@ -103,7 +105,11 @@ class GPTNet(nn.Module):
             )
         )
         for name, p in self.gpt.named_parameters():
-            requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
+            requires_grad = (
+                (train_wpe and "wpe" in name)
+                or (train_ln and "ln" in name)
+                or (train_ln_1 and "ln_1" in name)
+            )
             p.requires_grad_(requires_grad)
         self.n_embd = self.gpt.config.n_embd
         self.out = nn.Linear(self.gpt.config.n_embd, self.num_outputs)
@@ -341,6 +347,7 @@ def run(args, logger: Logger = None):
             gpt_size=args.gpt_size,
             randomize_parameters=args.randomize_parameters,
             train_ln=args.train_ln,
+            train_ln_1=args.train_ln_1,
             train_wpe=args.train_wpe,
             architecture=args.architecture,
         )
