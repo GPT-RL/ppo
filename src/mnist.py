@@ -129,7 +129,7 @@ class GPTNetMNIST(GPTNet):
                 nn.Conv2d(32, self.n_embd, 4, 4),
             )
         elif self.architecture == "1linear":
-            _, *dims = self.input_shape
+            dims = self.input_shape
             self.net = nn.Linear(int(np.prod(dims)), self.n_embd)
         else:
             raise InvalidArchitectureError()
@@ -152,7 +152,7 @@ class GPTNetXOR(GPTNet):
                 nn.Conv1d(32, self.n_embd, 1, 1),
             )
         elif self.architecture == "1linear":
-            _, *dims = self.input_shape
+            dims = self.input_shape
             self.net = nn.Linear(int(np.prod(dims)), self.n_embd)
         else:
             raise InvalidArchitectureError()
