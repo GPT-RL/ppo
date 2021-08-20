@@ -9,6 +9,7 @@ from typing import Optional
 import numpy as np
 import torch
 import yaml
+from sweep_logger import HasuraLogger, Logger
 from tap import Tap
 
 import utils
@@ -18,7 +19,6 @@ from evaluation import evaluate
 from ppo import PPO
 from rollouts import Rollouts
 from spec import spec
-from sweep_logger import HasuraLogger, Logger
 
 EPISODE_RETURN = "episode return"
 ACTION_LOSS = "action loss"
@@ -90,6 +90,7 @@ class Trainer:
 
         torch.manual_seed(args.seed)
         torch.cuda.manual_seed_all(args.seed)
+        np.random.seed(args.seed)
 
         if args.cuda and torch.cuda.is_available():
             torch.backends.cudnn.benchmark = False
@@ -101,14 +102,7 @@ class Trainer:
         torch.set_num_threads(1)
         device = torch.device("cuda:0" if args.cuda else "cpu")
 
-        envs = make_vec_envs(
-            env_name=args.env,
-            seed=args.seed,
-            num_processes=args.num_processes,
-            gamma=args.gamma,
-            device=device,
-            allow_early_resets=False,
-        )
+        envs = cls.make_vec_envs(args, device)
 
         obs_shape = envs.observation_space.shape
         action_space = envs.action_space
@@ -256,6 +250,18 @@ class Trainer:
                     num_processes=args.num_processes,
                     device=device,
                 )
+
+    @classmethod
+    def make_vec_envs(cls, args, device, **kwargs):
+        return make_vec_envs(
+            env_name=args.env,
+            seed=args.seed,
+            num_processes=args.num_processes,
+            gamma=args.gamma,
+            device=device,
+            allow_early_resets=False,
+            **kwargs,
+        )
 
     @staticmethod
     def save(agent, args, envs):

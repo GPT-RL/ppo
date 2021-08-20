@@ -177,6 +177,7 @@ class Base(NNBase):
     def forward(self, inputs, rnn_hxs, masks):
         inputs = inputs / 255.0
         # inputs = torch.nn.functional.layer_norm(inputs, normalized_shape=inputs.shape)
+        breakpoint()
         perception = self.perception(inputs)
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(perception, rnn_hxs, masks)

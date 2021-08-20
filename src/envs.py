@@ -15,6 +15,8 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnvWrapper
 from stable_baselines3.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
 
+from babyai_env import GoToLocalEnv
+
 try:
     import dmc2gym
 except ImportError:
@@ -31,9 +33,15 @@ except ImportError:
     pass
 
 
-def make_env(env_id, seed, rank, allow_early_resets):
+class InvalidEnvId(RuntimeError):
+    pass
+
+
+def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
     def _thunk():
-        if env_id.startswith("dm"):
+        if env_id == "GoToLocal":
+            env = GoToLocalEnv(*args, **kwargs)
+        elif env_id.startswith("dm"):
             _, domain, task = env_id.split(".")
             env = dmc2gym.make(domain_name=domain, task_name=task)
             env = ClipAction(env)
@@ -86,9 +94,11 @@ def make_vec_envs(
     device,
     allow_early_resets,
     num_frame_stack=None,
+    **kwargs
 ):
     envs = [
-        make_env(env_name, seed, i, allow_early_resets) for i in range(num_processes)
+        make_env(env_name, seed, i, allow_early_resets, **kwargs)
+        for i in range(num_processes)
     ]
 
     if len(envs) > 1:
