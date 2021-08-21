@@ -10,10 +10,10 @@ def evaluate(agent, obs_rms, env_name, seed, num_processes, device):
         env_name, seed + num_processes, num_processes, None, device, True
     )
 
-    vec_norm = utils.get_vec_normalize(eval_envs)
-    if vec_norm is not None:
-        vec_norm.eval()
-        vec_norm.obs_rms = obs_rms
+    # vec_norm = utils.get_vec_normalize(eval_envs)
+    # if vec_norm is not None:
+    #     vec_norm.eval()
+    #     vec_norm.obs_rms = obs_rms
 
     eval_episode_rewards = []
 

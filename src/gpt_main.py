@@ -12,24 +12,23 @@ from gpt_agent import Agent
 
 
 class Args(main.Args):
-    action_hidden_size: Optional[int] = None
     data_parallel: bool = True
     gpt_size: Literal[
         "small", "medium", "large", "xl"
     ] = "medium"  # what size of pretrained GPT to use
-    kernel: int = 16
     linguistic_analysis_save_interval: Optional[
         str
     ] = None  # path to save linguistic analysis data
     randomize_parameters: bool = False
-    stride: int = 8
-    transpose: bool = True
-    one_layer: bool = False
+    train_ln: bool = True
+    train_wpe: bool = False
 
 
 class Trainer(main.Trainer):
     @staticmethod
-    def make_agent(obs_shape, action_space, args: Args) -> Agent:
+    def make_agent(envs, args: Args) -> Agent:
+        obs_shape = envs.observation_space.shape
+        action_space = envs.action_space
         return Agent(
             action_hidden_size=args.action_hidden_size,
             action_space=action_space,

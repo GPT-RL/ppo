@@ -14,6 +14,7 @@ from stable_baselines3.common.atari_wrappers import (
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnvWrapper
 from stable_baselines3.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
+from transformers import GPT2Tokenizer
 
 from babyai_env import GoToLocalEnv
 

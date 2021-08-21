@@ -6,21 +6,60 @@ from pathlib import Path
 from pprint import pformat
 from typing import Optional
 
+import gym
 import numpy as np
 import torch
 import yaml
+from gym.wrappers.clip_action import ClipAction
+from stable_baselines3.common.atari_wrappers import (
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    MaxAndSkipEnv,
+    NoopResetEnv,
+    WarpFrame,
+)
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from sweep_logger import HasuraLogger, Logger
 from tap import Tap
 
 import utils
 from agent import Agent
-from envs import make_vec_envs
-from evaluation import evaluate
+from babyai_env import GoToLocalEnv
+from envs import (
+    TimeLimitMask,
+    TransposeImage,
+    VecNormalize,
+    VecPyTorch,
+    VecPyTorchFrameStack,
+)
 from ppo import PPO
 from rollouts import Rollouts
 from spec import spec
 
+try:
+    import dmc2gym
+except ImportError:
+    pass
+
+try:
+    import roboschool
+except ImportError:
+    pass
+
+try:
+    import pybullet_envs
+except ImportError:
+    pass
+
+
+class InvalidEnvId(RuntimeError):
+    pass
+
+
 EPISODE_RETURN = "episode return"
+TEST_EPISODE_RETURN = "test episode return"
 ACTION_LOSS = "action loss"
 VALUE_LOSS = "value loss"
 FPS = "fps"
@@ -53,7 +92,7 @@ class Args(Tap):
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
     env: str = "BreakoutNoFrameskip-v4"  # env ID for gym
-    eval_interval: Optional[int] = None  # how many updates to evaluate between
+    test_interval: Optional[int] = None  # how many updates to evaluate between
     eps: float = 1e-5  # RMSProp epsilon
     gae: bool = True  # use Generalized Advantage Estimation
     gae_lambda: float = 0.95  # GAE lambda parameter
@@ -102,13 +141,9 @@ class Trainer:
         torch.set_num_threads(1)
         device = torch.device("cuda:0" if args.cuda else "cpu")
 
-        envs = cls.make_vec_envs(args, device)
+        envs = cls.make_vec_envs(args, device, test=False)
 
-        obs_shape = envs.observation_space.shape
-        action_space = envs.action_space
-        agent = cls.make_agent(
-            obs_shape=obs_shape, action_space=action_space, args=args
-        )
+        agent = cls.make_agent(envs=envs, args=args)
         agent.to(device)
 
         ppo = PPO(
@@ -153,7 +188,7 @@ class Trainer:
                         action,
                         action_log_prob,
                         recurrent_hidden_states,
-                    ) = agent.act(
+                    ) = agent.forward(
                         inputs=rollouts.obs[step],
                         rnn_hxs=rollouts.recurrent_hidden_states[step],
                         masks=rollouts.masks[step],
@@ -236,45 +271,145 @@ class Trainer:
                 if logger is not None:
                     logger.log(log)
 
-            if (
-                args.eval_interval is not None
-                and len(episode_rewards) > 1
-                and j % args.eval_interval == 0
-            ):
-                obs_rms = utils.get_vec_normalize(envs).obs_rms
-                evaluate(
+            if args.test_interval is not None and j % args.test_interval == 0:
+                envs = cls.make_vec_envs(args, device, test=True)
+                cls.test(
                     agent=agent,
-                    obs_rms=obs_rms,
-                    env_name=args.env,
-                    seed=args.seed,
+                    envs=envs,
                     num_processes=args.num_processes,
                     device=device,
+                    start=start,
+                    logger=logger,
                 )
 
     @classmethod
-    def make_vec_envs(cls, args, device, **kwargs):
-        return make_vec_envs(
-            env_name=args.env,
-            seed=args.seed,
-            num_processes=args.num_processes,
-            gamma=args.gamma,
-            device=device,
-            allow_early_resets=False,
-            **kwargs,
+    def test(cls, agent, envs, num_processes, device, start, logger):
+
+        episode_rewards = []
+
+        obs = envs.reset()
+        recurrent_hidden_states = torch.zeros(
+            num_processes, agent.recurrent_hidden_state_size, device=device
         )
+        masks = torch.zeros(num_processes, 1, device=device)
+
+        while len(episode_rewards) < 10:
+            with torch.no_grad():
+                _, action, _, recurrent_hidden_states = agent.forward(
+                    obs, recurrent_hidden_states, masks, deterministic=True
+                )
+
+            # Obser reward and next obs
+            obs, _, done, infos = envs.step(action)
+
+            masks = torch.tensor(
+                [[0.0] if done_ else [1.0] for done_ in done],
+                dtype=torch.float32,
+                device=device,
+            )
+
+            for info in infos:
+                if "episode" in info.keys():
+                    episode_rewards.append(info["episode"]["r"])
+
+        envs.close()
+        now = time.time()
+        log = {
+            TEST_EPISODE_RETURN: np.mean(episode_rewards),
+            TIME: now * 1000000,
+            HOURS: (now - start) / 3600,
+        }
+        logging.info(pformat(log))
+        if logger is not None:
+            log.update({"run ID": logger.run_id})
+        logging.info(pformat(log))
+        if logger is not None:
+            logger.log(log)
+
+        print(
+            " Evaluation using {} episodes: mean reward {:.5f}\n".format(
+                len(episode_rewards), np.mean(episode_rewards)
+            )
+        )
+
+    @staticmethod
+    def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
+        def _thunk():
+            if env_id == "GoToLocal":
+                env = GoToLocalEnv(*args, **kwargs)
+            elif env_id.startswith("dm"):
+                _, domain, task = env_id.split(".")
+                env = dmc2gym.make(domain_name=domain, task_name=task)
+                env = ClipAction(env)
+            else:
+                env = gym.make(env_id)
+
+            is_atari = hasattr(gym.envs, "atari") and isinstance(
+                env.unwrapped, gym.envs.atari.atari_env.AtariEnv
+            )
+            if is_atari:
+                env = NoopResetEnv(env, noop_max=30)
+                env = MaxAndSkipEnv(env, skip=4)
+
+            env.seed(seed + rank)
+
+            if str(env.__class__.__name__).find("TimeLimit") >= 0:
+                env = TimeLimitMask(env)
+
+            env = Monitor(env, allow_early_resets=allow_early_resets)
+
+            if is_atari:
+                if len(env.observation_space.shape) == 3:
+                    env = EpisodicLifeEnv(env)
+                    if "FIRE" in env.unwrapped.get_action_meanings():
+                        env = FireResetEnv(env)
+                    env = WarpFrame(env, width=84, height=84)
+                    env = ClipRewardEnv(env)
+            elif len(env.observation_space.shape) == 3:
+                raise NotImplementedError(
+                    "CNN models work only for atari,\n"
+                    "please use a custom wrapper for a custom pixel input env.\n"
+                    "See wrap_deepmind for an example."
+                )
+
+            # If the input has shape (W,H,3), wrap for PyTorch convolutions
+            obs_shape = env.observation_space.shape
+            if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
+                env = TransposeImage(env, op=[2, 0, 1])
+
+            return env
+
+        return _thunk
+
+    @classmethod
+    def make_vec_envs(cls, args, device, num_frame_stack=None, **kwargs):
+        envs = [
+            cls.make_env(args.env, args.seed, i, False, **kwargs)
+            for i in range(args.num_processes)
+        ]
+
+        if len(envs) > 1:
+            envs = SubprocVecEnv(envs)
+        else:
+            envs = DummyVecEnv(envs)
+
+        envs = VecPyTorch(envs, device)
+
+        if num_frame_stack is not None:
+            envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
+        elif len(envs.observation_space.shape) == 3:
+            envs = VecPyTorchFrameStack(envs, 4, device)
+
+        return envs
 
     @staticmethod
     def save(agent, args, envs):
-        torch.save(
-            [
-                agent,
-                getattr(utils.get_vec_normalize(envs), "obs_rms", None),
-            ],
-            Path(args.save_dir, f"checkpoint.pkl"),
-        )
+        torch.save(agent, Path(args.save_dir, f"checkpoint.pkl"))
 
     @staticmethod
-    def make_agent(obs_shape, action_space, args) -> Agent:
+    def make_agent(envs: VecPyTorch, args) -> Agent:
+        obs_shape = envs.observation_space.shape
+        action_space = envs.action_space
         return Agent(
             obs_shape=obs_shape,
             action_space=action_space,

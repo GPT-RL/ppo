@@ -12,6 +12,27 @@ from distributions import Bernoulli, Categorical, DiagGaussian
 from utils import init
 
 
+def build_gpt(gpt_size, randomize_parameters):
+    gpt_size = get_gpt_size(gpt_size)
+    return (
+        GPT2Model(
+            GPT2Config.from_pretrained(
+                gpt_size,
+                use_cache=False,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
+        )
+        if randomize_parameters
+        else GPT2Model.from_pretrained(
+            gpt_size,
+            use_cache=False,
+            output_attentions=False,
+            output_hidden_states=False,
+        )
+    )
+
+
 class Agent(agent.Agent):
     def __init__(
         self, obs_shape, action_space, save_interval, save_dir, data_parallel, **kwargs
@@ -38,7 +59,7 @@ class Agent(agent.Agent):
         else:
             raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
+    def forward(self, inputs, rnn_hxs, masks, deterministic=False):
         value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
@@ -83,6 +104,12 @@ class GPTCell(nn.Module):
         return output, hx
 
 
+def get_gpt_size(gpt_size):
+    gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
+    gpt_size = f"gpt2{gpt_size}"
+    return gpt_size
+
+
 class Base(NNBase):
     def __init__(
         self,
@@ -98,25 +125,7 @@ class Base(NNBase):
         super().__init__(recurrent, hidden_size, hidden_size)
 
         self.transpose = transpose
-        gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
-        gpt_size = f"gpt2{gpt_size}"
-        self.gpt = (
-            GPT2Model(
-                GPT2Config.from_pretrained(
-                    gpt_size,
-                    use_cache=False,
-                    output_attentions=False,
-                    output_hidden_states=False,
-                )
-            )
-            if randomize_parameters
-            else GPT2Model.from_pretrained(
-                gpt_size,
-                use_cache=False,
-                output_attentions=False,
-                output_hidden_states=False,
-            )
-        )
+        self.gpt = build_gpt(gpt_size, randomize_parameters)
         # self.rnn = GPTCell(gpt=self.gpt, context_size=num_embeddings)
         # Freeze GPT parameters
         for p in self.gpt.parameters():
@@ -175,8 +184,7 @@ class Base(NNBase):
         return hx
 
     def forward(self, inputs, rnn_hxs, masks):
-        inputs = inputs / 255.0
-        # inputs = torch.nn.functional.layer_norm(inputs, normalized_shape=inputs.shape)
+        # inputs = inputs / 255.0
         breakpoint()
         perception = self.perception(inputs)
         if self.is_recurrent:

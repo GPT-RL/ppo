@@ -14,14 +14,7 @@ class Flatten(nn.Module):
 class Agent(nn.Module):
     def __init__(self, obs_shape, action_space, **kwargs):
         super(Agent, self).__init__()
-        if len(obs_shape) == 3:
-            base = CNNBase
-        elif len(obs_shape) == 1:
-            base = MLPBase
-        else:
-            raise NotImplementedError
-
-        self.base = base(obs_shape[0], **kwargs)
+        self.base = self.build_base(obs_shape, **kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
@@ -32,6 +25,15 @@ class Agent(nn.Module):
         elif action_space.__class__.__name__ == "MultiBinary":
             num_outputs = action_space.shape[0]
             self.dist = Bernoulli(self.base.output_size, num_outputs)
+        else:
+            raise NotImplementedError
+
+    def build_base(self, obs_shape, **kwargs):
+        kwargs = dict(num_inputs=obs_shape[0], **kwargs)
+        if len(obs_shape) == 3:
+            return CNNBase(**kwargs)
+        elif len(obs_shape) == 1:
+            return MLPBase(**kwargs)
         else:
             raise NotImplementedError
 
@@ -46,10 +48,7 @@ class Agent(nn.Module):
             return self.base.recurrent_hidden_state_size
         return 2
 
-    def forward(self, inputs, rnn_hxs, masks):
-        raise NotImplementedError
-
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
+    def forward(self, inputs, rnn_hxs, masks, deterministic=False):
         value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 

@@ -1,5 +1,7 @@
 import babyai
+import gym
 from babyai.levels.verifier import GoToInstr, ObjDesc
+from gym.spaces import Dict, Discrete
 from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
 
 
@@ -9,16 +11,29 @@ def all_object_types():
             yield object_type, color
 
 
+class ObsSpaceWrapper(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        spaces = {**self.observation_space.spaces}
+        self.observation_space = Dict(
+            spaces=dict(
+                **spaces,
+                direction=Discrete(4),
+            )
+        )
+
+    def observation(self, observation):
+        return observation
+
+
 class GoToLocalEnv(babyai.levels.iclr19_levels.Level_GoToLocal):
-    def __init__(self, *args, goal_objects, seed=None, **kwargs):
-        # self.test = test
-        # object_types = [*all_object_types()]
-        # self.np_random.shuffle(object_types)
-        # one_quarter = round(len(object_types) / 4.0)
-        # self.test_objects = object_types[:one_quarter]
-        # self.train_objects = object_types[one_quarter:]
-        super().__init__(*args, seed=seed, **kwargs)
+    def __init__(self, goal_objects, room_size, num_dists, seed):
         self.goal_objects = goal_objects
+        super().__init__(
+            seed=seed,
+            room_size=room_size,
+            num_dists=num_dists,
+        )
 
     def gen_mission(self):
         self.place_agent()
@@ -44,12 +59,14 @@ class GoToLocalEnv(babyai.levels.iclr19_levels.Level_GoToLocal):
 
         # List of distractors added
         dists = []
-        includes_goal = False
 
         while len(dists) < num_distractors:
-            color = self._rand_elem(COLOR_NAMES)
-            type = self._rand_elem(["key", "ball", "box"])
-            obj = (type, color)
+            if not dists:
+                obj = self._rand_elem(self.goal_objects)
+            else:
+                color = self._rand_elem(COLOR_NAMES)
+                type = self._rand_elem(["key", "ball", "box"])
+                obj = (type, color)
 
             if all_unique and obj in objs:
                 continue
@@ -65,11 +82,6 @@ class GoToLocalEnv(babyai.levels.iclr19_levels.Level_GoToLocal):
             dist, pos = self.add_object(room_i, room_j, *obj)
 
             objs.append(obj)
-            if obj in self.goal_objects:
-                includes_goal = True
             dists.append(dist)
-
-        if not includes_goal:
-            self.add_distractors(i, j, num_distractors, all_unique)
 
         return dists
