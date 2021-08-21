@@ -14,9 +14,8 @@ from stable_baselines3.common.atari_wrappers import (
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnvWrapper
 from stable_baselines3.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
-from transformers import GPT2Tokenizer
 
-from babyai_env import GoToLocalEnv
+from babyai_env import Env
 
 try:
     import dmc2gym
@@ -41,7 +40,7 @@ class InvalidEnvId(RuntimeError):
 def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
     def _thunk():
         if env_id == "GoToLocal":
-            env = GoToLocalEnv(*args, **kwargs)
+            env = Env(*args, **kwargs)
         elif env_id.startswith("dm"):
             _, domain, task = env_id.split(".")
             env = dmc2gym.make(domain_name=domain, task_name=task)

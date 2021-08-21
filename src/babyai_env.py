@@ -1,10 +1,99 @@
+from collections import defaultdict
 from typing import NamedTuple, TypeVar
 
 import babyai
 import gym
-from babyai.levels.verifier import GoToInstr, ObjDesc
-from gym.spaces import Dict, Discrete
+from babyai.levels.verifier import ObjDesc, PickupInstr
+from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
+from transformers import GPT2Tokenizer
+import numpy as np
+
+
+def get_train_and_test_objects():
+    object_types = [*all_object_types()]
+    np.random.shuffle(object_types)
+
+    def pairs():
+        colors = [*COLOR_NAMES]
+        types = ["key", "ball", "box"]
+
+        np.random.shuffle(colors)
+        np.random.shuffle(types)
+
+        colors_to_types = {color: [*types] for color in colors}
+
+        # yield all colors
+        for color, types in colors_to_types.items():
+            yield types.pop(), color
+
+        # reverse colors_to_types
+        types_to_colors = defaultdict(set)
+        for color, types in colors_to_types.items():
+            for type in types:
+                types_to_colors[type].add(color)
+
+        # yield all types
+        for type, [*colors] in types_to_colors.items():
+            yield type, colors.pop()
+
+        # yield remaining
+        remaining = [
+            (type, color)
+            for type, colors in types_to_colors.items()
+            for color in colors
+        ]
+        np.random.shuffle(remaining)
+        yield from remaining
+
+    pairs = [*pairs()]
+    three_quarters = round(3 / 4 * len(pairs))
+    train_objects = pairs[:three_quarters]
+    test_objects = pairs[three_quarters:]
+    return test_objects, train_objects
+
+
+def get_train_and_test_objects():
+    object_types = [*all_object_types()]
+    np.random.shuffle(object_types)
+
+    def pairs():
+        colors = [*COLOR_NAMES]
+        types = ["key", "ball", "box"]
+
+        np.random.shuffle(colors)
+        np.random.shuffle(types)
+
+        colors_to_types = {color: [*types] for color in colors}
+
+        # yield all colors
+        for color, types in colors_to_types.items():
+            yield types.pop(), color
+
+        # reverse colors_to_types
+        types_to_colors = defaultdict(set)
+        for color, types in colors_to_types.items():
+            for type in types:
+                types_to_colors[type].add(color)
+
+        # yield all types
+        for type, [*colors] in types_to_colors.items():
+            yield type, colors.pop()
+
+        # yield remaining
+        remaining = [
+            (type, color)
+            for type, colors in types_to_colors.items()
+            for color in colors
+        ]
+        np.random.shuffle(remaining)
+        yield from remaining
+
+    pairs = [*pairs()]
+    three_quarters = round(3 / 4 * len(pairs))
+    train_objects = pairs[:three_quarters]
+    test_objects = pairs[three_quarters:]
+    return test_objects, train_objects
 
 
 def all_object_types():
@@ -28,21 +117,26 @@ class ObsSpaceWrapper(gym.ObservationWrapper):
         return observation
 
 
-class GoToLocalEnv(babyai.levels.iclr19_levels.Level_GoToLocal):
-    def __init__(self, goal_objects, room_size, num_dists, seed):
+class Env(babyai.levels.iclr19_levels.Level_GoToLocal):
+    def __init__(
+        self,
+        goal_objects,
+        room_size: int,
+        num_dists: int,
+        seed: int,
+        strict: bool,
+    ):
+        self.strict = strict
         self.goal_objects = goal_objects
-        super().__init__(
-            seed=seed,
-            room_size=room_size,
-            num_dists=num_dists,
-        )
+        super().__init__(seed=seed, room_size=room_size, num_dists=num_dists)
 
     def gen_mission(self):
         self.place_agent()
+        self.connect_all()
         objs = self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
-        obj = self._rand_elem(filter(self.can_be_goal, objs))
-        self.instrs = GoToInstr(ObjDesc(obj.type, obj.color))
+        obj = self._rand_elem(objs)
+        self.instrs = PickupInstr(ObjDesc(obj.type, obj.color), strict=self.strict)
 
     def can_be_goal(self, obj: WorldObj):
         return (obj.type, obj.color) in self.goal_objects
@@ -96,3 +190,43 @@ class Spaces(NamedTuple):
     image: T
     direction: T
     mission: T
+
+
+class RolloutsWrapper(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        spaces = {**self.observation_space.spaces}
+        self.original_observation_space = Tuple(Spaces(**self.observation_space.spaces))
+        image_space = spaces["image"]
+        # direction_space = spaces["direction"]
+        mission_space = spaces["mission"]
+        self.observation_space = Box(
+            shape=[np.prod(image_space.shape) + 1 + np.prod(mission_space.shape)],
+            low=-np.inf,
+            high=np.inf,
+        )
+
+    def observation(self, observation):
+        return np.concatenate(
+            Spaces(
+                image=observation["image"].flatten(),
+                direction=np.array([observation["direction"]]),
+                mission=observation["mission"],
+            )
+        )
+
+
+class TokenizerWrapper(gym.ObservationWrapper):
+    def __init__(self, env, tokenizer: GPT2Tokenizer, longest_mission: str):
+        self.tokenizer: GPT2Tokenizer = tokenizer
+        encoded = tokenizer.encode(longest_mission)
+        super().__init__(env)
+        spaces = {**self.observation_space.spaces}
+        self.observation_space = Dict(
+            spaces=dict(**spaces, mission=MultiDiscrete([50257 for _ in encoded]))
+        )
+
+    def observation(self, observation):
+        mission = self.tokenizer.encode(observation["mission"])
+        observation.update(mission=mission)
+        return observation

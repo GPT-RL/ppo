@@ -26,11 +26,10 @@ from tap import Tap
 
 import utils
 from agent import Agent
-from babyai_env import GoToLocalEnv
+from babyai_env import Env
 from envs import (
     TimeLimitMask,
     TransposeImage,
-    VecNormalize,
     VecPyTorch,
     VecPyTorchFrameStack,
 )
@@ -337,7 +336,7 @@ class Trainer:
     def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
         def _thunk():
             if env_id == "GoToLocal":
-                env = GoToLocalEnv(*args, **kwargs)
+                env = Env(*args, **kwargs)
             elif env_id.startswith("dm"):
                 _, domain, task = env_id.split(".")
                 env = dmc2gym.make(domain_name=domain, task_name=task)
