@@ -15,7 +15,7 @@ h5py = "^3.3.0"
 typed-argument-parser = "^1.7.0"
 transformers = "^4.8.2"
 pybullet = "^3.1.7"
-run-logger = {git = "https://github.com/ethanabrooks/run-logger.git", rev = "main"}
+sweep-logger = {git = "https://github.com/ethanabrooks/sweep-logger.git", rev = "main"}
 gym = {version = "^0.18.3", extras = ["atari"]}
 setuptools = "^57.2.0"
 jsonlines = "^2.0.0"
