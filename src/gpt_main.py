@@ -1,21 +1,18 @@
 import logging
 from pathlib import Path
 from pprint import pformat
-from typing import Literal, Optional
+from typing import Optional
 
 import torch
 from transformers import GPT2Model
 
-import main
-import utils
+import babyai_main
+from envs import VecPyTorch
 from gpt_agent import Agent
 
 
-class Args(main.Args):
+class Args(babyai_main.Args):
     data_parallel: bool = True
-    gpt_size: Literal[
-        "small", "medium", "large", "xl"
-    ] = "medium"  # what size of pretrained GPT to use
     linguistic_analysis_save_interval: Optional[
         str
     ] = None  # path to save linguistic analysis data
@@ -24,24 +21,19 @@ class Args(main.Args):
     train_wpe: bool = False
 
 
-class Trainer(main.Trainer):
+class Trainer(babyai_main.Trainer):
     @staticmethod
-    def make_agent(envs, args: Args) -> Agent:
-        obs_shape = envs.observation_space.shape
+    def make_agent(envs: VecPyTorch, args: Args) -> Agent:
         action_space = envs.action_space
+        observation_space, *_ = envs.get_attr("original_observation_space")
         return Agent(
-            action_hidden_size=args.action_hidden_size,
             action_space=action_space,
-            data_parallel=args.data_parallel,
-            gpt_size=args.gpt_size,
+            embedding_size=args.embedding_size,
             hidden_size=args.hidden_size,
-            obs_shape=obs_shape,
-            one_layer=args.one_layer,
+            observation_space=observation_space,
             randomize_parameters=args.randomize_parameters,
-            recurrent=args.recurrent_policy,
-            save_interval=args.linguistic_analysis_save_interval,
-            save_dir=args.save_dir,
-            transpose=args.transpose,
+            train_ln=args.train_ln,
+            train_wpe=args.train_wpe,
         )
 
     @staticmethod
@@ -54,13 +46,7 @@ class Trainer(main.Trainer):
         logging.info("Saving parameters:")
         logging.info(pformat([*non_gpt_params]))
         save_path = Path(args.save_dir, f"checkpoint.pkl")
-        torch.save(
-            dict(
-                **non_gpt_params,
-                obs_rms=getattr(utils.get_vec_normalize(envs), "obs_rms", None),
-            ),
-            save_path,
-        )
+        torch.save(non_gpt_params, save_path)
         logging.info(f"Saved to {save_path}")
 
 
