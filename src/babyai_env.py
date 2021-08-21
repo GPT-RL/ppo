@@ -230,3 +230,101 @@ class TokenizerWrapper(gym.ObservationWrapper):
         mission = self.tokenizer.encode(observation["mission"])
         observation.update(mission=mission)
         return observation
+
+
+if __name__ == "__main__":
+    import babyai_main
+
+    class Args(babyai_main.Args):
+        tile_size: int = 32
+        agent_view: bool = False
+        test: bool = False
+
+    from gym_minigrid.wrappers import *
+    from gym_minigrid.window import Window
+
+    def redraw(img):
+        if not args.agent_view:
+            img = env.render("rgb_array", tile_size=args.tile_size)
+
+        window.show_img(img)
+
+    def reset():
+        obs = env.reset()
+
+        if hasattr(env, "mission"):
+            print("Mission: %s" % env.mission)
+            window.set_caption(env.mission)
+
+        redraw(obs)
+
+    def step(action):
+        obs, reward, done, info = env.step(action)
+        print("step=%s, reward=%.2f" % (env.step_count, reward))
+
+        if done:
+            print("done!")
+            reset()
+        else:
+            redraw(obs)
+
+    def key_handler(event):
+        print("pressed", event.key)
+
+        if event.key == "escape":
+            window.close()
+            return
+
+        if event.key == "backspace":
+            reset()
+            return
+
+        if event.key == "left":
+            step(env.actions.left)
+            return
+        if event.key == "right":
+            step(env.actions.right)
+            return
+        if event.key == "up":
+            step(env.actions.forward)
+            return
+
+        # Spacebar
+        if event.key == " ":
+            step(env.actions.toggle)
+            return
+        if event.key == "pageup":
+            step(env.actions.pickup)
+            return
+        if event.key == "pagedown":
+            step(env.actions.drop)
+            return
+
+        if event.key == "enter":
+            step(env.actions.done)
+            return
+
+    args = Args().parse_args()
+    train, test = get_train_and_test_objects()
+    goal_objects = test if args.test else train
+
+    env = Env(
+        goal_objects=goal_objects,
+        room_size=args.room_size,
+        num_dists=args.num_dists,
+        seed=args.seed,
+        strict=args.strict,
+    )
+    obs = env.reset()
+
+    if args.agent_view:
+        env = RGBImgPartialObsWrapper(env)
+        env = ImgObsWrapper(env)
+
+    window = Window("gym_minigrid")
+    window.reg_key_handler(key_handler)
+
+    reset()
+
+    # Blocking event loop
+    window.show(block=True)
