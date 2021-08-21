@@ -1,3 +1,5 @@
+from typing import NamedTuple, TypeVar
+
 import babyai
 import gym
 from babyai.levels.verifier import GoToInstr, ObjDesc
@@ -85,3 +87,12 @@ class GoToLocalEnv(babyai.levels.iclr19_levels.Level_GoToLocal):
             dists.append(dist)
 
         return dists
+
+
+T = TypeVar("T")  # Declare type variable
+
+
+class Spaces(NamedTuple):
+    image: T
+    direction: T
+    mission: T

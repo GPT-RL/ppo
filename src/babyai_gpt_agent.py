@@ -1,114 +1,59 @@
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from gym import Space
-from gym.spaces import Box, Dict, Discrete, MultiDiscrete
+from transformers import GPT2Config, GPT2Model
 
-import agent
-import babyai_main
-from agent import NNBase
-from gpt_agent import build_gpt
-from utils import init
+import babyai_agent
+from utils import get_gpt_size
 
 
-class Agent(agent.Agent):
-    def __init__(self, *args, observation_space, **kwargs):
-        spaces = babyai_main.Spaces(*observation_space.spaces)
-        super().__init__(
-            *args,
-            num_directions=spaces.direction.n,
-            obs_shape=spaces.image.shape,
-            observation_space=observation_space,
-            **kwargs
+def build_gpt(gpt_size, randomize_parameters):
+    gpt_size = get_gpt_size(gpt_size)
+    return (
+        GPT2Model(
+            GPT2Config.from_pretrained(
+                gpt_size,
+                use_cache=False,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
         )
+        if randomize_parameters
+        else GPT2Model.from_pretrained(
+            gpt_size,
+            use_cache=False,
+            output_attentions=False,
+            output_hidden_states=False,
+        )
+    )
 
+
+class Agent(babyai_agent.Agent):
     def build_base(self, obs_shape, **kwargs):
         return Base(**kwargs)
 
 
-def get_size(space: Space):
-    if isinstance(space, (Box, MultiDiscrete)):
-        return int(np.prod(space.shape))
-    if isinstance(space, Discrete):
-        return 1
-    raise TypeError()
-
-
-class Base(NNBase):
+class Base(babyai_agent.Base):
     def __init__(
         self,
-        gpt_size: str,
-        hidden_size: int,
-        num_directions: int,
-        observation_space: Dict,
+        *args,
+        embedding_size: str,
         randomize_parameters: bool,
         train_ln: bool,
         train_wpe: bool,
+        **kwargs,
     ):
-        super().__init__(False, hidden_size, hidden_size)
-        self.observation_spaces = babyai_main.Spaces(*observation_space.spaces)
-        self.num_directions = num_directions
-        self.gpt = build_gpt(gpt_size, randomize_parameters)
-        for name, p in self.gpt.named_parameters():
-            requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
-            p.requires_grad_(requires_grad)
-        self.embedding_size = self.gpt.config.n_embd
+        self._embedding_size = embedding_size
+        self.randomize_parameters = randomize_parameters
+        self.train_wpe = train_wpe
+        self.train_ln = train_ln
+        super().__init__(*args, embedding_size=embedding_size, **kwargs)
 
-        init_ = lambda m: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain("relu"),
-        )
-        h, w, d = self.observation_spaces.image.shape
-
-        self.conv = nn.Sequential(
-            init_(nn.Conv2d(d, 32, 4, 2)),
-            nn.ReLU(),
-            nn.Flatten(),
-        )
-        self.merge = nn.Sequential(
-            init_(
-                nn.Linear(
-                    32 * 2 * 2 + num_directions + self.embedding_size, hidden_size
-                )
-            ),
-            nn.ReLU(),
-        )
-
-        init_ = lambda m: init(
-            m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0)
-        )
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
-        self.train()
-
-    def forward(self, inputs, rnn_hxs, masks):
-        inputs = babyai_main.Spaces(
-            *torch.split(
-                inputs,
-                [get_size(space) for space in self.observation_spaces],
-                dim=-1,
+    def build_embeddings(self):
+        gpt = build_gpt(self._embedding_size, self.randomize_parameters)
+        for name, p in gpt.named_parameters():
+            requires_grad = (self.train_wpe and "wpe" in name) or (
+                self.train_ln and "ln" in name
             )
-        )
+            p.requires_grad_(requires_grad)
+        return gpt
 
-        image = inputs.image.reshape(-1, *self.observation_spaces.image.shape).permute(
-            0, 3, 1, 2
-        )
-        image = self.conv(image)
-        directions = inputs.direction.squeeze().long()
-        directions = F.one_hot(directions, num_classes=self.num_directions)
-        mission = self.gpt.forward(inputs.mission.long()).last_hidden_state[:, -1]
-        x = torch.cat([image, directions, mission], dim=-1)
-        x = self.merge(x)
-        return self.critic_linear(x), x, rnn_hxs
-
-
-class DataParallel(nn.DataParallel):
-    def __getattr__(self, item):
-        try:
-            return super().__getattr__(item)
-        except AttributeError:
-            return getattr(self.module, item)
+    def embed(self, inputs):
+        return self.embeddings.forward(inputs).last_hidden_state[:, -1]

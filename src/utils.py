@@ -26,6 +26,11 @@ def get_vec_normalize(venv):
 
     return None
 
+def get_gpt_size(gpt_size):
+    gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
+    gpt_size = f"gpt2{gpt_size}"
+    return gpt_size
+
 
 # Necessary for my KFAC implementation.
 class AddBias(nn.Module):

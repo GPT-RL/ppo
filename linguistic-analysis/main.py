@@ -1,16 +1,18 @@
 import pickle
 import random
-from pathlib import Path
 from itertools import chain
+from pathlib import Path
 from typing import List, Tuple
 
 import jsonlines
-import pandas as pd
 import numpy as np
+import pandas as pd
 import torch
 import umap
 from tap import Tap
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+
+import babyai_env
 
 BASE_PATH = Path("/root/.cache/GPT/linguistic_analysis")
 UMAP_CONFIGS = [
@@ -58,7 +60,7 @@ def relative_quantile_summary(
     quantile_labels: List[float],
 ) -> pd.DataFrame:
     q = torch.quantile(pairwise_dists, quantiles, dim=1)
-    q = pd.DataFrame(q.cpu().numpy().T, columns=quantile_labels)
+    q = pd.DataFrame(babyai_env.T, columns=quantile_labels)
     return get_summary(q, "quantile")
 
 
