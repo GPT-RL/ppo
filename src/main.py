@@ -272,10 +272,9 @@ class Trainer:
                     logger.log(log)
 
             if args.test_interval is not None and j % args.test_interval == 0:
-                envs = cls.make_vec_envs(args, device, test=True)
                 cls.test(
                     agent=agent,
-                    envs=envs,
+                    envs=cls.make_vec_envs(args, device, test=True),
                     num_processes=args.num_processes,
                     device=device,
                     start=start,
