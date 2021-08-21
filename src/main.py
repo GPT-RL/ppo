@@ -445,6 +445,7 @@ class Trainer:
                 *[
                     spec(x="step", y=y)
                     for y in (
+                        TEST_EPISODE_RETURN,
                         EPISODE_RETURN,
                         FPS,
                         ENTROPY,
