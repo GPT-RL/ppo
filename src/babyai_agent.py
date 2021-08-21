@@ -103,8 +103,8 @@ class Base(NNBase):
             0, 3, 1, 2
         )
         image = self.conv(image)
-        directions = inputs.direction.squeeze().long()
-        directions = F.one_hot(directions, num_classes=self.num_directions)
+        directions = inputs.direction.long()
+        directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
         mission = self.embed(inputs.mission.long())
         x = torch.cat([image, directions, mission], dim=-1)
         x = self.merge(x)
