@@ -249,8 +249,8 @@ class Trainer:
                     args.save_dir.mkdir(parents=True, exist_ok=True)
                     cls.save(agent, args, envs)
 
+            total_num_steps = (j + 1) * args.num_processes * args.num_steps
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
-                total_num_steps = (j + 1) * args.num_processes * args.num_steps
                 now = time.time()
                 fps = int(total_num_steps / (now - start))
                 log = {
@@ -278,11 +278,12 @@ class Trainer:
                     num_processes=args.num_processes,
                     device=device,
                     start=start,
+                    total_num_steps=total_num_steps,
                     logger=logger,
                 )
 
     @classmethod
-    def test(cls, agent, envs, num_processes, device, start, logger):
+    def test(cls, agent, envs, num_processes, device, start, total_num_steps, logger):
 
         episode_rewards = []
 
@@ -317,6 +318,7 @@ class Trainer:
             TEST_EPISODE_RETURN: np.mean(episode_rewards),
             TIME: now * 1000000,
             HOURS: (now - start) / 3600,
+            STEP: total_num_steps,
         }
         logging.info(pformat(log))
         if logger is not None:
@@ -440,9 +442,15 @@ class Trainer:
         logger: Logger
         with HasuraLogger(args.graphql_endpoint) as logger:
             charts = [
-                spec(x=HOURS, y=EPISODE_RETURN),
                 *[
-                    spec(x="step", y=y)
+                    spec(x=HOURS, y=y)
+                    for y in (
+                        TEST_EPISODE_RETURN,
+                        EPISODE_RETURN,
+                    )
+                ],
+                *[
+                    spec(x=STEP, y=y)
                     for y in (
                         TEST_EPISODE_RETURN,
                         EPISODE_RETURN,
