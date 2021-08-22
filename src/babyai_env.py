@@ -3,9 +3,11 @@ from typing import NamedTuple, TypeVar
 
 import babyai
 import gym
+import numpy as np
 from babyai.levels.verifier import ObjDesc, PickupInstr
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
+from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
 
@@ -197,7 +199,6 @@ if __name__ == "__main__":
         agent_view: bool = False
         test: bool = False
 
-    from gym_minigrid.wrappers import *
     from gym_minigrid.window import Window
 
     def redraw(img):
