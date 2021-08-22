@@ -92,7 +92,8 @@ class Env(babyai.levels.iclr19_levels.Level_GoToLocal):
         self.connect_all()
         objs = self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
-        obj = self._rand_elem(objs)
+        obj, *_ = objs
+        assert (obj.type, obj.color) in self.goal_objects, obj
         self.instrs = PickupInstr(ObjDesc(obj.type, obj.color), strict=self.strict)
 
     def can_be_goal(self, obj: WorldObj):
