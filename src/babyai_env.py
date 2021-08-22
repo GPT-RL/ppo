@@ -10,9 +10,6 @@ from transformers import GPT2Tokenizer
 
 
 def get_train_and_test_objects():
-    object_types = [*all_object_types()]
-    np.random.shuffle(object_types)
-
     def pairs():
         colors = [*COLOR_NAMES]
         types = ["key", "ball", "box"]
@@ -37,18 +34,16 @@ def get_train_and_test_objects():
             yield type, colors.pop()
 
         # yield remaining
-        remaining = [
-            (type, color)
-            for type, colors in types_to_colors.items()
-            for color in colors
-        ]
-        np.random.shuffle(remaining)
-        yield from remaining
+        # remaining = [
+        #     (type, color)
+        #     for type, colors in types_to_colors.items()
+        #     for color in colors
+        # ]
+        # np.random.shuffle(remaining)
+        # yield from remaining
 
-    pairs = [*pairs()]
-    three_quarters = round(3 / 4 * len(pairs))
-    train_objects = pairs[:three_quarters]
-    test_objects = pairs[three_quarters:]
+    train_objects = [*pairs()]
+    test_objects = [x for x in all_object_types() if x not in set(train_objects)]
     return test_objects, train_objects
 
 
