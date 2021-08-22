@@ -53,49 +53,6 @@ def get_train_and_test_objects():
     return test_objects, train_objects
 
 
-def get_train_and_test_objects():
-    object_types = [*all_object_types()]
-    np.random.shuffle(object_types)
-
-    def pairs():
-        colors = [*COLOR_NAMES]
-        types = ["key", "ball", "box"]
-
-        np.random.shuffle(colors)
-        np.random.shuffle(types)
-
-        colors_to_types = {color: [*types] for color in colors}
-
-        # yield all colors
-        for color, types in colors_to_types.items():
-            yield types.pop(), color
-
-        # reverse colors_to_types
-        types_to_colors = defaultdict(set)
-        for color, types in colors_to_types.items():
-            for type in types:
-                types_to_colors[type].add(color)
-
-        # yield all types
-        for type, [*colors] in types_to_colors.items():
-            yield type, colors.pop()
-
-        # yield remaining
-        remaining = [
-            (type, color)
-            for type, colors in types_to_colors.items()
-            for color in colors
-        ]
-        np.random.shuffle(remaining)
-        yield from remaining
-
-    pairs = [*pairs()]
-    three_quarters = round(3 / 4 * len(pairs))
-    train_objects = pairs[:three_quarters]
-    test_objects = pairs[three_quarters:]
-    return test_objects, train_objects
-
-
 def all_object_types():
     for color in COLOR_NAMES:
         for object_type in ["key", "ball", "box"]:
