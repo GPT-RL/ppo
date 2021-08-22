@@ -8,6 +8,7 @@ from babyai_agent import Agent
 from babyai_env import (
     Env,
     ObsSpaceWrapper,
+    ZeroOneRewardWrapper,
     RolloutsWrapper,
     TokenizerWrapper,
     get_train_and_test_objects,
@@ -43,6 +44,7 @@ class Trainer(main.Trainer):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
+            env = ZeroOneRewardWrapper(env)
             env = ObsSpaceWrapper(env)
             env = TokenizerWrapper(
                 env, tokenizer=tokenizer, longest_mission="pick up a blue ball"

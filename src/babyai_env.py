@@ -7,7 +7,6 @@ from babyai.levels.verifier import ObjDesc, PickupInstr
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
 from transformers import GPT2Tokenizer
-import numpy as np
 
 
 def get_train_and_test_objects():
@@ -148,6 +147,11 @@ class Spaces(NamedTuple):
     image: T
     direction: T
     mission: T
+
+
+class ZeroOneRewardWrapper(gym.RewardWrapper):
+    def reward(self, reward):
+        return int(bool(reward > 0))
 
 
 class RolloutsWrapper(gym.ObservationWrapper):
