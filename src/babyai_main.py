@@ -60,7 +60,7 @@ class Trainer(main.Trainer):
     @classmethod
     def make_vec_envs(cls, args, device, **kwargs):
         test_objects, train_objects = get_train_and_test_objects()
-        assert len(test_objects) >= 3
+        # assert len(test_objects) >= 3
         test = kwargs.pop("test")
         goal_objects = test_objects if test else train_objects
 

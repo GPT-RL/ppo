@@ -6,7 +6,7 @@ import gym
 import numpy as np
 from babyai.levels.verifier import ObjDesc, PickupInstr
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
+from gym_minigrid.minigrid import Ball, COLOR_NAMES, WorldObj
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
@@ -44,8 +44,10 @@ def get_train_and_test_objects():
         # np.random.shuffle(remaining)
         # yield from remaining
 
-    train_objects = [*pairs()][:1]
-    test_objects = [x for x in all_object_types() if x not in set(train_objects)]
+    # train_objects = [*pairs()][:1]
+    train_objects = [("ball", "red")]
+    # test_objects = [x for x in all_object_types() if x not in set(train_objects)]
+    test_objects = [("ball", "blue")]
     return test_objects, train_objects
 
 
@@ -89,7 +91,11 @@ class Env(babyai.levels.iclr19_levels.Level_GoToLocal):
         objs = self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
         obj, *_ = objs
-        assert (obj.type, obj.color) in self.goal_objects, obj
+        assert (obj.type, obj.color) in self.goal_objects, (
+            obj.type,
+            obj.color,
+            self.goal_objects,
+        )
         self.instrs = PickupInstr(ObjDesc(obj.type, obj.color), strict=self.strict)
 
     def can_be_goal(self, obj: WorldObj):

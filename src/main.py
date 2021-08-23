@@ -91,7 +91,6 @@ class Args(Tap):
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
     env: str = "BreakoutNoFrameskip-v4"  # env ID for gym
-    test_interval: Optional[int] = None  # how many updates to evaluate between
     eps: float = 1e-5  # RMSProp epsilon
     gae: bool = True  # use Generalized Advantage Estimation
     gae_lambda: float = 0.95  # GAE lambda parameter
@@ -111,6 +110,7 @@ class Args(Tap):
     save_interval: Optional[int] = None  # how many updates to save between
     save_dir: str = "/tmp/logs"  # path to save parameters if saving locally
     seed: int = 0  # random seed
+    test_interval: Optional[int] = None  # how many updates to evaluate between
     use_proper_time_limits: bool = False  # compute returns with time limits
     value_coef: float = 1  # value loss coefficient
     config: Optional[str] = None  # If given, yaml config from which to load params
