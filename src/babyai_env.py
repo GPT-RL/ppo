@@ -44,7 +44,7 @@ def get_train_and_test_objects():
         # np.random.shuffle(remaining)
         # yield from remaining
 
-    train_objects = [*pairs()]
+    train_objects = [*pairs()][:1]
     test_objects = [x for x in all_object_types() if x not in set(train_objects)]
     return test_objects, train_objects
 
