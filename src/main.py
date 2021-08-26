@@ -330,7 +330,13 @@ class Trainer:
             logger.log(log)
             tick = time.time()
             logger.blob(
-                pickle.dumps(dict(observations=observations, rewards=episode_rewards))
+                pickle.dumps(
+                    dict(
+                        observations=observations,
+                        rewards=episode_rewards,
+                        **{STEP: total_num_steps},
+                    )
+                )
             )
             logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
