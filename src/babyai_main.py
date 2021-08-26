@@ -1,6 +1,5 @@
 from typing import Literal
 
-from gym_minigrid.wrappers import FullyObsWrapper
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
 
@@ -8,6 +7,7 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     Env,
+    FullyObsWrapper,
     ZeroOneRewardWrapper,
     RolloutsWrapper,
     TokenizerWrapper,

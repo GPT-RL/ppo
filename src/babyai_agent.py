@@ -44,6 +44,7 @@ class Base(NNBase):
     ):
         super().__init__(False, hidden_size, hidden_size)
         self.observation_spaces = Spaces(*observation_space.spaces)
+        self.num_directions = self.observation_spaces.direction.n
 
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size),
@@ -68,7 +69,9 @@ class Base(NNBase):
             nn.Flatten(),
         )
         self.merge = nn.Sequential(
-            init_(nn.Linear(32 + self.embedding_size, hidden_size)),
+            init_(
+                nn.Linear(32 + self.num_directions + self.embedding_size, hidden_size)
+            ),
             nn.ReLU(),
         )
 
@@ -97,8 +100,10 @@ class Base(NNBase):
             0, 3, 1, 2
         )
         image = self.conv(image)
+        directions = inputs.direction.long()
+        directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
         mission = self.embed(inputs.mission.long())
-        x = torch.cat([image, mission], dim=-1)
+        x = torch.cat([image, directions, mission], dim=-1)
         x = self.merge(x)
         return self.critic_linear(x), x, rnn_hxs
 

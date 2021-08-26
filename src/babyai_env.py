@@ -1,15 +1,17 @@
 from collections import defaultdict
-from typing import NamedTuple, TypeVar
+from dataclasses import astuple, dataclass
+from typing import TypeVar
 
 import babyai
-from dataclasses import astuple, dataclass
 import gym
+import gym_minigrid
 import numpy as np
 from babyai.levels.verifier import ObjDesc, PickupInstr
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import Ball, COLOR_NAMES, WorldObj
+from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
+from gym_minigrid.window import Window
 
 
 def get_train_and_test_objects():
@@ -134,6 +136,7 @@ T = TypeVar("T")  # Declare type variable
 @dataclass
 class Spaces:
     image: T
+    direction: T
     mission: T
 
 
@@ -153,7 +156,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
         # direction_space = spaces["direction"]
         mission_space = spaces["mission"]
         self.observation_space = Box(
-            shape=[np.prod(image_space.shape) + np.prod(mission_space.shape)],
+            shape=[np.prod(image_space.shape) + 1 + np.prod(mission_space.shape)],
             low=-np.inf,
             high=np.inf,
         )
@@ -163,6 +166,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
             astuple(
                 Spaces(
                     image=observation["image"].flatten(),
+                    direction=np.array([observation["direction"]]),
                     mission=observation["mission"],
                 )
             )
@@ -185,16 +189,24 @@ class TokenizerWrapper(gym.ObservationWrapper):
         return observation
 
 
-if __name__ == "__main__":
-    import babyai_main
+class FullyObsWrapper(gym_minigrid.wrappers.FullyObsWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.observation_space = Dict(
+            spaces=dict(
+                **self.observation_space.spaces,
+                direction=Discrete(4),
+            )
+        )
 
-    class Args(babyai_main.Args):
-        tile_size: int = 32
-        agent_view: bool = False
-        test: bool = False
+    def observation(self, obs):
+        direction = obs["direction"]
+        obs = super().observation(obs)
+        obs["direction"] = direction
+        return obs
 
-    from gym_minigrid.window import Window
 
+def main(args: "Args"):
     def redraw(img):
         if not args.agent_view:
             img = env.render("rgb_array", tile_size=args.tile_size)
@@ -255,10 +267,8 @@ if __name__ == "__main__":
             step(env.actions.done)
             return
 
-    args = Args().parse_args()
     train, test = get_train_and_test_objects()
     goal_objects = test if args.test else train
-
     env = Env(
         goal_objects=goal_objects,
         room_size=args.room_size,
@@ -266,16 +276,22 @@ if __name__ == "__main__":
         seed=args.seed,
         strict=args.strict,
     )
-    obs = env.reset()
-
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
         env = ImgObsWrapper(env)
-
     window = Window("gym_minigrid")
     window.reg_key_handler(key_handler)
-
     reset()
-
     # Blocking event loop
     window.show(block=True)
+
+
+if __name__ == "__main__":
+    import babyai_main
+
+    class Args(babyai_main.Args):
+        tile_size: int = 32
+        agent_view: bool = False
+        test: bool = False
+
+    main(Args().parse_args())
