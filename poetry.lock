@@ -699,7 +699,7 @@ redis = "^3.5.3"
 type = "git"
 url = "https://github.com/ethanabrooks/run-logger.git"
 reference = "main"
-resolved_reference = "03c6a532f303c4dd8a295f984e07100199587bfe"
+resolved_reference = "e6c60b7dc6c31d39cb990191fed8ed56442e12b2"
 
 [[package]]
 name = "rx"
@@ -804,7 +804,7 @@ run-logger = {git = "https://github.com/ethanabrooks/run-logger.git", rev = "mai
 type = "git"
 url = "https://github.com/ethanabrooks/sweep-logger.git"
 reference = "main"
-resolved_reference = "1878b871e2f25b123d65729c546113d39d146a15"
+resolved_reference = "b70753df92fa322bd3bbf8854c5e5093de1d6138"
 
 [[package]]
 name = "threadpoolctl"

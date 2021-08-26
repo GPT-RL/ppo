@@ -1,3 +1,4 @@
+import codecs
 import logging
 import os
 import pickle
@@ -328,23 +329,27 @@ class Trainer:
         logging.info(pformat(log))
         if logger is not None:
             logger.log(log)
-            tick = time.time()
-            logger.blob(
-                pickle.dumps(
-                    dict(
-                        observations=observations,
-                        rewards=episode_rewards,
-                        **{STEP: total_num_steps},
-                    )
-                )
+            cls.blob(
+                logger,
+                dict(
+                    observations=observations,
+                    rewards=episode_rewards,
+                    **{STEP: total_num_steps},
+                ),
             )
-            logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
         logging.info(
             " Evaluation using {} episodes: mean reward {:.5f}\n".format(
                 len(episode_rewards), np.mean(episode_rewards)
             )
         )
+
+    @staticmethod
+    def blob(logger: Logger, obj):
+        tick = time.time()
+        pickled = codecs.encode(pickle.dumps(obj), "base64").decode()
+        logger.blob(pickled)
+        logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
     @staticmethod
     def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
