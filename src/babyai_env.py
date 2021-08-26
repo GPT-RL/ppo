@@ -210,7 +210,6 @@ if __name__ == "__main__":
     def redraw(img):
         if not args.agent_view:
             img = env.render("rgb_array", tile_size=args.tile_size)
-
         window.show_img(img)
 
     def reset():

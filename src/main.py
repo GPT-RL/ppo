@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 import time
 from collections import deque
 from pathlib import Path
@@ -285,6 +286,7 @@ class Trainer:
     def test(cls, agent, envs, num_processes, device, start, total_num_steps, logger):
 
         episode_rewards = []
+        observations = []
 
         obs = envs.reset()
         recurrent_hidden_states = torch.zeros(
@@ -298,8 +300,9 @@ class Trainer:
                     obs, recurrent_hidden_states, masks, deterministic=True
                 )
 
-            # Obser reward and next obs
+            # Observe reward and next obs
             obs, _, done, infos = envs.step(action)
+            observations.append(obs.cpu().numpy())
 
             masks = torch.tensor(
                 [[0.0] if done_ else [1.0] for done_ in done],
@@ -325,8 +328,13 @@ class Trainer:
         logging.info(pformat(log))
         if logger is not None:
             logger.log(log)
+            tick = time.time()
+            logger.blob(
+                pickle.dumps(dict(observations=observations, rewards=episode_rewards))
+            )
+            logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
-        print(
+        logging.info(
             " Evaluation using {} episodes: mean reward {:.5f}\n".format(
                 len(episode_rewards), np.mean(episode_rewards)
             )

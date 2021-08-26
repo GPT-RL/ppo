@@ -25,6 +25,7 @@ class Args(main.Args):
     room_size: int = 5
     num_dists: int = 2
     strict: bool = True
+    record_interval: int = 200
 
 
 class Trainer(main.Trainer):
