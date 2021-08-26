@@ -90,6 +90,7 @@ class Sweep(LoggerArgs):
 
 @dataclass
 class TimeSteps:
+    action: np.ndarray
     observation: np.ndarray
     reward: np.ndarray
     done: np.ndarray
@@ -315,6 +316,7 @@ class Trainer:
             time_steps.append(
                 asdict(
                     TimeSteps(
+                        action=action.cpu().numpy(),
                         observation=obs.cpu().numpy(),
                         reward=rewards,
                         done=done,
