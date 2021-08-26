@@ -57,21 +57,6 @@ def all_object_types():
             yield object_type, color
 
 
-class ObsSpaceWrapper(gym.ObservationWrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        spaces = {**self.observation_space.spaces}
-        self.observation_space = Dict(
-            spaces=dict(
-                **spaces,
-                direction=Discrete(4),
-            )
-        )
-
-    def observation(self, observation):
-        return observation
-
-
 class Env(babyai.levels.iclr19_levels.Level_GoToLocal):
     def __init__(
         self,
@@ -149,7 +134,6 @@ T = TypeVar("T")  # Declare type variable
 @dataclass
 class Spaces:
     image: T
-    direction: T
     mission: T
 
 
@@ -169,7 +153,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
         # direction_space = spaces["direction"]
         mission_space = spaces["mission"]
         self.observation_space = Box(
-            shape=[np.prod(image_space.shape) + 1 + np.prod(mission_space.shape)],
+            shape=[np.prod(image_space.shape) + np.prod(mission_space.shape)],
             low=-np.inf,
             high=np.inf,
         )
@@ -179,7 +163,6 @@ class RolloutsWrapper(gym.ObservationWrapper):
             astuple(
                 Spaces(
                     image=observation["image"].flatten(),
-                    direction=np.array([observation["direction"]]),
                     mission=observation["mission"],
                 )
             )

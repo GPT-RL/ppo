@@ -1,5 +1,6 @@
 from typing import Literal
 
+from gym_minigrid.wrappers import FullyObsWrapper
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
 
@@ -7,7 +8,6 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     Env,
-    ObsSpaceWrapper,
     ZeroOneRewardWrapper,
     RolloutsWrapper,
     TokenizerWrapper,
@@ -45,8 +45,8 @@ class Trainer(main.Trainer):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
+            env = FullyObsWrapper(env)
             env = ZeroOneRewardWrapper(env)
-            env = ObsSpaceWrapper(env)
             env = TokenizerWrapper(
                 env, tokenizer=tokenizer, longest_mission="pick up a blue ball"
             )
