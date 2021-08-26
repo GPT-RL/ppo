@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import NamedTuple, TypeVar
 
 import babyai
+from dataclasses import astuple, dataclass
 import gym
 import numpy as np
 from babyai.levels.verifier import ObjDesc, PickupInstr
@@ -145,7 +146,8 @@ class Env(babyai.levels.iclr19_levels.Level_GoToLocal):
 T = TypeVar("T")  # Declare type variable
 
 
-class Spaces(NamedTuple):
+@dataclass
+class Spaces:
     image: T
     direction: T
     mission: T
@@ -160,7 +162,9 @@ class RolloutsWrapper(gym.ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
         spaces = {**self.observation_space.spaces}
-        self.original_observation_space = Tuple(Spaces(**self.observation_space.spaces))
+        self.original_observation_space = Tuple(
+            astuple(Spaces(**self.observation_space.spaces))
+        )
         image_space = spaces["image"]
         # direction_space = spaces["direction"]
         mission_space = spaces["mission"]
@@ -172,10 +176,12 @@ class RolloutsWrapper(gym.ObservationWrapper):
 
     def observation(self, observation):
         return np.concatenate(
-            Spaces(
-                image=observation["image"].flatten(),
-                direction=np.array([observation["direction"]]),
-                mission=observation["mission"],
+            astuple(
+                Spaces(
+                    image=observation["image"].flatten(),
+                    direction=np.array([observation["direction"]]),
+                    mission=observation["mission"],
+                )
             )
         )
 

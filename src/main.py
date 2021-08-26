@@ -4,9 +4,10 @@ import os
 import pickle
 import time
 from collections import deque
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
-from typing import Optional
+from typing import List, Optional
 
 import gym
 import numpy as np
@@ -85,6 +86,14 @@ class Run(LoggerArgs):
 
 class Sweep(LoggerArgs):
     sweep_id: int = None
+
+
+@dataclass
+class TimeSteps:
+    observation: np.ndarray
+    reward: np.ndarray
+    done: np.ndarray
+    info: List[dict]
 
 
 class Args(Tap):
@@ -287,7 +296,7 @@ class Trainer:
     def test(cls, agent, envs, num_processes, device, start, total_num_steps, logger):
 
         episode_rewards = []
-        observations = []
+        time_steps = []
 
         obs = envs.reset()
         recurrent_hidden_states = torch.zeros(
@@ -302,8 +311,17 @@ class Trainer:
                 )
 
             # Observe reward and next obs
-            obs, _, done, infos = envs.step(action)
-            observations.append(obs.cpu().numpy())
+            obs, rewards, done, infos = envs.step(action)
+            time_steps.append(
+                asdict(
+                    TimeSteps(
+                        observation=obs.cpu().numpy(),
+                        reward=rewards,
+                        done=done,
+                        info=infos,
+                    )
+                )
+            )
 
             masks = torch.tensor(
                 [[0.0] if done_ else [1.0] for done_ in done],
@@ -332,8 +350,7 @@ class Trainer:
             cls.blob(
                 logger,
                 dict(
-                    observations=observations,
-                    rewards=episode_rewards,
+                    time_steps=time_steps,
                     **{STEP: total_num_steps},
                 ),
             )
@@ -347,7 +364,10 @@ class Trainer:
     @staticmethod
     def blob(logger: Logger, obj):
         tick = time.time()
+
+        # https://stackoverflow.com/a/30469744/4176597
         pickled = codecs.encode(pickle.dumps(obj), "base64").decode()
+
         logger.blob(pickled)
         logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
@@ -484,6 +504,7 @@ class Trainer:
                 sweep_id=sweep_id,
                 charts=charts,
             )
+
             if parameters is not None:
                 for k, v in parameters.items():
                     if k not in excluded:

@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from gym import Space
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete
 from transformers import GPT2Config
+from dataclasses import astuple
 
 import agent
 from agent import NNBase
@@ -94,7 +95,7 @@ class Base(NNBase):
         inputs = Spaces(
             *torch.split(
                 inputs,
-                [get_size(space) for space in self.observation_spaces],
+                [get_size(space) for space in astuple(self.observation_spaces)],
                 dim=-1,
             )
         )
