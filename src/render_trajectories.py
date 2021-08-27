@@ -40,6 +40,7 @@ class Args(Tap):
     id: int
     granularity: Literal["sweep", "run"] = "run"
     tile_size: int = 32
+    test: bool = True
 
 
 class InvalidGranularityError(RuntimeError):
@@ -167,7 +168,10 @@ query Query($id: Int) {
 
             # https://stackoverflow.com/a/30469744/4176597
             data = pickle.loads(codecs.decode(pickled.encode(), "base64"))
+            test = data["test"]
             training_step = data["step"]
+            if test != args.test:
+                continue
             if training_step < args.step:
                 continue
             raw_time_steps = data["time_steps"]
@@ -220,7 +224,7 @@ query Query($id: Int) {
             for j, (object_idx, color_idx, state_idx) in enumerate(row):
                 obj = IDX_TO_OBJECT[object_idx]
                 color = IDX_TO_COLOR[color_idx]
-                state = IDX_TO_STATE[state_idx]
+                state = IDX_TO_STATE.get(state_idx)
                 if obj == "wall":
                     v = Wall(color)
                 elif obj == "floor":
@@ -285,4 +289,4 @@ query Query($id: Int) {
 
 
 if __name__ == "__main__":
-    main(Args().parse_args())
+    main(Args(explicit_bool=True).parse_args())
