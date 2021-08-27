@@ -94,8 +94,8 @@ class Env(RoomGridLevel):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        for obj in self.room_objects:
-            self.add_object(0, 0, *obj)
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        self.add_object(0, 0, *self.goal_object)
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*self.goal_object))
 
