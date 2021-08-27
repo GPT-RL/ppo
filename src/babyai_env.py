@@ -69,14 +69,14 @@ class Agent(WorldObj):
 class Env(RoomGridLevel):
     def __init__(
         self,
-        room_objects,
+        goal_objects,
         room_size: int,
         num_dists: int,
         seed: int,
         strict: bool,
     ):
         self.strict = strict
-        self.goal_object, *_ = self.room_objects = room_objects
+        self.goal_object, *_ = self.goal_objects = goal_objects
         self.num_dists = num_dists
         self.__reward = None
         self.__done = None
@@ -95,7 +95,7 @@ class Env(RoomGridLevel):
         self.place_agent()
         self.connect_all()
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
-        goal_object = self._rand_elem(self.room_objects)
+        goal_object = self._rand_elem(self.goal_objects)
         self.add_object(0, 0, *goal_object)
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*goal_object))
@@ -295,7 +295,7 @@ def main(args: "Args"):
     train, test = get_train_and_test_objects()
     goal_objects = test if args.test else train
     env = Env(
-        room_objects=goal_objects,
+        goal_objects=goal_objects,
         room_size=args.room_size,
         num_dists=args.num_dists,
         seed=args.seed,

@@ -41,7 +41,9 @@ class Trainer(main.Trainer):
         )
 
     @staticmethod
-    def make_env(env_id, seed, rank, allow_early_resets, render: bool, *args, **kwargs):
+    def make_env(
+        env_id, seed, rank, allow_early_resets, render: bool = False, *args, **kwargs
+    ):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
@@ -65,7 +67,7 @@ class Trainer(main.Trainer):
         test_objects, train_objects = get_train_and_test_objects()
         # assert len(test_objects) >= 3
         test = kwargs.pop("test")
-        room_objects = test_objects if test else train_objects
+        goal_objects = test_objects if test else train_objects
 
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
         return super().make_vec_envs(
@@ -73,7 +75,7 @@ class Trainer(main.Trainer):
             device,
             room_size=args.room_size,
             num_dists=args.num_dists,
-            room_objects=room_objects,
+            goal_objects=goal_objects,
             strict=args.strict,
             tokenizer=tokenizer,
             **kwargs,

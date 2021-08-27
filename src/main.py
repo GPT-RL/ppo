@@ -138,7 +138,7 @@ class Args(Tap):
 
 class Trainer:
     @classmethod
-    def train(cls, args: Args, logger: Optional[Logger] = None):
+    def train(cls, args: Args, logger: Optional[HasuraLogger] = None):
         logging.getLogger().setLevel(args.log_level)
 
         if args.render or args.render_test:

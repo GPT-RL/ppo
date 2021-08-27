@@ -153,7 +153,7 @@ query Query($id: Int) {
         rank=0,
         allow_early_resets=False,
         tokenizer=tokenizer,
-        room_objects=[("ball", "red")],
+        goal_objects=[("ball", "red")],
         room_size=metadata.room_size,
         num_dists=metadata.num_dists,
         strict=metadata.strict,
