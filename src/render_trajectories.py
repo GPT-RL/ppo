@@ -153,10 +153,10 @@ query Query($id: Int) {
         rank=0,
         allow_early_resets=False,
         tokenizer=tokenizer,
-        # goal_objects=[("ball", "red")],
-        # room_size=metadata.room_size,
-        # num_dists=metadata.num_dists,
-        # strict=metadata.strict,
+        room_objects=[("ball", "red")],
+        room_size=metadata.room_size,
+        num_dists=metadata.num_dists,
+        strict=metadata.strict,
     )()
     IDX_TO_ACTIONS = {a.value: a.name for a in env.actions}
     observation_spaces = env.original_observation_space
@@ -214,6 +214,7 @@ query Query($id: Int) {
                     )
 
     time_steps = [*get_time_steps()]
+    INDEX = len(time_steps) - 1
 
     def redraw():
         time_step: TimeStep = time_steps[INDEX]
