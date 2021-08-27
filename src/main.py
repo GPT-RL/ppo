@@ -278,12 +278,24 @@ class Trainer:
                 logging.info(pformat(log))
                 if logger is not None:
                     log.update({"run ID": logger.run_id})
+
                 logging.info(pformat(log))
                 if logger is not None:
                     logger.log(log)
 
+                cls.evaluate(
+                    agent=agent,
+                    envs=cls.make_vec_envs(args, device, test=False),
+                    num_processes=args.num_processes,
+                    device=device,
+                    start=start,
+                    total_num_steps=total_num_steps,
+                    logger=logger,
+                    test=False,
+                )
+
             if args.test_interval is not None and j % args.test_interval == 0:
-                cls.test(
+                cls.evaluate(
                     agent=agent,
                     envs=cls.make_vec_envs(args, device, test=True),
                     num_processes=args.num_processes,
@@ -291,10 +303,13 @@ class Trainer:
                     start=start,
                     total_num_steps=total_num_steps,
                     logger=logger,
+                    test=True,
                 )
 
     @classmethod
-    def test(cls, agent, envs, num_processes, device, start, total_num_steps, logger):
+    def evaluate(
+        cls, agent, envs, num_processes, device, start, total_num_steps, logger, test
+    ):
 
         episode_rewards = []
         time_steps = []
@@ -353,6 +368,7 @@ class Trainer:
                 logger,
                 dict(
                     time_steps=time_steps,
+                    test=test,
                     **{STEP: total_num_steps},
                 ),
             )
