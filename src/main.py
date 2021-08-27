@@ -13,6 +13,7 @@ import gym
 import numpy as np
 import torch
 import yaml
+from gql import gql
 from gym.wrappers.clip_action import ClipAction
 from stable_baselines3.common.atari_wrappers import (
     ClipRewardEnv,
@@ -26,6 +27,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from sweep_logger import HasuraLogger, Logger
 from tap import Tap
+from torch import nn
 
 import utils
 from agent import Agent
@@ -108,6 +110,7 @@ class Args(Tap):
     gae_lambda: float = 0.95  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
     hidden_size: int = 512
+    load_path: str = None  # path to load parameters from if at all
     log_interval: int = 100  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
     log_level: str = "INFO"
@@ -135,7 +138,7 @@ class Args(Tap):
 
 class Trainer:
     @classmethod
-    def train(cls, args: Args, logger: Optional[Logger] = None):
+    def train(cls, args: Args, logger: Optional[HasuraLogger] = None):
         logging.getLogger().setLevel(args.log_level)
 
         torch.manual_seed(args.seed)
@@ -156,6 +159,11 @@ class Trainer:
 
         agent = cls.make_agent(envs=envs, args=args)
         agent.to(device)
+
+        if args.load_path is not None:
+            assert logger is not None
+            raise NotImplementedError
+            # agent.load_state_dict(torch.load(args.load_path))
 
         ppo = PPO(
             agent=agent,
@@ -250,17 +258,16 @@ class Trainer:
 
             rollouts.after_update()
 
+            total_num_steps = (j + 1) * args.num_processes * args.num_steps
+
             # save for every interval-th episode or for the last epoch
             if (
                 args.save_interval is not None
-                and j % args.save_interval == 0
-                or j == num_updates - 1
+                and (j % args.save_interval == 0 or j == num_updates - 1)
+                and logger is not None
             ):
-                if args.save_dir:
-                    args.save_dir.mkdir(parents=True, exist_ok=True)
-                    cls.save(agent, args, envs)
+                cls.save(agent, logger, total_num_steps)
 
-            total_num_steps = (j + 1) * args.num_processes * args.num_steps
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
                 now = time.time()
                 fps = int(total_num_steps / (now - start))
@@ -366,12 +373,12 @@ class Trainer:
         if logger is not None:
             logger.log(log)
             cls.blob(
-                logger,
-                dict(
-                    time_steps=time_steps,
-                    test=test,
-                    **{STEP: total_num_steps},
-                ),
+                logger=logger,
+                blob=time_steps,
+                metadata={
+                    STEP: total_num_steps,
+                    "test": test,
+                },
             )
 
         logging.info(
@@ -381,13 +388,13 @@ class Trainer:
         )
 
     @staticmethod
-    def blob(logger: Logger, obj):
+    def blob(logger: Logger, blob, metadata: dict):
         tick = time.time()
 
         # https://stackoverflow.com/a/30469744/4176597
-        pickled = codecs.encode(pickle.dumps(obj), "base64").decode()
+        pickled = codecs.encode(pickle.dumps(blob), "base64").decode()
 
-        logger.blob(pickled)
+        logger.blob(blob=pickled, metadata=metadata)
         logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
     @staticmethod
@@ -460,9 +467,11 @@ class Trainer:
 
         return envs
 
-    @staticmethod
-    def save(agent, args, envs):
-        torch.save(agent, Path(args.save_dir, f"checkpoint.pkl"))
+    @classmethod
+    def save(cls, agent: nn.Module, logger: Logger, step: int):
+        tick = time.time()
+        cls.blob(logger=logger, blob=agent.state_dict(), metadata={STEP: step})
+        logging.info(f"Saving took {time.time() - tick} seconds.")
 
     @staticmethod
     def make_agent(envs: VecPyTorch, args) -> Agent:
