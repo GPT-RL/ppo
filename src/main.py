@@ -324,7 +324,6 @@ class Trainer:
     ):
 
         episode_rewards = []
-        time_steps = []
 
         obs = envs.reset()
         recurrent_hidden_states = torch.zeros(
@@ -340,18 +339,6 @@ class Trainer:
 
             # Observe reward and next obs
             obs, rewards, done, infos = envs.step(action)
-            time_steps.append(
-                asdict(
-                    TimeSteps(
-                        action=action.cpu().numpy(),
-                        observation=obs.cpu().numpy(),
-                        reward=rewards,
-                        done=done,
-                        info=infos,
-                    )
-                )
-            )
-
             masks = torch.tensor(
                 [[0.0] if done_ else [1.0] for done_ in done],
                 dtype=torch.float32,
@@ -377,14 +364,6 @@ class Trainer:
         logging.info(pformat(log))
         if logger is not None:
             logger.log(log)
-            cls.blob(
-                logger=logger,
-                blob=time_steps,
-                metadata={
-                    STEP: total_num_steps,
-                    "type": f"{'test' if test else 'train'} trajectories",
-                },
-            )
 
         logging.info(
             " Evaluation using {} episodes: mean reward {:.5f}\n".format(
