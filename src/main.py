@@ -110,6 +110,7 @@ class Args(Tap):
     hidden_size: int = 512
     log_interval: int = 100  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
+    load_path: str = None  # path to load parameters from if at all
     log_level: str = "INFO"
     lr: float = 2.5e-4  # learning rate
     max_grad_norm: float = 0.5  # clip gradient norms
@@ -155,6 +156,8 @@ class Trainer:
         envs = cls.make_vec_envs(args, device, test=False)
 
         agent = cls.make_agent(envs=envs, args=args)
+        if args.load_path is not None:
+            agent.load_state_dict(torch.load(args.load_path))
         agent.to(device)
 
         ppo = PPO(
@@ -366,12 +369,12 @@ class Trainer:
         if logger is not None:
             logger.log(log)
             cls.blob(
-                logger,
-                dict(
-                    time_steps=time_steps,
-                    test=test,
-                    **{STEP: total_num_steps},
-                ),
+                logger=logger,
+                blob=time_steps,
+                metadata={
+                    STEP: total_num_steps,
+                    "type": f"{'test' if test else 'train'} trajectories",
+                },
             )
 
         logging.info(
@@ -381,13 +384,13 @@ class Trainer:
         )
 
     @staticmethod
-    def blob(logger: Logger, obj):
+    def blob(logger: HasuraLogger, blob, metadata: dict):
         tick = time.time()
 
         # https://stackoverflow.com/a/30469744/4176597
-        pickled = codecs.encode(pickle.dumps(obj), "base64").decode()
+        pickled = codecs.encode(pickle.dumps(blob), "base64").decode()
 
-        logger.blob(pickled)
+        logger.blob(blob=pickled, metadata=metadata)
         logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
     @staticmethod
@@ -462,7 +465,7 @@ class Trainer:
 
     @staticmethod
     def save(agent, args, envs):
-        torch.save(agent, Path(args.save_dir, f"checkpoint.pkl"))
+        torch.save(agent.state_dict(), Path(args.save_dir, f"checkpoint.pkl"))
 
     @staticmethod
     def make_agent(envs: VecPyTorch, args) -> Agent:
@@ -496,7 +499,7 @@ class Trainer:
         if name := getattr(args, "name", None):
             metadata.update(name=name)
 
-        logger: Logger
+        logger: HasuraLogger
         with HasuraLogger(args.graphql_endpoint) as logger:
             charts = [
                 *[

@@ -488,6 +488,7 @@ test = ["hypothesis (>=3.58)", "pytest (>=6.0)", "pytest-xdist"]
 [package.source]
 type = "url"
 url = "https://files.pythonhosted.org/packages/4c/dc/5949dd7e2b0233a26dc3482ee2ee8707542cc25696602d990ed407ff939e/pandas-1.3.2-cp38-cp38-macosx_10_9_x86_64.whl"
+
 [[package]]
 name = "parso"
 version = "0.8.2"
@@ -699,7 +700,7 @@ redis = "^3.5.3"
 type = "git"
 url = "https://github.com/ethanabrooks/run-logger.git"
 reference = "main"
-resolved_reference = "e6c60b7dc6c31d39cb990191fed8ed56442e12b2"
+resolved_reference = "b65f705eec6b3d698ee5229efd11ed5dd446a752"
 
 [[package]]
 name = "rx"
@@ -804,7 +805,7 @@ run-logger = {git = "https://github.com/ethanabrooks/run-logger.git", rev = "mai
 type = "git"
 url = "https://github.com/ethanabrooks/sweep-logger.git"
 reference = "main"
-resolved_reference = "b70753df92fa322bd3bbf8854c5e5093de1d6138"
+resolved_reference = "7726a151e176cdb0289cf9f1079ea36e08d0eedb"
 
 [[package]]
 name = "threadpoolctl"
