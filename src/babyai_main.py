@@ -10,6 +10,7 @@ from babyai_env import (
     FullyObsWrapper,
     RolloutsWrapper,
     TokenizerWrapper,
+    ZeroOneRewardWrapper,
     get_train_and_test_objects,
 )
 from envs import VecPyTorch
@@ -45,7 +46,7 @@ class Trainer(main.Trainer):
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
             env = FullyObsWrapper(env)
-            # env = ZeroOneRewardWrapper(env)
+            env = ZeroOneRewardWrapper(env)
             env = TokenizerWrapper(
                 env, tokenizer=tokenizer, longest_mission="pick up a blue ball"
             )
