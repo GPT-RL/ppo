@@ -44,7 +44,7 @@ class Trainer(main.Trainer):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
-            # env = FullyObsWrapper(env)
+            env = FullyObsWrapper(env)
             # env = ZeroOneRewardWrapper(env)
             env = TokenizerWrapper(
                 env, tokenizer=tokenizer, longest_mission="pick up a blue ball"

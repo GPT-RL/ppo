@@ -94,7 +94,7 @@ T = TypeVar("T")  # Declare type variable
 @dataclass
 class Spaces:
     image: T
-    # direction: T
+    direction: T
     mission: T
 
 
@@ -114,7 +114,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
         # direction_space = spaces["direction"]
         mission_space = spaces["mission"]
         self.observation_space = Box(
-            shape=[np.prod(image_space.shape) + np.prod(mission_space.shape)],
+            shape=[np.prod(image_space.shape) + 1 + np.prod(mission_space.shape)],
             low=-np.inf,
             high=np.inf,
         )
@@ -124,7 +124,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
             astuple(
                 Spaces(
                     image=observation["image"].flatten(),
-                    # direction=np.array([observation["direction"]]),
+                    direction=np.array([observation["direction"]]),
                     mission=observation["mission"],
                 )
             )
