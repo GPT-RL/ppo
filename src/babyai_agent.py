@@ -1,11 +1,11 @@
+from dataclasses import astuple
+
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from gym import Space
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete
 from transformers import GPT2Config
-from dataclasses import astuple
 
 import agent
 from agent import NNBase
@@ -44,7 +44,7 @@ class Base(NNBase):
     ):
         super().__init__(False, hidden_size, hidden_size)
         self.observation_spaces = Spaces(*observation_space.spaces)
-        self.num_directions = self.observation_spaces.direction.n
+        # self.num_directions = self.observation_spaces.direction.n
 
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size),
@@ -68,12 +68,10 @@ class Base(NNBase):
             nn.ReLU(),
             nn.Flatten(),
         )
+        conv_output_size = self.conv(torch.zeros(1, d, h, w)).size(-1)
+
         self.merge = nn.Sequential(
-            init_(
-                nn.Linear(
-                    32 * 2 * 2 + self.num_directions + self.embedding_size, hidden_size
-                )
-            ),
+            init_(nn.Linear(conv_output_size + self.embedding_size, hidden_size)),
             nn.ReLU(),
         )
 
@@ -102,10 +100,10 @@ class Base(NNBase):
             0, 3, 1, 2
         )
         image = self.conv(image)
-        directions = inputs.direction.long()
-        directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
+        # directions = inputs.direction.long()
+        # directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
         mission = self.embed(inputs.mission.long())
-        x = torch.cat([image, directions, mission], dim=-1)
+        x = torch.cat([image, mission], dim=-1)
         x = self.merge(x)
         return self.critic_linear(x), x, rnn_hxs
 
