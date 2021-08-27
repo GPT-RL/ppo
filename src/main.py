@@ -353,11 +353,12 @@ class Trainer:
         envs.close()
         now = time.time()
         log = {
-            TEST_EPISODE_RETURN: np.mean(episode_rewards),
             TIME: now * 1000000,
             HOURS: (now - start) / 3600,
             STEP: total_num_steps,
         }
+        if test:
+            log.update({TEST_EPISODE_RETURN: np.mean(episode_rewards)})
         logging.info(pformat(log))
         if logger is not None:
             log.update({"run ID": logger.run_id})
