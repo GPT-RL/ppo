@@ -64,13 +64,15 @@ class Base(NNBase):
         h, w, d = self.observation_spaces.image.shape
 
         self.conv = nn.Sequential(
-            init_(nn.Conv2d(d, 32, 4, 2)),
+            init_(nn.Conv2d(d, 32, 3, 2)),
             nn.ReLU(),
             nn.Flatten(),
         )
         self.merge = nn.Sequential(
             init_(
-                nn.Linear(288 + self.num_directions + self.embedding_size, hidden_size)
+                nn.Linear(
+                    32 * 2 * 2 + self.num_directions + self.embedding_size, hidden_size
+                )
             ),
             nn.ReLU(),
         )

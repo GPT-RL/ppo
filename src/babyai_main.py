@@ -8,7 +8,6 @@ from babyai_agent import Agent
 from babyai_env import (
     Env,
     FullyObsWrapper,
-    ZeroOneRewardWrapper,
     RolloutsWrapper,
     TokenizerWrapper,
     get_train_and_test_objects,
@@ -23,7 +22,7 @@ class Args(main.Args):
     ] = "medium"  # what size of pretrained GPT to use
     env: str = "GoToLocal"  # env ID for gym
     room_size: int = 5
-    num_dists: int = 2
+    num_dists: int = 1
     strict: bool = True
     record_interval: int = 200
 
@@ -46,7 +45,7 @@ class Trainer(main.Trainer):
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
             env = FullyObsWrapper(env)
-            env = ZeroOneRewardWrapper(env)
+            # env = ZeroOneRewardWrapper(env)
             env = TokenizerWrapper(
                 env, tokenizer=tokenizer, longest_mission="pick up a blue ball"
             )
@@ -63,16 +62,16 @@ class Trainer(main.Trainer):
         test_objects, train_objects = get_train_and_test_objects()
         # assert len(test_objects) >= 3
         test = kwargs.pop("test")
-        goal_objects = test_objects if test else train_objects
+        room_objects = test_objects if test else train_objects
 
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
         return super().make_vec_envs(
             args,
             device,
-            # room_size=args.room_size,
-            # num_dists=args.num_dists,
-            # goal_objects=goal_objects,
-            # strict=args.strict,
+            room_size=args.room_size,
+            num_dists=args.num_dists,
+            room_objects=room_objects,
+            strict=args.strict,
             tokenizer=tokenizer,
             **kwargs,
         )

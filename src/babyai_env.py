@@ -2,16 +2,16 @@ from collections import defaultdict
 from dataclasses import astuple, dataclass
 from typing import TypeVar
 
-import babyai
 import gym
 import gym_minigrid
 import numpy as np
+from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import ObjDesc, PickupInstr
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
+from gym_minigrid.minigrid import COLOR_NAMES
+from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
-from gym_minigrid.window import Window
 
 
 def get_train_and_test_objects():
@@ -48,8 +48,9 @@ def get_train_and_test_objects():
         # yield from remaining
 
     # train_objects = [*pairs()][:1]
-    train_objects = [("ball", "red")]
-    test_objects = [x for x in all_object_types() if x not in set(train_objects)]
+    train_objects = [("ball", "red"), ("key", "yellow")]
+    # test_objects = [x for x in all_object_types() if x not in set(train_objects)]
+    test_objects = [("key", "yellow"), ("ball", "red")]
     return test_objects, train_objects
 
 
@@ -59,76 +60,32 @@ def all_object_types():
             yield object_type, color
 
 
-class Env(babyai.levels.iclr19_levels.Level_GoToLocal):
-    pass
-    # def __init__(
-    #     self,
-    #     goal_objects,
-    #     room_size: int,
-    #     num_dists: int,
-    #     seed: int,
-    #     strict: bool,
-    # ):
-    #     self.strict = strict
-    #     self.goal_objects = goal_objects
-    #     super().__init__(seed=seed, room_size=room_size, num_dists=num_dists)
-    #
-    # def gen_mission(self):
-    #     self.place_agent()
-    #     self.connect_all()
-    #     objs = self.add_distractors(num_distractors=self.num_dists, all_unique=False)
-    #     self.check_objs_reachable()
-    #     obj, *_ = objs
-    #     assert (obj.type, obj.color) in self.goal_objects, (
-    #         obj.type,
-    #         obj.color,
-    #         self.goal_objects,
-    #     )
-    #     self.instrs = PickupInstr(ObjDesc(obj.type, obj.color), strict=self.strict)
-    #
-    # def can_be_goal(self, obj: WorldObj):
-    #     return (obj.type, obj.color) in self.goal_objects
-    #
-    # def add_distractors(self, i=None, j=None, num_distractors=10, all_unique=True):
-    #     """
-    #     Add random objects that can potentially distract/confuse the agent.
-    #     """
-    #
-    #     # Collect a list of existing objects
-    #     objs = []
-    #     for row in self.room_grid:
-    #         for room in row:
-    #             for obj in room.objs:
-    #                 objs.append((obj.type, obj.color))
-    #
-    #     # List of distractors added
-    #     dists = []
-    #
-    #     while len(dists) < num_distractors:
-    #         if not dists:
-    #             obj = self._rand_elem(self.goal_objects)
-    #         else:
-    #             color = self._rand_elem(COLOR_NAMES)
-    #             type = self._rand_elem(["key", "ball", "box"])
-    #             obj = (type, color)
-    #
-    #         if all_unique and obj in objs:
-    #             continue
-    #
-    #         # Add the object to a random room if no room specified
-    #         room_i = i
-    #         room_j = j
-    #         if room_i is None:
-    #             room_i = self._rand_int(0, self.num_cols)
-    #         if room_j is None:
-    #             room_j = self._rand_int(0, self.num_rows)
-    #
-    #         dist, pos = self.add_object(room_i, room_j, *obj)
-    #
-    #         objs.append(obj)
-    #         dists.append(dist)
-    #
-    #     return dists
+class Env(RoomGridLevel):
+    def __init__(
+        self,
+        room_objects,
+        room_size: int,
+        num_dists: int,
+        seed: int,
+        strict: bool,
+    ):
+        self.strict = strict
+        self.goal_object, *_ = self.room_objects = room_objects
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        for obj in self.room_objects:
+            self.add_object(0, 0, *obj)
+        self.check_objs_reachable()
+        self.instrs = PickupInstr(ObjDesc(*self.goal_object))
 
 
 T = TypeVar("T")  # Declare type variable
@@ -271,11 +228,11 @@ def main(args: "Args"):
     train, test = get_train_and_test_objects()
     goal_objects = test if args.test else train
     env = Env(
-        # goal_objects=goal_objects,
+        room_objects=goal_objects,
         room_size=args.room_size,
         num_dists=args.num_dists,
         seed=args.seed,
-        # strict=args.strict,
+        strict=args.strict,
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
