@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import astuple, dataclass
-from typing import TypeVar
+from typing import Generator, Optional, TypeVar
 
 import gym
 import gym_minigrid
@@ -8,9 +8,10 @@ import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import ObjDesc, PickupInstr
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES
+from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
+from termcolor import colored
 from transformers import GPT2Tokenizer
 
 
@@ -60,6 +61,11 @@ def all_object_types():
             yield object_type, color
 
 
+class Agent(WorldObj):
+    def render(self, r):
+        pass
+
+
 class Env(RoomGridLevel):
     def __init__(
         self,
@@ -86,6 +92,45 @@ class Env(RoomGridLevel):
             self.add_object(0, 0, *obj)
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*self.goal_object))
+
+    def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
+        for j in range(self.width):
+            if np.all(self.agent_pos == (i, j)):
+                yield Agent(color="blue", type="agent")
+            else:
+                yield self.grid.get(i, j)
+
+    def row_strings(self, i: int) -> Generator[str, None, None]:
+        for obj in self.row_objs(i):
+            if obj is None:
+                yield ""
+            else:
+                yield colored(obj.type, obj.color)
+
+    @property
+    def max_string_length(self):
+        return max(map(len, OBJECT_TO_IDX))
+
+    def fixed_width_row_strings(self, i: int) -> Generator[str, None, None]:
+        for string in self.row_strings(i):
+            string = string[: self.max_string_length]
+            yield f"{string:<{self.max_string_length}}"
+
+    def row_string(self, i: int):
+        return "|".join(self.fixed_width_row_strings(i))
+
+    def horizontal_separator_string(self):
+        return "-" * ((self.max_string_length + 1) * self.grid.width - 1)
+
+    def render_string(self):
+        yield self.row_string(0)
+        for i in range(1, self.grid.height):
+            yield self.horizontal_separator_string()
+            yield self.row_string(i)
+
+    def render(self, *args, **kwargs):
+        for string in self.render_string():
+            print(string)
 
 
 T = TypeVar("T")  # Declare type variable

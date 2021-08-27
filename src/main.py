@@ -120,6 +120,7 @@ class Args(Tap):
     num_steps: int = 128  # number of forward steps in A2C
     ppo_epoch: int = 3  # number of PPO updates
     recurrent_policy: bool = False  # use recurrence in the policy
+    render: bool = False
     save_interval: Optional[int] = None  # how many updates to save between
     save_dir: str = "/tmp/logs"  # path to save parameters if saving locally
     seed: int = 0  # random seed
@@ -139,6 +140,9 @@ class Trainer:
     def train(cls, args: Args, logger: Optional[Logger] = None):
         logging.getLogger().setLevel(args.log_level)
 
+        if args.render:
+            args.num_processes = 1
+
         torch.manual_seed(args.seed)
         torch.cuda.manual_seed_all(args.seed)
         np.random.seed(args.seed)
@@ -153,7 +157,10 @@ class Trainer:
         torch.set_num_threads(1)
         device = torch.device("cuda:0" if args.cuda else "cpu")
 
-        envs = cls.make_vec_envs(args, device, test=False)
+        envs = cls.make_vec_envs(args, device, test=False, render=args.render)
+
+        if args.render:
+            render_func = utils.get_render_func(envs)
 
         agent = cls.make_agent(envs=envs, args=args)
         if args.load_path is not None:
@@ -394,7 +401,9 @@ class Trainer:
         logging.info(f"Sending blob took {time.time() - tick} seconds.")
 
     @staticmethod
-    def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
+    def make_env(
+        env_id, seed, rank, allow_early_resets, *args, render: bool = False, **kwargs
+    ):
         def _thunk():
             if env_id == "GoToLocal":
                 env = Env(*args, **kwargs)

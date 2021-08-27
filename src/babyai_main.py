@@ -13,7 +13,7 @@ from babyai_env import (
     ZeroOneRewardWrapper,
     get_train_and_test_objects,
 )
-from envs import VecPyTorch
+from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
 
 
@@ -41,7 +41,7 @@ class Trainer(main.Trainer):
         )
 
     @staticmethod
-    def make_env(env_id, seed, rank, allow_early_resets, *args, **kwargs):
+    def make_env(env_id, seed, rank, allow_early_resets, render: bool, *args, **kwargs):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             env = Env(*args, seed=seed + rank, **kwargs)
@@ -53,6 +53,8 @@ class Trainer(main.Trainer):
             env = RolloutsWrapper(env)
 
             env = Monitor(env, allow_early_resets=allow_early_resets)
+            if render:
+                env = RenderWrapper(env)
 
             return env
 
