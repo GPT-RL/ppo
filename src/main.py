@@ -323,7 +323,7 @@ class Trainer:
         while len(episode_rewards) < 10:
             with torch.no_grad():
                 _, action, _, recurrent_hidden_states = agent.forward(
-                    obs, recurrent_hidden_states, masks, deterministic=True
+                    obs, recurrent_hidden_states, masks
                 )
 
             # Observe reward and next obs
