@@ -68,10 +68,13 @@ class Base(NNBase):
             nn.ReLU(),
             nn.Flatten(),
         )
+        conv_output_size = self.conv(torch.zeros(1, d, h, w)).size(-1)
+
         self.merge = nn.Sequential(
             init_(
                 nn.Linear(
-                    32 * 2 * 2 + self.num_directions + self.embedding_size, hidden_size
+                    conv_output_size + self.num_directions + self.embedding_size,
+                    hidden_size,
                 )
             ),
             nn.ReLU(),
