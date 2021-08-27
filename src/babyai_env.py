@@ -98,7 +98,7 @@ class Env(RoomGridLevel):
         goal_object = self._rand_elem(self.goal_objects)
         self.add_object(0, 0, *goal_object)
         self.check_objs_reachable()
-        self.instrs = PickupInstr(ObjDesc(*goal_object))
+        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
     def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
         for j in range(self.width):
