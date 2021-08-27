@@ -153,10 +153,10 @@ query Query($id: Int) {
         rank=0,
         allow_early_resets=False,
         tokenizer=tokenizer,
-        goal_objects=[("ball", "red")],
-        room_size=metadata.room_size,
-        num_dists=metadata.num_dists,
-        strict=metadata.strict,
+        # goal_objects=[("ball", "red")],
+        # room_size=metadata.room_size,
+        # num_dists=metadata.num_dists,
+        # strict=metadata.strict,
     )()
     IDX_TO_ACTIONS = {a.value: a.name for a in env.actions}
     observation_spaces = env.original_observation_space
@@ -170,6 +170,7 @@ query Query($id: Int) {
             data = pickle.loads(codecs.decode(pickled.encode(), "base64"))
             test = data["test"]
             training_step = data["step"]
+            print("Training step:", training_step, "Test:", test)
             if test != args.test:
                 continue
             if training_step < args.step:
@@ -194,10 +195,11 @@ query Query($id: Int) {
                             axis=-1,
                         )
                     )
+                    room_size = int((observation.image.size / 3) ** 0.5)
                     observation = replace(
                         observation,
                         image=observation.image.reshape(
-                            (metadata.room_size, metadata.room_size, -1)
+                            (room_size, room_size, 3)
                         ).astype(np.uint8),
                         mission=tokenizer.decode(
                             observation.mission, skip_special_tokens=True
@@ -262,8 +264,17 @@ query Query($id: Int) {
             agent_dir=agent_dir,
         )
         window.show_img(img)
-        window.set_caption(
-            f"mission={time_step.observation.mission}, reward={time_step.reward}, done={time_step.done}, action={time_step.action}"
+        # window.set_caption(
+        #     f"mission: {time_step.observation.mission}, reward: {time_step.reward}, done: {time_step.done}, action: {time_step.action}"
+        # )
+
+        print(
+            f"mission: {time_step.observation.mission}",
+            f"reward: {time_step.reward}",
+            f"done: {time_step.done}",
+            f"action: {time_step.action}",
+            sep="\n",
+            end="\n\n",
         )
 
     def key_handler(event):
@@ -274,7 +285,7 @@ query Query($id: Int) {
             INDEX = INDEX - 1
             redraw()
             return
-        elif event.key == "right" and INDEX < len(time_steps):
+        elif event.key == "right" and INDEX < len(time_steps) - 1:
             INDEX = INDEX + 1
             redraw()
             return
