@@ -214,7 +214,7 @@ class Trainer:
                 or j == num_updates - 1
             ):
                 if args.save_dir:
-                    args.save_dir.mkdir(parents=True, exist_ok=True)
+                    Path(args.save_dir).mkdir(parents=True, exist_ok=True)
                     cls.save(agent, args, envs)
 
             if args.linear_lr_decay:

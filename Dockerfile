@@ -64,11 +64,11 @@ WORKDIR "/deps"
 
 COPY pyproject.toml poetry.lock /deps/
 RUN pip install poetry \
- && poetry install \
- && wget "http://www.atarimania.com/roms/Roms.rar" \
- && unrar e Roms.rar \
- && unzip ROMS.zip \
- && /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8/bin/python -m atari_py.import_roms ROMS/
+ && poetry install
+ #&& wget "http://www.atarimania.com/roms/Roms.rar" \
+ #&& unrar e Roms.rar \
+ #&& unzip ROMS.zip \
+ #&& /root/.cache/pypoetry/virtualenvs/ppo-K3BlsyQa-py3.8/bin/python -m atari_py.import_roms ROMS/
 
 FROM base AS runtime
 
