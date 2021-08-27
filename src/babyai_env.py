@@ -49,9 +49,9 @@ def get_train_and_test_objects():
         # yield from remaining
 
     # train_objects = [*pairs()][:1]
-    train_objects = [("ball", "red"), ("key", "yellow")]
+    train_objects = [("ball", "red")]
     # test_objects = [x for x in all_object_types() if x not in set(train_objects)]
-    test_objects = [("key", "yellow"), ("ball", "red")]
+    test_objects = [("key", "yellow")]
     return test_objects, train_objects
 
 
@@ -95,9 +95,10 @@ class Env(RoomGridLevel):
         self.place_agent()
         self.connect_all()
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
-        self.add_object(0, 0, *self.goal_object)
+        goal_object = self._rand_elem(self.room_objects)
+        self.add_object(0, 0, *goal_object)
         self.check_objs_reachable()
-        self.instrs = PickupInstr(ObjDesc(*self.goal_object))
+        self.instrs = PickupInstr(ObjDesc(*goal_object))
 
     def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
         for j in range(self.width):
