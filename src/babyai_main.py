@@ -69,10 +69,10 @@ class Trainer(main.Trainer):
         return super().make_vec_envs(
             args,
             device,
-            room_size=args.room_size,
-            num_dists=args.num_dists,
-            goal_objects=goal_objects,
-            strict=args.strict,
+            # room_size=args.room_size,
+            # num_dists=args.num_dists,
+            # goal_objects=goal_objects,
+            # strict=args.strict,
             tokenizer=tokenizer,
             **kwargs,
         )

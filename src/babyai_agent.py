@@ -70,7 +70,7 @@ class Base(NNBase):
         )
         self.merge = nn.Sequential(
             init_(
-                nn.Linear(32 + self.num_directions + self.embedding_size, hidden_size)
+                nn.Linear(288 + self.num_directions + self.embedding_size, hidden_size)
             ),
             nn.ReLU(),
         )
