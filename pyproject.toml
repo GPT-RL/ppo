@@ -22,7 +22,7 @@ jsonlines = "^2.0.0"
 pynndescent = "0.5.0"
 umap-learn = "0.5.0"
 babyai = {git = "https://github.com/GPT-RL/babyai.git"}
-termcolor = "^1.1.0"
+ansicolors = "^1.1.8"
 
 [tool.poetry.dev-dependencies]
 black = "^21.6b0"

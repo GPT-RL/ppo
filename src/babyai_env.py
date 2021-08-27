@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import astuple, dataclass
 from typing import Generator, Optional, TypeVar
 
+import colors
 import gym
 import gym_minigrid
 import numpy as np
@@ -11,7 +12,6 @@ from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
-from termcolor import colored
 from transformers import GPT2Tokenizer
 
 
@@ -78,12 +78,18 @@ class Env(RoomGridLevel):
         self.strict = strict
         self.goal_object, *_ = self.room_objects = room_objects
         self.num_dists = num_dists
+        self.__reward = None
+        self.__done = None
         super().__init__(
             room_size=room_size,
             num_rows=1,
             num_cols=1,
             seed=seed,
         )
+
+    def step(self, action):
+        s, self.__reward, self.__done, i = super().step(action)
+        return s, self.__reward, self.__done, i
 
     def gen_mission(self):
         self.place_agent()
@@ -103,21 +109,32 @@ class Env(RoomGridLevel):
     def row_strings(self, i: int) -> Generator[str, None, None]:
         for obj in self.row_objs(i):
             if obj is None:
-                yield ""
+                string = ""
+            elif isinstance(obj, Agent):
+                if self.agent_dir == 0:
+                    string = "v"
+                elif self.agent_dir == 1:
+                    string = ">"
+                elif self.agent_dir == 2:
+                    string = "^"
+                elif self.agent_dir == 3:
+                    string = "<"
+                else:
+                    raise RuntimeError(f"invalid agent dir: {self.agent_dir}")
             else:
-                yield colored(obj.type, obj.color)
+                string = obj.type
+
+            string = f"{string:<{self.max_string_length}}"
+            if obj is not None:
+                string = colors.color(string, obj.color)
+            yield string + "\033[0m"
 
     @property
     def max_string_length(self):
-        return max(map(len, OBJECT_TO_IDX))
-
-    def fixed_width_row_strings(self, i: int) -> Generator[str, None, None]:
-        for string in self.row_strings(i):
-            string = string[: self.max_string_length]
-            yield f"{string:<{self.max_string_length}}"
+        return max(map(len, OBJECT_TO_IDX)) + 1
 
     def row_string(self, i: int):
-        return "|".join(self.fixed_width_row_strings(i))
+        return "|".join(self.row_strings(i))
 
     def horizontal_separator_string(self):
         return "-" * ((self.max_string_length + 1) * self.grid.width - 1)
@@ -131,6 +148,10 @@ class Env(RoomGridLevel):
     def render(self, *args, **kwargs):
         for string in self.render_string():
             print(string)
+        print(self.mission)
+        print("Reward:", self.__reward)
+        print("Done:", self.__done)
+        input("Press enter to coninue.")
 
 
 T = TypeVar("T")  # Declare type variable

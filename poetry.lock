@@ -1,4 +1,12 @@
 [[package]]
+name = "ansicolors"
+version = "1.1.8"
+description = "ANSI colors for Python"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "appdirs"
 version = "1.4.4"
 description = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
@@ -808,14 +816,6 @@ reference = "main"
 resolved_reference = "7726a151e176cdb0289cf9f1079ea36e08d0eedb"
 
 [[package]]
-name = "termcolor"
-version = "1.1.0"
-description = "ANSII Color formatting for output in terminal."
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "threadpoolctl"
 version = "2.2.0"
 description = "threadpoolctl"
@@ -1022,9 +1022,13 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "de405db517fc268e0d3392ea44bf5229795849a0ab07cc9074ff4e0f565fac7f"
+content-hash = "828576e57d1033ee63ee16bd31084e00ff82f9ea3cfef5e0e7721c754cba9aef"
 
 [metadata.files]
+ansicolors = [
+    {file = "ansicolors-1.1.8-py2.py3-none-any.whl", hash = "sha256:00d2dde5a675579325902536738dd27e4fac1fd68f773fe36c21044eb559e187"},
+    {file = "ansicolors-1.1.8.zip", hash = "sha256:99f94f5e3348a0bcd43c82e5fc4414013ccc19d70bd939ad71e0133ce9c372e0"},
+]
 appdirs = [
     {file = "appdirs-1.4.4-py2.py3-none-any.whl", hash = "sha256:a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128"},
     {file = "appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41"},
@@ -1576,9 +1580,6 @@ stable-baselines3 = [
     {file = "stable_baselines3-1.1.0.tar.gz", hash = "sha256:62c1f959623cd2bb9eb75451bbf9af2b3e5cd4b42ae6987adf9c8fd0a2eb4969"},
 ]
 sweep-logger = []
-termcolor = [
-    {file = "termcolor-1.1.0.tar.gz", hash = "sha256:1d6d69ce66211143803fbc56652b41d73b4a400a2891d7bf7a1cdf4c02de613b"},
-]
 threadpoolctl = [
     {file = "threadpoolctl-2.2.0-py3-none-any.whl", hash = "sha256:e5a995e3ffae202758fa8a90082e35783b9370699627ae2733cd1c3a73553616"},
     {file = "threadpoolctl-2.2.0.tar.gz", hash = "sha256:86d4b6801456d780e94681d155779058759eaef3c3564758b17b6c99db5f81cb"},
