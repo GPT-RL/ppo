@@ -121,6 +121,7 @@ class Args(Tap):
     ppo_epoch: int = 3  # number of PPO updates
     recurrent_policy: bool = False  # use recurrence in the policy
     render: bool = False
+    render_test: bool = False
     save_interval: Optional[int] = None  # how many updates to save between
     save_dir: str = "/tmp/logs"  # path to save parameters if saving locally
     seed: int = 0  # random seed
@@ -140,7 +141,7 @@ class Trainer:
     def train(cls, args: Args, logger: Optional[Logger] = None):
         logging.getLogger().setLevel(args.log_level)
 
-        if args.render:
+        if args.render or args.render_test:
             args.num_processes = 1
 
         torch.manual_seed(args.seed)
@@ -158,9 +159,6 @@ class Trainer:
         device = torch.device("cuda:0" if args.cuda else "cpu")
 
         envs = cls.make_vec_envs(args, device, test=False, render=args.render)
-
-        if args.render:
-            render_func = utils.get_render_func(envs)
 
         agent = cls.make_agent(envs=envs, args=args)
         if args.load_path is not None:
@@ -196,6 +194,28 @@ class Trainer:
         start = time.time()
         num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
         for j in range(num_updates):
+            if args.test_interval is not None and j % args.test_interval == 0:
+                cls.evaluate(
+                    agent=agent,
+                    envs=cls.make_vec_envs(
+                        args, device, test=True, render=args.render_test
+                    ),
+                    num_processes=args.num_processes,
+                    device=device,
+                    start=start,
+                    total_num_steps=cls.total_num_steps(j, args),
+                    logger=logger,
+                    test=True,
+                )
+            # save for every interval-th episode or for the last epoch
+            if (
+                args.save_interval is not None
+                and j % args.save_interval == 0
+                or j == num_updates - 1
+            ):
+                if args.save_dir:
+                    args.save_dir.mkdir(parents=True, exist_ok=True)
+                    cls.save(agent, args, envs)
 
             if args.linear_lr_decay:
                 # decrease learning rate linearly
@@ -260,17 +280,7 @@ class Trainer:
 
             rollouts.after_update()
 
-            # save for every interval-th episode or for the last epoch
-            if (
-                args.save_interval is not None
-                and j % args.save_interval == 0
-                or j == num_updates - 1
-            ):
-                if args.save_dir:
-                    args.save_dir.mkdir(parents=True, exist_ok=True)
-                    cls.save(agent, args, envs)
-
-            total_num_steps = (j + 1) * args.num_processes * args.num_steps
+            total_num_steps = cls.total_num_steps(j + 1, args)
             if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
                 now = time.time()
                 fps = int(total_num_steps / (now - start))
@@ -295,7 +305,7 @@ class Trainer:
 
                 cls.evaluate(
                     agent=agent,
-                    envs=cls.make_vec_envs(args, device, test=False),
+                    envs=cls.make_vec_envs(args, device, test=False, render=False),
                     num_processes=args.num_processes,
                     device=device,
                     start=start,
@@ -304,17 +314,9 @@ class Trainer:
                     test=False,
                 )
 
-            if args.test_interval is not None and j % args.test_interval == 0:
-                cls.evaluate(
-                    agent=agent,
-                    envs=cls.make_vec_envs(args, device, test=True),
-                    num_processes=args.num_processes,
-                    device=device,
-                    start=start,
-                    total_num_steps=total_num_steps,
-                    logger=logger,
-                    test=True,
-                )
+    @staticmethod
+    def total_num_steps(j, args):
+        return j * args.num_processes * args.num_steps
 
     @classmethod
     def evaluate(
