@@ -22,7 +22,7 @@ class TrainTest:
     test: list
 
 
-COLORS = [*COLOR_NAMES][:4]
+COLORS = [*COLOR_NAMES][:3]
 TYPES = ["key", "ball", "box"]
 
 
@@ -33,7 +33,7 @@ def get_train_and_test_objects():
 
         remaining = set(all_objects)
 
-        for _type, color in zip(itertools.cycle(TYPES), COLORS):
+        for _type, color in zip(TYPES, itertools.cycle(COLORS)):
             remaining.remove((_type, color))
             yield _type, color
         # yield from remaining
