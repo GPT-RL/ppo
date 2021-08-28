@@ -138,7 +138,7 @@ class Args(Tap):
 
 class Trainer:
     @classmethod
-    def train(cls, args: Args, logger: Optional[HasuraLogger] = None):
+    def train(cls, args: Args, logger: HasuraLogger):
         logging.getLogger().setLevel(args.log_level)
 
         if args.render or args.render_test:
@@ -152,7 +152,7 @@ class Trainer:
             torch.backends.cudnn.benchmark = False
             torch.backends.cudnn.deterministic = True
 
-        if logger is not None:
+        if logger.run_id is not None:
             args.save_dir = Path(args.save_dir, str(logger.run_id))
 
         torch.set_num_threads(1)
@@ -296,11 +296,11 @@ class Trainer:
                     ENTROPY: dist_entropy,
                 }
                 logging.info(pformat(log))
-                if logger is not None:
+                if logger.run_id is not None:
                     log.update({"run ID": logger.run_id})
 
                 logging.info(pformat(log))
-                if logger is not None:
+                if logger.run_id is not None:
                     logger.log(log)
 
                 cls.evaluate(
@@ -359,10 +359,10 @@ class Trainer:
         if test:
             log.update({TEST_EPISODE_RETURN: np.mean(episode_rewards)})
         logging.info(pformat(log))
-        if logger is not None:
+        if logger.run_id is not None:
             log.update({"run ID": logger.run_id})
         logging.info(pformat(log))
-        if logger is not None:
+        if logger.run_id is not None:
             logger.log(log)
 
         logging.info(
@@ -481,8 +481,6 @@ class Trainer:
                 args = args.from_dict(
                     {k: v for k, v in config.items() if k not in excluded}
                 )
-        if args.subcommand is None:
-            return cls.train(args)
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
         if args.host_machine:
             metadata.update(host_machine=args.host_machine)
@@ -491,40 +489,41 @@ class Trainer:
 
         logger: HasuraLogger
         with HasuraLogger(args.graphql_endpoint) as logger:
-            charts = [
-                *[
-                    spec(x=HOURS, y=y)
-                    for y in (
-                        TEST_EPISODE_RETURN,
-                        EPISODE_RETURN,
-                    )
-                ],
-                *[
-                    spec(x=STEP, y=y)
-                    for y in (
-                        TEST_EPISODE_RETURN,
-                        EPISODE_RETURN,
-                        FPS,
-                        ENTROPY,
-                        GRADIENT_NORM,
-                    )
-                ],
-            ]
-            sweep_id = getattr(args, "sweep_id", None)
-            parameters = logger.create_run(
-                metadata=metadata,
-                sweep_id=sweep_id,
-                charts=charts,
-            )
+            if args.subcommand is not None:
+                charts = [
+                    *[
+                        spec(x=HOURS, y=y)
+                        for y in (
+                            TEST_EPISODE_RETURN,
+                            EPISODE_RETURN,
+                        )
+                    ],
+                    *[
+                        spec(x=STEP, y=y)
+                        for y in (
+                            TEST_EPISODE_RETURN,
+                            EPISODE_RETURN,
+                            FPS,
+                            ENTROPY,
+                            GRADIENT_NORM,
+                        )
+                    ],
+                ]
+                sweep_id = getattr(args, "sweep_id", None)
+                parameters = logger.create_run(
+                    metadata=metadata,
+                    sweep_id=sweep_id,
+                    charts=charts,
+                )
 
-            if parameters is not None:
-                for k, v in parameters.items():
-                    if k not in excluded:
-                        assert hasattr(args, k), k
-                        setattr(args, k, v)
-            logger.update_metadata(
-                dict(parameters=args.as_dict(), run_id=logger.run_id)
-            )
+                if parameters is not None:
+                    for k, v in parameters.items():
+                        if k not in excluded:
+                            assert hasattr(args, k), k
+                            setattr(args, k, v)
+                logger.update_metadata(
+                    dict(parameters=args.as_dict(), run_id=logger.run_id)
+                )
             logging.info(pformat(args.as_dict()))
             return cls.train(args=args, logger=logger)
 
