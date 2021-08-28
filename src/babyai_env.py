@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import astuple, dataclass
 from typing import Generator, Optional, TypeVar
+import itertools
 
 import colors
 import gym
@@ -16,47 +17,25 @@ from transformers import GPT2Tokenizer
 
 
 def get_train_and_test_objects():
+    colors = [*COLOR_NAMES][:2]
+    types = ["key", "ball"]  # , "box"]
+    all_objects = set(itertools.product(types, colors))
+
     def pairs():
-        colors = [*COLOR_NAMES]
-        types = ["key", "ball", "box"]
 
         np.random.shuffle(colors)
         np.random.shuffle(types)
 
-        colors_to_types = {color: [*types] for color in colors}
+        remaining = set(all_objects)
 
-        # yield all colors
-        for color, types in colors_to_types.items():
-            yield types.pop(), color
-
-        # reverse colors_to_types
-        types_to_colors = defaultdict(set)
-        for color, types in colors_to_types.items():
-            for type in types:
-                types_to_colors[type].add(color)
-
-        # yield all types
-        for type, [*colors] in types_to_colors.items():
-            yield type, colors.pop()
-
-        # yield remaining
-        # remaining = [
-        #     (type, color)
-        #     for type, colors in types_to_colors.items()
-        #     for color in colors
-        # ]
-        # np.random.shuffle(remaining)
+        for _type, color in zip(types, itertools.cycle(colors)):
+            remaining.remove((_type, color))
+            yield _type, color
         # yield from remaining
 
     train_objects = [*pairs()]
-    test_objects = [x for x in all_object_types() if x not in set(train_objects)]
+    test_objects = [x for x in all_objects if x not in set(train_objects)]
     return test_objects, train_objects
-
-
-def all_object_types():
-    for color in COLOR_NAMES:
-        for object_type in ["key", "ball", "box"]:
-            yield object_type, color
 
 
 class Agent(WorldObj):
