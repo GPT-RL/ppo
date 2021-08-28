@@ -24,7 +24,7 @@ class TrainTest:
 
 def get_train_and_test_objects():
     _colors = [*COLOR_NAMES][:2]
-    types = ["key", "ball"]  # "box"]
+    types = ["key", "ball", "box"]
     all_objects = set(itertools.product(types, _colors))
 
     def pairs():
