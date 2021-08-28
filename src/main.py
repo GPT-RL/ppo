@@ -170,6 +170,7 @@ query GetParameters($id: Int!) {
         agent = cls.make_agent(envs=envs, args=args)
         if args.load_id is not None:
             load_path = cls.save_path(args.load_id)
+            logging.info(f"Loading checkpoint from {load_path}...")
             agent.load_state_dict(torch.load(load_path))
         agent.to(device)
 
@@ -552,6 +553,7 @@ query GetParameters($id: Int!) {
             "render_test",
             "subcommand",
             "sweep_id",
+            "load_id",
         }
 
 

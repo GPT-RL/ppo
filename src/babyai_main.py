@@ -1,4 +1,5 @@
 from typing import Literal
+import logging
 
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
@@ -68,6 +69,9 @@ class Trainer(main.Trainer):
         # assert len(test_objects) >= 3
         test = kwargs.pop("test")
         goal_objects = objects.test if test else objects.train
+        logging.info(f"{'test' if test else 'train'} objects")
+        for obj in goal_objects:
+            logging.info(obj)
 
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
         return super().make_vec_envs(
