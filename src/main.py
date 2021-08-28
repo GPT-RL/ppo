@@ -71,6 +71,7 @@ GRADIENT_NORM = "gradient norm"
 TIME = "time"
 HOURS = "hours"
 STEP = "step"
+SAVE_COUNT = "save count"
 
 
 class Run(Tap):
@@ -199,6 +200,7 @@ query GetParameters($id: Int!) {
         episode_rewards = deque(maxlen=10)
 
         start = time.time()
+        save_count = 0
         num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
         for j in range(num_updates):
             if args.test_interval is not None and j % args.test_interval == 0:
@@ -223,6 +225,7 @@ query GetParameters($id: Int!) {
                 save_path = cls.save_path(logger.run_id)
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 cls.save(agent, save_path)
+                save_count += 1
 
             if args.linear_lr_decay:
                 # decrease learning rate linearly
@@ -301,6 +304,7 @@ query GetParameters($id: Int!) {
                     GRADIENT_NORM: gradient_norm,
                     STEP: total_num_steps,
                     ENTROPY: dist_entropy,
+                    SAVE_COUNT: save_count,
                 }
                 logging.info(pformat(log))
                 if logger.run_id is not None:
@@ -512,6 +516,7 @@ query GetParameters($id: Int!) {
                             FPS,
                             ENTROPY,
                             GRADIENT_NORM,
+                            SAVE_COUNT,
                         )
                     ],
                 ]
