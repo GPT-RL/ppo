@@ -23,7 +23,7 @@ class TrainTest:
 
 
 COLORS = [*COLOR_NAMES][:2]
-TYPES = ["key", "ball"]  # , "box"]
+TYPES = ["key", "ball", "box"]
 
 
 def get_train_and_test_objects():
@@ -36,9 +36,9 @@ def get_train_and_test_objects():
         for _type, color in zip(TYPES, itertools.cycle(COLORS)):
             remaining.remove((_type, color))
             yield _type, color
-        # yield from remaining
+        yield from remaining
 
-    train_objects = [*pairs()]
+    train_objects = [*pairs()][:4]
     test_objects = [x for x in all_objects if x not in set(train_objects)]
     return TrainTest(train=train_objects, test=test_objects)
 
