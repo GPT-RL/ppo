@@ -4,7 +4,7 @@ import os
 import pickle
 import time
 from collections import deque
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import List, Optional
@@ -13,6 +13,7 @@ import gym
 import numpy as np
 import torch
 import yaml
+from gql import gql
 from gym.wrappers.clip_action import ClipAction
 from stable_baselines3.common.atari_wrappers import (
     ClipRewardEnv,
@@ -24,7 +25,7 @@ from stable_baselines3.common.atari_wrappers import (
 )
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-from sweep_logger import HasuraLogger, Logger
+from sweep_logger import HasuraLogger
 from tap import Tap
 
 import utils
@@ -72,19 +73,14 @@ HOURS = "hours"
 STEP = "step"
 
 
-class LoggerArgs(Tap):
-    graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
-    host_machine: str = os.getenv("HOST_MACHINE")
-
-
-class Run(LoggerArgs):
+class Run(Tap):
     name: str
 
     def configure(self) -> None:
         self.add_argument("name", type=str)  # positional
 
 
-class Sweep(LoggerArgs):
+class Sweep(Tap):
     sweep_id: int = None
 
 
@@ -107,10 +103,12 @@ class Args(Tap):
     gae: bool = True  # use Generalized Advantage Estimation
     gae_lambda: float = 0.95  # GAE lambda parameter
     gamma: float = 0.99  # discount factor
+    graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
     hidden_size: int = 512
+    host_machine: str = os.getenv("HOST_MACHINE")
     log_interval: int = 100  # how many updates to log between
     linear_lr_decay: bool = False  # anneal the learning rate
-    load_path: str = None  # path to load parameters from if at all
+    load_id: int = None  # path to load parameters from if at all
     log_level: str = "INFO"
     lr: float = 2.5e-4  # learning rate
     max_grad_norm: float = 0.5  # clip gradient norms
@@ -123,7 +121,6 @@ class Args(Tap):
     render: bool = False
     render_test: bool = False
     save_interval: Optional[int] = None  # how many updates to save between
-    save_dir: str = "/tmp/logs"  # path to save parameters if saving locally
     seed: int = 0  # random seed
     test_interval: Optional[int] = None  # how many updates to evaluate between
     use_proper_time_limits: bool = False  # compute returns with time limits
@@ -139,7 +136,19 @@ class Args(Tap):
 class Trainer:
     @classmethod
     def train(cls, args: Args, logger: HasuraLogger):
-        logging.getLogger().setLevel(args.log_level)
+        if args.load_id is not None:
+            parameters = logger.execute(
+                gql(
+                    """
+query GetParameters($id: Int!) {
+  run_by_pk(id: $id) {
+    metadata(path: "parameters")
+  }
+}"""
+                ),
+                variable_values=dict(id=args.load_id),
+            )["run_by_pk"]["metadata"]
+            cls.update_args(args, parameters, check_hasattr=False)
 
         if args.render or args.render_test:
             args.num_processes = 1
@@ -152,17 +161,15 @@ class Trainer:
             torch.backends.cudnn.benchmark = False
             torch.backends.cudnn.deterministic = True
 
-        if logger.run_id is not None:
-            args.save_dir = Path(args.save_dir, str(logger.run_id))
-
         torch.set_num_threads(1)
         device = torch.device("cuda:0" if args.cuda else "cpu")
 
         envs = cls.make_vec_envs(args, device, test=False, render=args.render)
 
         agent = cls.make_agent(envs=envs, args=args)
-        if args.load_path is not None:
-            agent.load_state_dict(torch.load(args.load_path))
+        if args.load_id is not None:
+            load_path = cls.save_path(args.load_id)
+            agent.load_state_dict(torch.load(load_path))
         agent.to(device)
 
         ppo = PPO(
@@ -210,12 +217,12 @@ class Trainer:
             # save for every interval-th episode or for the last epoch
             if (
                 args.save_interval is not None
-                and j % args.save_interval == 0
-                or j == num_updates - 1
+                and logger.run_id is not None
+                and (j % args.save_interval == 0 or j == num_updates - 1)
             ):
-                if args.save_dir:
-                    Path(args.save_dir).mkdir(parents=True, exist_ok=True)
-                    cls.save(agent, args, envs)
+                save_path = cls.save_path(logger.run_id)
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                cls.save(agent, save_path)
 
             if args.linear_lr_decay:
                 # decrease learning rate linearly
@@ -454,8 +461,12 @@ class Trainer:
         return envs
 
     @staticmethod
-    def save(agent, args, envs):
-        torch.save(agent.state_dict(), Path(args.save_dir, f"checkpoint.pkl"))
+    def save_path(run_id: int):
+        return Path("logs", str(run_id), "checkpoint.pkl")
+
+    @staticmethod
+    def save(agent, save_path: Path):
+        torch.save(agent.state_dict(), save_path)
 
     @staticmethod
     def make_agent(envs: VecPyTorch, args) -> Agent:
@@ -469,17 +480,12 @@ class Trainer:
 
     @classmethod
     def main(cls, args: Args):
-        excluded = {
-            "subcommand",
-            "sweep_id",
-            "config",
-            "name",
-        }
+        logging.getLogger().setLevel(args.log_level)
         if args.config is not None:
             with Path(args.config).open() as f:
                 config = yaml.load(f, yaml.FullLoader)
                 args = args.from_dict(
-                    {k: v for k, v in config.items() if k not in excluded}
+                    {k: v for k, v in config.items() if k not in cls.excluded()}
                 )
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
         if args.host_machine:
@@ -517,15 +523,31 @@ class Trainer:
                 )
 
                 if parameters is not None:
-                    for k, v in parameters.items():
-                        if k not in excluded:
-                            assert hasattr(args, k), k
-                            setattr(args, k, v)
+                    cls.update_args(args, parameters)
                 logger.update_metadata(
                     dict(parameters=args.as_dict(), run_id=logger.run_id)
                 )
             logging.info(pformat(args.as_dict()))
             return cls.train(args=args, logger=logger)
+
+    @classmethod
+    def update_args(cls, args, parameters, check_hasattr=True):
+        for k, v in parameters.items():
+            if k not in cls.excluded():
+                if check_hasattr:
+                    assert hasattr(args, k), k
+                setattr(args, k, v)
+
+    @classmethod
+    def excluded(cls):
+        return {
+            "config",
+            "name",
+            "render",
+            "render_test",
+            "subcommand",
+            "sweep_id",
+        }
 
 
 if __name__ == "__main__":
