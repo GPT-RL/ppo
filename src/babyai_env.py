@@ -23,7 +23,7 @@ class TrainTest:
 
 
 COLORS = [*COLOR_NAMES][:2]
-TYPES = ["key", "ball", "box"]
+TYPES = ["key", "ball"]  # , "box"]
 
 
 def get_train_and_test_objects():
