@@ -23,7 +23,7 @@ class TrainTest:
 
 
 def get_train_and_test_objects():
-    _colors = [*COLOR_NAMES][:2]
+    _colors = [*COLOR_NAMES][:3]
     types = ["key", "ball", "box"]
     all_objects = set(itertools.product(types, _colors))
 
