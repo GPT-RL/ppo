@@ -22,7 +22,7 @@ class TrainTest:
     test: list
 
 
-COLORS = [*COLOR_NAMES][:3]
+COLORS = [*COLOR_NAMES][:2]
 TYPES = ["key", "ball", "box"]
 
 
