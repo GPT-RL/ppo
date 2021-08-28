@@ -22,19 +22,18 @@ class TrainTest:
     test: list
 
 
+COLORS = [*COLOR_NAMES][:3]
+TYPES = ["key", "ball", "box"]
+
+
 def get_train_and_test_objects():
-    _colors = [*COLOR_NAMES][:3]
-    types = ["key", "ball", "box"]
-    all_objects = set(itertools.product(types, _colors))
+    all_objects = set(itertools.product(TYPES, COLORS))
 
     def pairs():
 
-        np.random.shuffle(_colors)
-        np.random.shuffle(types)
-
         remaining = set(all_objects)
 
-        for _type, color in zip(types, itertools.cycle(_colors)):
+        for _type, color in zip(TYPES, itertools.cycle(COLORS)):
             remaining.remove((_type, color))
             yield _type, color
         # yield from remaining
