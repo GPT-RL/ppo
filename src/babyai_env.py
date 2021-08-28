@@ -16,26 +16,32 @@ from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
 
+@dataclass
+class TrainTest:
+    train: list
+    test: list
+
+
 def get_train_and_test_objects():
-    colors = [*COLOR_NAMES][:2]
-    types = ["key", "ball"]  # , "box"]
-    all_objects = set(itertools.product(types, colors))
+    _colors = [*COLOR_NAMES][:2]
+    types = ["key", "ball"]  # "box"]
+    all_objects = set(itertools.product(types, _colors))
 
     def pairs():
 
-        np.random.shuffle(colors)
+        np.random.shuffle(_colors)
         np.random.shuffle(types)
 
         remaining = set(all_objects)
 
-        for _type, color in zip(types, itertools.cycle(colors)):
+        for _type, color in zip(types, itertools.cycle(_colors)):
             remaining.remove((_type, color))
             yield _type, color
         # yield from remaining
 
     train_objects = [*pairs()]
     test_objects = [x for x in all_objects if x not in set(train_objects)]
-    return test_objects, train_objects
+    return TrainTest(train=train_objects, test=test_objects)
 
 
 class Agent(WorldObj):
@@ -269,8 +275,8 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    train, test = get_train_and_test_objects()
-    goal_objects = test if args.test else train
+    objects = get_train_and_test_objects()
+    goal_objects = objects.test if args.test else objects.train
     env = Env(
         goal_objects=goal_objects,
         room_size=args.room_size,
