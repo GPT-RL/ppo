@@ -39,8 +39,7 @@ def get_train_and_test_objects():
         # yield from remaining
 
     train_objects = [*pairs()]
-    test_objects = [x for x in all_objects if x not in set(train_objects)]
-    return TrainTest(train=train_objects, test=test_objects)
+    return TrainTest(train=train_objects, test=list(all_objects))
 
 
 class Agent(WorldObj):
