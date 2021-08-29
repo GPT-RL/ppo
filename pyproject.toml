@@ -21,8 +21,8 @@ setuptools = "^57.2.0"
 jsonlines = "^2.0.0"
 pynndescent = "0.5.0"
 umap-learn = "0.5.0"
-babyai = {git = "https://github.com/GPT-RL/babyai.git"}
 ansicolors = "^1.1.8"
+babyai = {git = "https://github.com/GPT-RL/babyai.git"}
 
 [tool.poetry.dev-dependencies]
 black = "^21.6b0"
