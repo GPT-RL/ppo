@@ -1,5 +1,4 @@
 from typing import Literal
-import logging
 
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
@@ -7,12 +6,13 @@ from transformers import GPT2Tokenizer
 import main
 from babyai_agent import Agent
 from babyai_env import (
-    Env,
     FullyObsWrapper,
+    PickupEnv,
+    PickupRedEnv,
     RolloutsWrapper,
+    SynonymWrapper,
     TokenizerWrapper,
     ZeroOneRewardWrapper,
-    get_train_and_test_objects,
 )
 from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
@@ -24,9 +24,12 @@ class Args(main.Args):
     ] = "medium"  # what size of pretrained GPT to use
     env: str = "GoToLocal"  # env ID for gym
     room_size: int = 5
-    num_dists: int = 1
     strict: bool = True
     record_interval: int = 200
+
+
+class InvalidEnvIdError(RuntimeError):
+    pass
 
 
 class Trainer(main.Trainer):
@@ -47,12 +50,18 @@ class Trainer(main.Trainer):
     ):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
-            env = Env(*args, seed=seed + rank, **kwargs)
+            if env_id == "pickup":
+                env = PickupEnv(*args, seed=seed + rank, num_dists=1, **kwargs)
+                mission = "pick up the red ball"
+            elif env_id == "pickup-synonyms":
+                env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
+                env = SynonymWrapper(env)
+                mission = "pick-up the crimson phone"
+            else:
+                raise InvalidEnvIdError()
             env = FullyObsWrapper(env)
             env = ZeroOneRewardWrapper(env)
-            env = TokenizerWrapper(
-                env, tokenizer=tokenizer, longest_mission="pick up a blue ball"
-            )
+            env = TokenizerWrapper(env, tokenizer=tokenizer, longest_mission=mission)
             env = RolloutsWrapper(env)
 
             env = Monitor(env, allow_early_resets=allow_early_resets)
@@ -65,21 +74,12 @@ class Trainer(main.Trainer):
 
     @classmethod
     def make_vec_envs(cls, args, device, **kwargs):
-        objects = get_train_and_test_objects()
         # assert len(test_objects) >= 3
-        test = kwargs.pop("test")
-        goal_objects = objects.test if test else objects.train
-        logging.info(f"{'test' if test else 'train'} objects")
-        for obj in goal_objects:
-            logging.info(obj)
-
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
         return super().make_vec_envs(
             args,
             device,
             room_size=args.room_size,
-            num_dists=args.num_dists,
-            goal_objects=goal_objects,
             strict=args.strict,
             tokenizer=tokenizer,
             **kwargs,

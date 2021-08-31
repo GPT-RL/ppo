@@ -1,14 +1,13 @@
-from collections import defaultdict
 from dataclasses import astuple, dataclass
+from itertools import chain, cycle, islice, product
 from typing import Generator, Optional, TypeVar
-import itertools
 
-import colors
 import gym
 import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import ObjDesc, PickupInstr
+from colors import color as asci_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
@@ -22,24 +21,7 @@ class TrainTest:
     test: list
 
 
-COLORS = [*COLOR_NAMES][:3]
 TYPES = ["key", "ball", "box"]
-
-
-def get_train_and_test_objects():
-    all_objects = set(itertools.product(TYPES, COLORS))
-
-    def pairs():
-
-        remaining = set(all_objects)
-
-        for _type, color in zip(TYPES, itertools.cycle(COLORS)):
-            remaining.remove((_type, color))
-            yield _type, color
-        # yield from remaining
-
-    train_objects = [*pairs()]
-    return TrainTest(train=train_objects, test=list(all_objects))
 
 
 class Agent(WorldObj):
@@ -47,17 +29,24 @@ class Agent(WorldObj):
         pass
 
 
-class Env(RoomGridLevel):
+class PickupEnv(RoomGridLevel):
     def __init__(
         self,
-        goal_objects,
+        test: bool,
         room_size: int,
-        num_dists: int,
         seed: int,
         strict: bool,
+        num_dists: int = 1,
     ):
         self.strict = strict
-        self.goal_object, *_ = self.goal_objects = goal_objects
+
+        colors = [*COLOR_NAMES][:3]
+        all_objects = product(TYPES, colors)
+        train_objects = zip(TYPES, cycle(colors))
+
+        self.goal_object, *_ = self.goal_objects = [
+            *(all_objects if test else train_objects)
+        ]
         self.num_dists = num_dists
         self.__reward = None
         self.__done = None
@@ -108,7 +97,7 @@ class Env(RoomGridLevel):
 
             string = f"{string:<{self.max_string_length}}"
             if obj is not None:
-                string = colors.color(string, obj.color)
+                string = asci_color(string, obj.color)
             yield string + "\033[0m"
 
     @property
@@ -136,6 +125,20 @@ class Env(RoomGridLevel):
         input("Press enter to coninue.")
 
 
+class PickupRedEnv(PickupEnv):
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        color = "red"
+        for kind in TYPES:
+            self.add_object(0, 0, kind=kind, color=color)
+        goal_type = self._rand_elem(TYPES)
+        self.check_objs_reachable()
+        self.instrs = PickupInstr(
+            ObjDesc(type=goal_type, color=color), strict=self.strict
+        )
+
+
 T = TypeVar("T")  # Declare type variable
 
 
@@ -144,6 +147,30 @@ class Spaces:
     image: T
     direction: T
     mission: T
+
+
+class SynonymWrapper(gym.ObservationWrapper):
+    synonyms = {
+        "pick-up": ["take", "grab", "get"],
+        "red": ["crimson"],
+        "box": ["carton", "package"],
+        "ball": ["sphere", "globe"],
+        "phone": ["cell", "mobile"],
+    }
+
+    def observation(self, observation):
+        mission: str = observation["mission"]
+        mission = mission.replace("key", "phone")
+        mission = mission.replace("pick up", "pick-up")
+
+        def new_mission():
+            for word in mission.split():
+                choices = [word, *self.synonyms.get(word, [])]
+                yield self.np_random.choice(choices)
+
+        mission = " ".join(new_mission())
+        observation["mission"] = mission
+        return observation
 
 
 class ZeroOneRewardWrapper(gym.RewardWrapper):
@@ -191,6 +218,9 @@ class TokenizerWrapper(gym.ObservationWrapper):
 
     def observation(self, observation):
         mission = self.tokenizer.encode(observation["mission"])
+        length = len(self.observation_space.spaces["mission"].nvec)
+        eos = self.tokenizer.eos_token_id
+        mission = [*islice(chain(mission, cycle([eos])), length)]
         observation.update(mission=mission)
         return observation
 
@@ -273,10 +303,8 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    objects = get_train_and_test_objects()
-    goal_objects = objects.test if args.test else objects.train
-    env = Env(
-        goal_objects=goal_objects,
+    env = PickupEnv(
+        test=True,
         room_size=args.room_size,
         num_dists=args.num_dists,
         seed=args.seed,

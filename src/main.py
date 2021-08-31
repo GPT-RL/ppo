@@ -30,7 +30,6 @@ from tap import Tap
 
 import utils
 from agent import Agent
-from babyai_env import Env
 from envs import (
     TimeLimitMask,
     TransposeImage,
@@ -398,9 +397,7 @@ query GetParameters($id: Int!) {
         env_id, seed, rank, allow_early_resets, *args, render: bool = False, **kwargs
     ):
         def _thunk():
-            if env_id == "GoToLocal":
-                env = Env(*args, **kwargs)
-            elif env_id.startswith("dm"):
+            if env_id.startswith("dm"):
                 _, domain, task = env_id.split(".")
                 env = dmc2gym.make(domain_name=domain, task_name=task)
                 env = ClipAction(env)
