@@ -10,6 +10,8 @@ from babyai_env import (
     PickupEnv,
     PickupRedEnv,
     RolloutsWrapper,
+    SequenceEnv,
+    SequenceSynonymWrapper,
     SynonymWrapper,
     TokenizerWrapper,
     ZeroOneRewardWrapper,
@@ -57,8 +59,13 @@ class Trainer(main.Trainer):
                 env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
                 env = SynonymWrapper(env)
                 mission = "pick-up the crimson phone"
+            elif env_id == "sequence-paraphrases":
+                env = SequenceEnv(*args, seed=seed + rank, **kwargs)
+                env = SequenceSynonymWrapper(env, test=kwargs["test"])
+                mission = "pick up the red ball, having already picked up the red key"
             else:
                 raise InvalidEnvIdError()
+
             env = FullyObsWrapper(env)
             env = ZeroOneRewardWrapper(env)
             env = TokenizerWrapper(env, tokenizer=tokenizer, longest_mission=mission)

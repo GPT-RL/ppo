@@ -1,12 +1,19 @@
+import re
 from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice, product
-from typing import Generator, Optional, TypeVar
+from typing import Callable, Generator, Optional, TypeVar
 
 import gym
 import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
-from babyai.levels.verifier import ObjDesc, PickupInstr
+from babyai.levels.verifier import (
+    AfterInstr,
+    BeforeInstr,
+    GoToInstr,
+    ObjDesc,
+    PickupInstr,
+)
 from colors import color as asci_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
@@ -91,7 +98,7 @@ class PickupEnv(RoomGridLevel):
                 elif self.agent_dir == 3:
                     string = "<"
                 else:
-                    raise RuntimeError(f"invalid agent dir: {self.agent_dir}")
+                    breakpoint()
             else:
                 string = obj.type
 
@@ -116,13 +123,16 @@ class PickupEnv(RoomGridLevel):
             yield self.horizontal_separator_string()
             yield self.row_string(i)
 
-    def render(self, *args, **kwargs):
-        for string in self.render_string():
-            print(string)
-        print(self.mission)
-        print("Reward:", self.__reward)
-        print("Done:", self.__done)
-        input("Press enter to coninue.")
+    def render(self, mode="terminal", **kwargs):
+        if mode == "terminal":
+            for string in self.render_string():
+                print(string)
+            print(self.mission)
+            print("Reward:", self.__reward)
+            print("Done:", self.__done)
+            input("Press enter to coninue.")
+        else:
+            return super().render(mode=mode, **kwargs)
 
 
 class PickupRedEnv(PickupEnv):
@@ -136,6 +146,26 @@ class PickupRedEnv(PickupEnv):
         self.check_objs_reachable()
         self.instrs = PickupInstr(
             ObjDesc(type=goal_type, color=color), strict=self.strict
+        )
+
+
+class SequenceEnv(PickupEnv):
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        color = "red"
+        for kind in TYPES:
+            self.add_object(0, 0, kind=kind, color=color)
+        goal1 = self._rand_elem(TYPES)
+        goal2 = self._rand_elem(set(TYPES) - {goal1})
+
+        instr1 = GoToInstr(ObjDesc(type=goal1, color=color))
+        instr2 = PickupInstr(ObjDesc(type=goal2, color=color))
+        self.check_objs_reachable()
+        self.instrs = (
+            BeforeInstr(instr1, instr2, strict=True)
+            if self.np_random.choice(2)
+            else AfterInstr(instr1, instr2, strict=True)
         )
 
 
@@ -170,6 +200,59 @@ class SynonymWrapper(gym.ObservationWrapper):
 
         mission = " ".join(new_mission())
         observation["mission"] = mission
+        return observation
+
+
+class InvalidInstructionError(RuntimeError):
+    pass
+
+
+class SequenceSynonymWrapper(gym.ObservationWrapper):
+    def __init__(self, env, test: bool):
+        super().__init__(env)
+        self.test = test
+
+    def observation(self, observation):
+        mission = observation["mission"]
+
+        def after(instr1: str, instr2: str):
+            return f"{instr2} after you {instr1}"
+
+        def after_reverse(instr1: str, instr2: str):
+            return f"After you {instr1}, {instr2}"
+
+        def before(instr1: str, instr2: str):
+            return f"{instr1} before you {instr2}"
+
+        def before_reverse(instr1: str, instr2: str):
+            return f"Before you {instr2}, {instr1}"
+
+        def then(instr1: str, instr2: str):
+            return f"{instr1}, then {instr2}"
+
+        def _next(instr1: str, instr2: str):
+            return f"{instr1}. Next, {instr2}"
+
+        def having(instr1: str, instr2: str):
+            return f"{instr2}, having already {past(instr1)}"
+
+        wordings = [after, after_reverse, before, before_reverse, then, _next, having]
+
+        def past(instr: str):
+            return instr.replace("pick", "picked")
+
+        match = re.match(r"(.*), then (.*)", mission)
+        if not match:
+            match = re.match(r"(.*) after you (.*)", mission)
+            if not match:
+                breakpoint()
+
+        wording: Callable[[str, str], str] = (
+            before if self.test else self.np_random.choice(wordings)
+        )
+        mission = wording(*match.group(1, 2))
+        observation["mission"] = mission
+
         return observation
 
 
@@ -303,10 +386,9 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = PickupEnv(
-        test=True,
+    env = SequenceEnv(
+        test=False,
         room_size=args.room_size,
-        num_dists=args.num_dists,
         seed=args.seed,
         strict=args.strict,
     )
