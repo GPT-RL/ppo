@@ -1,6 +1,6 @@
 import re
 from dataclasses import astuple, dataclass
-from itertools import chain, cycle, islice, product
+from itertools import chain, cycle, islice
 from typing import Callable, Generator, Optional, TypeVar
 
 import gym
@@ -16,7 +16,7 @@ from babyai.levels.verifier import (
 )
 from colors import color as asci_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
@@ -47,13 +47,15 @@ class PickupEnv(RoomGridLevel):
     ):
         self.strict = strict
 
-        colors = [*COLOR_NAMES][:3]
-        all_objects = product(TYPES, colors)
-        train_objects = zip(TYPES, cycle(colors))
-
-        self.goal_object, *_ = self.goal_objects = [
-            *(all_objects if test else train_objects)
-        ]
+        self.goal_object, *_ = self.goal_objects = (
+            ["ball", "green"]
+            if test
+            else [
+                ("box", "green"),
+                ("box", "yellow"),
+                ("ball", "yellow"),
+            ]
+        )
         self.num_dists = num_dists
         self.__reward = None
         self.__done = None
@@ -177,6 +179,31 @@ class Spaces:
     image: T
     direction: T
     mission: T
+
+
+class PlantAnimalWrapper(gym.ObservationWrapper):
+    green_box = "green box"
+    yellow_box = "yellow box"
+    green_ball = "green ball"
+    yellow_ball = "yellow ball"
+    replacements = {
+        green_box: ["iguana", "frog", "grasshopper", "turtle", "mantis"],
+        yellow_box: ["tiger", "lion", "orangutan", "goldfish"],
+        green_ball: ["lime", "kiwi", "broccoli", "lettuce"],
+        yellow_ball: ["peach", "yam", "tangerine", "carrot"],
+    }
+    replacement_objects = [green_box, yellow_box, green_ball, yellow_ball]
+
+    def observation(self, observation):
+        mission: str = observation["mission"]
+        for obj in self.replacement_objects:
+            if obj in mission:
+                replacements = self.replacements[obj]
+                replacement = self.np_random.choice(replacements)
+                mission.replace(obj, replacement)
+
+        observation["mission"] = mission
+        return observation
 
 
 class SynonymWrapper(gym.ObservationWrapper):

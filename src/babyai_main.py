@@ -9,6 +9,7 @@ from babyai_env import (
     FullyObsWrapper,
     PickupEnv,
     PickupRedEnv,
+    PlantAnimalWrapper,
     RolloutsWrapper,
     SequenceEnv,
     SequenceSynonymWrapper,
@@ -54,21 +55,31 @@ class Trainer(main.Trainer):
             tokenizer = kwargs.pop("tokenizer")
             if env_id == "pickup":
                 env = PickupEnv(*args, seed=seed + rank, num_dists=1, **kwargs)
-                mission = "pick up the red ball"
+                longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
                 env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
                 env = SynonymWrapper(env)
-                mission = "pick-up the crimson phone"
+                longest_mission = "pick-up the crimson phone"
             elif env_id == "sequence-paraphrases":
                 env = SequenceEnv(*args, seed=seed + rank, **kwargs)
                 env = SequenceSynonymWrapper(env, test=kwargs["test"])
-                mission = "pick up the red ball, having already picked up the red key"
+                longest_mission = (
+                    "pick up the red ball, having already picked up the red key"
+                )
+            elif env_id == "plant-animal":
+                env = PickupEnv(*args, seed=seed + rank, **kwargs)
+                env = PlantAnimalWrapper(env)
+                longest_mission = "pick up the grasshopper"
             else:
                 raise InvalidEnvIdError()
 
             env = FullyObsWrapper(env)
             env = ZeroOneRewardWrapper(env)
-            env = TokenizerWrapper(env, tokenizer=tokenizer, longest_mission=mission)
+            env = TokenizerWrapper(
+                env,
+                tokenizer=tokenizer,
+                longest_mission=longest_mission,
+            )
             env = RolloutsWrapper(env)
 
             env = Monitor(env, allow_early_resets=allow_early_resets)
