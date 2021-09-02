@@ -66,6 +66,9 @@ class Trainer(main.Trainer):
                 longest_mission = (
                     "pick up the red ball, having already picked up the red key"
                 )
+            elif env_id == "sequence":
+                env = SequenceEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "pick up the red ball, then pick up the red key"
             elif env_id == "plant-animal":
                 env = PickupEnv(*args, seed=seed + rank, **kwargs)
                 env = PlantAnimalWrapper(env)
