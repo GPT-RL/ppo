@@ -156,8 +156,8 @@ class SequenceEnv(PickupEnv):
         goal1 = self._rand_elem(TYPES)
         goal2 = self._rand_elem(set(TYPES) - {goal1})
 
-        instr1 = GoToInstr(ObjDesc(type=goal1, color=color))
-        instr2 = PickupInstr(ObjDesc(type=goal2, color=color), strict=True)
+        instr1 = PickupInstr(ObjDesc(type=goal1, color=color), strict=True)
+        instr2 = GoToInstr(ObjDesc(type=goal2, color=color))
         self.check_objs_reachable()
         self.instrs = (
             BeforeInstr(instr1, instr2, strict=True)
@@ -506,7 +506,7 @@ def main(args: "Args"):
             return
 
     env = SequenceEnv(
-        test=False,
+        goal_objects=[("box", "red"), ("ball", "red")],
         room_size=args.room_size,
         seed=args.seed,
         strict=args.strict,
