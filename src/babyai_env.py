@@ -14,7 +14,7 @@ from babyai.levels.verifier import (
     ObjDesc,
     PickupInstr,
 )
-from colors import color as asci_color
+from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
@@ -48,7 +48,7 @@ class PickupEnv(RoomGridLevel):
         self.strict = strict
 
         self.goal_object, *_ = self.goal_objects = (
-            ["ball", "green"]
+            [("ball", "green")]
             if test
             else [
                 ("box", "green"),
@@ -106,7 +106,7 @@ class PickupEnv(RoomGridLevel):
 
             string = f"{string:<{self.max_string_length}}"
             if obj is not None:
-                string = asci_color(string, obj.color)
+                string = ansi_color(string, obj.color)
             yield string + "\033[0m"
 
     @property
@@ -137,17 +137,19 @@ class PickupEnv(RoomGridLevel):
             return super().render(mode=mode, **kwargs)
 
 
+COLOR = "red"
+
+
 class PickupRedEnv(PickupEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        color = "red"
         for kind in TYPES:
-            self.add_object(0, 0, kind=kind, color=color)
+            self.add_object(0, 0, kind=kind, color=COLOR)
         goal_type = self._rand_elem(TYPES)
         self.check_objs_reachable()
         self.instrs = PickupInstr(
-            ObjDesc(type=goal_type, color=color), strict=self.strict
+            ObjDesc(type=goal_type, color=COLOR), strict=self.strict
         )
 
 
