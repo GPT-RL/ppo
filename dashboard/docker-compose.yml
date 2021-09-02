@@ -2,6 +2,8 @@ version: "3.6"
 services:
   pluto-dashboard:
     build: .
+    command:
+      - ${SCRIPT}
     volumes:
       - "./notebooks:/workspace/notebooks"
       - "$HOME/.cache/GPT/linguistic_analysis:/workspace/linguistic_analysis"
