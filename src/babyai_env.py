@@ -1,7 +1,8 @@
 import re
+import typing
 from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
-from typing import Callable, Generator, Optional, TypeVar
+from typing import Callable, Generator, List, Optional, TypeVar
 
 import gym
 import gym_minigrid
@@ -39,7 +40,7 @@ class Agent(WorldObj):
 class PickupEnv(RoomGridLevel):
     def __init__(
         self,
-        test: bool,
+        goal_objects: typing.Iterable[typing.Tuple[str, str]],
         room_size: int,
         seed: int,
         strict: bool,
@@ -47,15 +48,7 @@ class PickupEnv(RoomGridLevel):
     ):
         self.strict = strict
 
-        self.goal_object, *_ = self.goal_objects = (
-            [("ball", "green")]
-            if test
-            else [
-                ("box", "green"),
-                ("box", "yellow"),
-                ("ball", "yellow"),
-            ]
-        )
+        self.goal_object, *_ = self.goal_objects = list(goal_objects)
         self.num_dists = num_dists
         self.__reward = None
         self.__done = None
@@ -184,25 +177,122 @@ class Spaces:
 
 
 class PlantAnimalWrapper(gym.ObservationWrapper):
-    green_box = "green box"
-    yellow_box = "yellow box"
-    green_ball = "green ball"
-    yellow_ball = "yellow ball"
+    green_animal = "green box"
+    orange_animal = "yellow box"
+    green_plant = "green ball"
+    orange_plant = "yellow ball"
+    white_animal = "grey box"
+    white_plant = "grey ball"
+    purple_animal = "purple box"
+    purple_plant = "purple ball"
+    # pink_animal = "pink box"
+    # pink_plant = "pink ball"
+    black_animal = "blue box"
+    black_plant = "blue ball"
+    red_animal = "red box"
+    red_plant = "red ball"
     replacements = {
-        green_box: ["iguana", "frog", "grasshopper", "turtle", "mantis"],
-        yellow_box: ["tiger", "lion", "orangutan", "goldfish"],
-        green_ball: ["lime", "kiwi", "broccoli", "lettuce"],
-        yellow_ball: ["peach", "yam", "tangerine", "carrot"],
+        red_animal: [
+            "rooster",
+            "lobster",
+            "crab",
+            "ladybug",
+            "cardinal",
+        ],
+        red_plant: [
+            "cherry",
+            "tomato",
+            "chili",
+            "apple",
+            "raspberry",
+            "cranberry",
+            "strawberry",
+            "pomegranate",
+            "radish",
+            "beet",
+            "rose",
+        ],
+        black_animal: [
+            "gorilla",
+            "crow",
+            "panther",
+            "raven",
+            "bat",
+        ],
+        black_plant: ["black plant"],
+        # pink_animal: ["flamingo", "pig"],
+        # pink_plant: ["lychee", "dragonfruit"],
+        purple_animal: ["purple animal"],
+        purple_plant: [
+            "grape",
+            "eggplant",
+            "plum",
+            "shallot",
+            "lilac",
+        ],
+        white_animal: [
+            "polar bear",
+            "swan",
+            "ermine",
+            "sheep",
+            "seagull",
+        ],
+        white_plant: [
+            "coconut",
+            "cauliflower",
+            "onion",
+            "garlic",
+        ],
+        green_animal: [
+            "iguana",
+            "frog",
+            "grasshopper",
+            "turtle",
+            "mantis",
+            "lizard",
+            "caterpillar",
+        ],
+        green_plant: [
+            "lime",
+            "kiwi",
+            "broccoli",
+            "lettuce",
+            "kale",
+            "spinach",
+            "avocado",
+            "cucumber",
+            "basil",
+            "pea",
+            "arugula",
+            "celery",
+        ],
+        orange_animal: [
+            "tiger",
+            "lion",
+            "orangutan",
+            "goldfish",
+            "clownfish",
+            "fox",
+        ],
+        orange_plant: [
+            "peach",
+            "yam",
+            "tangerine",
+            "carrot",
+            "papaya",
+            "clementine",
+            "kumquat",
+            "pumpkin",
+            "marigold",
+        ],
     }
-    replacement_objects = [green_box, yellow_box, green_ball, yellow_ball]
 
     def observation(self, observation):
         mission: str = observation["mission"]
-        for obj in self.replacement_objects:
-            if obj in mission:
-                replacements = self.replacements[obj]
-                replacement = self.np_random.choice(replacements)
-                mission.replace(obj, replacement)
+        for k, v in self.replacements.items():
+            if k in mission:
+                replacement = self.np_random.choice(v)
+                mission.replace(k, replacement)
 
         observation["mission"] = mission
         return observation

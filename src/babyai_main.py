@@ -53,8 +53,25 @@ class Trainer(main.Trainer):
     ):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
+            test = kwargs.pop("test")
+            kwargs.update(
+                goal_objects=(
+                    [("ball", "green")]
+                    if test
+                    else [
+                        ("box", "green"),
+                        ("box", "yellow"),
+                        ("ball", "yellow"),
+                    ]
+                )
+            )
             if env_id == "pickup":
-                env = PickupEnv(*args, seed=seed + rank, num_dists=1, **kwargs)
+                env = PickupEnv(
+                    *args,
+                    seed=seed + rank,
+                    num_dists=1,
+                    **kwargs,
+                )
                 longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
                 env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
@@ -70,6 +87,15 @@ class Trainer(main.Trainer):
                 env = SequenceEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "pick up the red ball, then pick up the red key"
             elif env_id == "plant-animal":
+                objects = {*PlantAnimalWrapper.replacements.keys()}
+                test_objects = {
+                    PlantAnimalWrapper.purple_animal,
+                    PlantAnimalWrapper.black_plant,
+                }
+                goal_objects = test_objects if test else objects - test_objects
+                goal_objects = [o.split() for o in goal_objects]
+                goal_objects = [(t, c) for (c, t) in goal_objects]
+                kwargs.update(goal_objects=goal_objects)
                 env = PickupEnv(*args, seed=seed + rank, **kwargs)
                 env = PlantAnimalWrapper(env)
                 longest_mission = "pick up the grasshopper"
