@@ -151,18 +151,19 @@ class SequenceEnv(PickupEnv):
         self.place_agent()
         self.connect_all()
         color = "red"
-        for kind in TYPES:
-            self.add_object(0, 0, kind=kind, color=color)
         goal1 = self._rand_elem(TYPES)
         goal2 = self._rand_elem(set(TYPES) - {goal1})
+
+        for kind in [goal1, goal2]:
+            self.add_object(0, 0, kind=kind, color=color)
 
         instr1 = PickupInstr(ObjDesc(type=goal1, color=color), strict=True)
         instr2 = GoToInstr(ObjDesc(type=goal2, color=color))
         self.check_objs_reachable()
         self.instrs = (
             BeforeInstr(instr1, instr2, strict=True)
-            if self.np_random.choice(2)
-            else AfterInstr(instr1, instr2, strict=True)
+            # if self.np_random.choice(2)
+            # else AfterInstr(instr2, instr1, strict=True)
         )
 
 
