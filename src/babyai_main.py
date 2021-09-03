@@ -8,6 +8,7 @@ from babyai_agent import Agent
 from babyai_env import (
     FullyObsWrapper,
     PickupEnv,
+    PickupEnvRoomObjects,
     PickupRedEnv,
     PlantAnimalWrapper,
     RolloutsWrapper,
@@ -92,11 +93,11 @@ class Trainer(main.Trainer):
                     PlantAnimalWrapper.purple_animal,
                     PlantAnimalWrapper.black_plant,
                 }
-                goal_objects = test_objects if test else objects - test_objects
-                goal_objects = [o.split() for o in goal_objects]
-                goal_objects = [(t, c) for (c, t) in goal_objects]
-                kwargs.update(goal_objects=goal_objects)
-                env = PickupEnv(*args, seed=seed + rank, **kwargs)
+                room_objects = test_objects if test else objects - test_objects
+                room_objects = [o.split() for o in room_objects]
+                room_objects = [(t, c) for (c, t) in room_objects]
+                kwargs.update(room_objects=room_objects)
+                env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
                 env = PlantAnimalWrapper(env)
                 longest_mission = "pick up the grasshopper"
             else:

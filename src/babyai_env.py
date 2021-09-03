@@ -1,5 +1,6 @@
 import re
 import typing
+from abc import ABC
 from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
 from typing import Callable, Generator, List, Optional, TypeVar
@@ -37,7 +38,7 @@ class Agent(WorldObj):
         pass
 
 
-class RenderEnv(RoomGridLevel):
+class RenderEnv(RoomGridLevel, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__reward = None
@@ -65,6 +66,7 @@ class RenderEnv(RoomGridLevel):
                     string = "<"
                 else:
                     breakpoint()
+                    raise RuntimeError
             else:
                 string = obj.type
 
@@ -115,7 +117,6 @@ class PickupEnv(RenderEnv):
         num_dists: int = 1,
     ):
         self.strict = strict
-
         self.goal_object, *_ = self.goal_objects = list(goal_objects)
         self.num_dists = num_dists
         super().__init__(
@@ -131,6 +132,30 @@ class PickupEnv(RenderEnv):
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         goal_object = self._rand_elem(self.goal_objects)
         self.add_object(0, 0, *goal_object)
+        self.check_objs_reachable()
+        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
+
+
+class PickupEnvRoomObjects(PickupEnv):
+    def __init__(
+        self,
+        *args,
+        room_objects: typing.Iterable[typing.Tuple[str, str]],
+        **kwargs,
+    ):
+        self.room_objects = room_objects
+        kwargs.update(goal_objects=room_objects)
+        super().__init__(*args, **kwargs)
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        objects = {*self.room_objects} - {goal_object}
+        for _ in range(self.num_dists):
+            obj = self._rand_elem(objects)
+            self.add_object(0, 0, *obj)
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
@@ -511,11 +536,16 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = SequenceEnv(
-        goal_objects=[("box", "red"), ("ball", "red")],
-        room_size=args.room_size,
-        seed=args.seed,
-        strict=args.strict,
+    objects = {*PlantAnimalWrapper.replacements.keys()}
+    test_objects = {
+        PlantAnimalWrapper.purple_animal,
+        PlantAnimalWrapper.black_plant,
+    }
+    room_objects = test_objects if args.test else objects - test_objects
+    room_objects = [o.split() for o in room_objects]
+    room_objects = [(t, c) for (c, t) in room_objects]
+    env = PickupEnvRoomObjects(
+        room_objects=room_objects, seed=args.seed, room_size=args.room_size, strict=True
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
