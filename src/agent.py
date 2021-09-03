@@ -147,9 +147,9 @@ class NNBase(nn.Module):
                 start_idx = has_zeros[i]
                 end_idx = has_zeros[i + 1]
 
-                masks = masks[start_idx].view(1, -1, 1)
+                _masks = masks[start_idx].view(1, -1, 1)
                 rnn_scores, hxs = self.rnn(
-                    x[start_idx:end_idx], hxs * masks + self.initial_hxs * (1 - masks)
+                    x[start_idx:end_idx], hxs * _masks + self.initial_hxs * (1 - _masks)
                 )
 
                 outputs.append(rnn_scores)
