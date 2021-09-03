@@ -1,3 +1,5 @@
+from dataclasses import astuple
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,7 +7,6 @@ import torch.nn.functional as F
 from gym import Space
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete
 from transformers import GPT2Config
-from dataclasses import astuple
 
 import agent
 from agent import NNBase
@@ -95,7 +96,8 @@ class Base(NNBase):
 
     def build_embeddings(self):
         num_embeddings = int(self.observation_spaces.mission.nvec[0])
-        return nn.EmbeddingBag(num_embeddings, self.embedding_size)
+        return nn.Sequential(nn.Embedding(num_embeddings, self.embedding_size),
+                             nn.GRU(self.embedding_size, self.embedding_size, batch_first=True),)
 
     def forward(self, inputs, rnn_hxs, masks):
         inputs = Spaces(
@@ -112,6 +114,7 @@ class Base(NNBase):
         image = self.conv(image)
         directions = inputs.direction.long()
         directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
+
         mission = self.embed(inputs.mission.long())
         x = torch.cat([image, directions, mission], dim=-1)
         x = self.merge(x)
@@ -120,4 +123,4 @@ class Base(NNBase):
         return self.critic_linear(x), x, rnn_hxs
 
     def embed(self, inputs):
-        return self.embeddings.forward(inputs)
+        return self.embeddings.forward(inputs)[1].squeeze(0)
