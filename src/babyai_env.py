@@ -5,13 +5,14 @@ from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
 from typing import Callable, Generator, List, Optional, TypeVar
 
+import babyai.levels.verifier
 import gym
 import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
+    ActionInstr,
     AfterInstr,
-    BeforeInstr,
     GoToInstr,
     ObjDesc,
     PickupInstr,
@@ -107,6 +108,71 @@ class RenderEnv(RoomGridLevel, ABC):
         return s, self.__reward, self.__done, i
 
 
+class ToggleInstr(ActionInstr):
+    """
+    Pick up an object matching a given description
+    eg: pick up the grey ball
+    """
+
+    def __init__(self, obj_desc, strict=False):
+        super().__init__()
+        self.desc = obj_desc
+        self.strict = strict
+
+    def surface(self, env):
+        return "toggle " + self.desc.surface(env)
+
+    def reset_verifier(self, env):
+        super().reset_verifier(env)
+
+        self.desc.find_matching_objs(env)
+
+    def verify_action(self, action):
+        # Only verify when the pickup action is performed
+        if action != self.env.actions.toggle:
+            return "continue"
+
+        # For each object position
+        for pos in self.desc.obj_poss:
+            # If the agent is next to (and facing) the object
+            if np.array_equal(pos, self.env.front_pos):
+                return "success"
+
+        if self.strict:
+            return "failure"  # not allowed to toggle except in front of correct object
+
+        return "continue"
+
+
+class ToggleEnv(RenderEnv):
+    def __init__(
+        self,
+        goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
+    ):
+        self.strict = strict
+        self.goal_object, *_ = self.goal_objects = list(goal_objects)
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        self.check_objs_reachable()
+        self.instrs = ToggleInstr(ObjDesc(*goal_object), strict=self.strict)
+
+
 class PickupEnv(RenderEnv):
     def __init__(
         self,
@@ -176,6 +242,32 @@ class PickupRedEnv(PickupEnv):
         )
 
 
+class BeforeInstr(babyai.levels.verifier.BeforeInstr):
+    def verify(self, action):
+        if self.a_done == "success":
+            self.b_done = self.instr_b.verify(action)
+
+            if self.b_done == "failure":
+                return "failure"
+
+            if self.b_done == "success":
+                return "success"
+        else:
+            self.a_done = self.instr_a.verify(action)
+            if self.a_done == "failure":
+                return "failure"
+
+            if self.a_done == "success":
+                return "continue"
+
+            # In strict mode, completing b first means failure
+            if self.strict:
+                if self.instr_b.verify(action) == "success":
+                    return "failure"
+
+        return "continue"
+
+
 class SequenceEnv(RenderEnv):
     def __init__(self, *args, strict: bool, **kwargs):
         self.strict = strict
@@ -191,8 +283,8 @@ class SequenceEnv(RenderEnv):
         for kind in [goal1, goal2]:
             self.add_object(0, 0, kind=kind, color=color)
 
-        instr1 = PickupInstr(ObjDesc(type=goal1, color=color), strict=self.strict)
-        instr2 = GoToInstr(ObjDesc(type=goal2, color=color))
+        instr1 = ToggleInstr(ObjDesc(type=goal1, color=color), strict=self.strict)
+        instr2 = ToggleInstr(ObjDesc(type=goal2, color=color), strict=self.strict)
         self.check_objs_reachable()
         self.instrs = (
             BeforeInstr(instr1, instr2, strict=True)
@@ -545,11 +637,8 @@ def main(args: "Args"):
         PlantAnimalWrapper.purple_animal,
         PlantAnimalWrapper.black_plant,
     }
-    room_objects = test_objects if args.test else objects - test_objects
-    room_objects = [o.split() for o in room_objects]
-    room_objects = [(t, c) for (c, t) in room_objects]
-    env = PickupEnvRoomObjects(
-        room_objects=room_objects, seed=args.seed, room_size=args.room_size, strict=True
+    env = SequenceEnv(
+        seed=args.seed, num_cols=1, num_rows=1, room_size=args.room_size, strict=True
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
