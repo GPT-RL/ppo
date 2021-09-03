@@ -176,7 +176,11 @@ class PickupRedEnv(PickupEnv):
         )
 
 
-class SequenceEnv(PickupEnv):
+class SequenceEnv(RenderEnv):
+    def __init__(self, *args, strict: bool, **kwargs):
+        self.strict = strict
+        super().__init__(*args, **kwargs)
+
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
@@ -187,7 +191,7 @@ class SequenceEnv(PickupEnv):
         for kind in [goal1, goal2]:
             self.add_object(0, 0, kind=kind, color=color)
 
-        instr1 = PickupInstr(ObjDesc(type=goal1, color=color), strict=True)
+        instr1 = PickupInstr(ObjDesc(type=goal1, color=color), strict=self.strict)
         instr2 = GoToInstr(ObjDesc(type=goal2, color=color))
         self.check_objs_reachable()
         self.instrs = (

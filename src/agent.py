@@ -81,6 +81,7 @@ class NNBase(nn.Module):
 
         self._hidden_size = hidden_size
         self._recurrent = recurrent
+        self.initial_hxs = nn.Parameter(self._initial_hxs)
 
         if recurrent:
             self.rnn = nn.GRU(recurrent_input_size, hidden_size)
@@ -101,7 +102,7 @@ class NNBase(nn.Module):
         return 1
 
     @property
-    def initial_hxs(self):
+    def _initial_hxs(self):
         return torch.zeros(1, self.recurrent_hidden_state_size)
 
     @property
