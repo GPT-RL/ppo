@@ -37,40 +37,11 @@ class Agent(WorldObj):
         pass
 
 
-class PickupEnv(RoomGridLevel):
-    def __init__(
-        self,
-        goal_objects: typing.Iterable[typing.Tuple[str, str]],
-        room_size: int,
-        seed: int,
-        strict: bool,
-        num_dists: int = 1,
-    ):
-        self.strict = strict
-
-        self.goal_object, *_ = self.goal_objects = list(goal_objects)
-        self.num_dists = num_dists
+class RenderEnv(RoomGridLevel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.__reward = None
         self.__done = None
-        super().__init__(
-            room_size=room_size,
-            num_rows=1,
-            num_cols=1,
-            seed=seed,
-        )
-
-    def step(self, action):
-        s, self.__reward, self.__done, i = super().step(action)
-        return s, self.__reward, self.__done, i
-
-    def gen_mission(self):
-        self.place_agent()
-        self.connect_all()
-        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
-        goal_object = self._rand_elem(self.goal_objects)
-        self.add_object(0, 0, *goal_object)
-        self.check_objs_reachable()
-        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
     def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
         for j in range(self.width):
@@ -118,8 +89,8 @@ class PickupEnv(RoomGridLevel):
             yield self.horizontal_separator_string()
             yield self.row_string(i)
 
-    def render(self, mode="terminal", **kwargs):
-        if mode == "terminal":
+    def render(self, mode="human", **kwargs):
+        if mode == "human":
             for string in self.render_string():
                 print(string)
             print(self.mission)
@@ -128,6 +99,40 @@ class PickupEnv(RoomGridLevel):
             input("Press enter to coninue.")
         else:
             return super().render(mode=mode, **kwargs)
+
+    def step(self, action):
+        s, self.__reward, self.__done, i = super().step(action)
+        return s, self.__reward, self.__done, i
+
+
+class PickupEnv(RenderEnv):
+    def __init__(
+        self,
+        goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
+    ):
+        self.strict = strict
+
+        self.goal_object, *_ = self.goal_objects = list(goal_objects)
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        self.check_objs_reachable()
+        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
 COLOR = "red"
