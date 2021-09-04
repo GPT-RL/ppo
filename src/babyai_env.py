@@ -92,13 +92,54 @@ class RenderEnv(RoomGridLevel, ABC):
             yield self.horizontal_separator_string()
             yield self.row_string(i)
 
-    def render(self, *args, **kwargs):
-        for string in self.render_string():
-            print(string)
-        print(self.mission)
-        print("Reward:", self.__reward)
-        print("Done:", self.__done)
-        input("Press enter to coninue.")
+    def render(self, mode="human", **kwargs):
+        if mode == "human":
+            for string in self.render_string():
+                print(string)
+            print(self.mission)
+            print("Reward:", self.__reward)
+            print("Done:", self.__done)
+            input("Press enter to coninue.")
+        else:
+            return super().render(mode=mode, **kwargs)
+
+    def step(self, action):
+        s, self.__reward, self.__done, i = super().step(action)
+        return s, self.__reward, self.__done, i
+
+
+class ToggleInstr(ActionInstr):
+    """
+    Pick up an object matching a given description
+    eg: pick up the grey ball
+    """
+
+    def __init__(self, obj_desc, strict=False):
+        super().__init__()
+        self.desc = obj_desc
+        self.strict = strict
+
+    def surface(self, env):
+        return "toggle " + self.desc.surface(env)
+
+    def reset_verifier(self, env):
+        super().reset_verifier(env)
+
+        self.desc.find_matching_objs(env)
+
+    def verify_action(self, action):
+        # Only verify when the pickup action is performed
+        if action != self.env.actions.toggle:
+            return "continue"
+
+        # For each object position
+        for pos in self.desc.obj_poss:
+            # If the agent is next to (and facing) the object
+            if np.array_equal(pos, self.env.front_pos):
+                return "success"
+
+        if self.strict:
+            return "failure"  # not allowed to toggle except in front of correct object
 
 
 class PickupEnv(RenderEnv):
@@ -137,17 +178,94 @@ class PickupEnv(RenderEnv):
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
+class PickupEnvRoomObjects(PickupEnv):
+    def __init__(
+        self,
+        *args,
+        room_objects: typing.Iterable[typing.Tuple[str, str]],
+        **kwargs,
+    ):
+        self.room_objects = room_objects
+        kwargs.update(goal_objects=room_objects)
+        super().__init__(*args, **kwargs)
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        objects = {*self.room_objects} - {goal_object}
+        for _ in range(self.num_dists):
+            obj = self._rand_elem(objects)
+            self.add_object(0, 0, *obj)
+        self.check_objs_reachable()
+        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
+
+
+COLOR = "red"
+
+
 class PickupRedEnv(PickupEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        color = "red"
         for kind in TYPES:
-            self.add_object(0, 0, kind=kind, color=color)
+            self.add_object(0, 0, kind=kind, color=COLOR)
         goal_type = self._rand_elem(TYPES)
         self.check_objs_reachable()
         self.instrs = PickupInstr(
-            ObjDesc(type=goal_type, color=color), strict=self.strict
+            ObjDesc(type=goal_type, color=COLOR), strict=self.strict
+        )
+
+
+class BeforeInstr(babyai.levels.verifier.BeforeInstr):
+    def verify(self, action):
+        if self.a_done == "success":
+            self.b_done = self.instr_b.verify(action)
+
+            if self.b_done == "failure":
+                return "failure"
+
+            if self.b_done == "success":
+                return "success"
+        else:
+            self.a_done = self.instr_a.verify(action)
+            if self.a_done == "failure":
+                return "failure"
+
+            if self.a_done == "success":
+                return "continue"
+
+            # In strict mode, completing b first means failure
+            if self.strict:
+                if self.instr_b.verify(action) == "success":
+                    return "failure"
+
+        return "continue"
+
+
+class SequenceEnv(RenderEnv):
+    def __init__(self, *args, strict: bool, **kwargs):
+        self.strict = strict
+        super().__init__(*args, **kwargs)
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        color = "red"
+        goal1 = self._rand_elem(TYPES)
+        goal2 = self._rand_elem(set(TYPES) - {goal1})
+
+        for kind in [goal1, goal2]:
+            self.add_object(0, 0, kind=kind, color=color)
+
+        instr1 = ToggleInstr(ObjDesc(type=goal1, color=color), strict=self.strict)
+        instr2 = ToggleInstr(ObjDesc(type=goal2, color=color), strict=self.strict)
+        self.check_objs_reachable()
+        self.instrs = (
+            BeforeInstr(instr1, instr2, strict=True)
+            # if self.np_random.choice(2)
+            # else AfterInstr(instr2, instr1, strict=True)
         )
 
 
@@ -159,6 +277,128 @@ class Spaces:
     image: T
     direction: T
     mission: T
+
+
+class PlantAnimalWrapper(gym.ObservationWrapper):
+    green_animal = "green box"
+    orange_animal = "yellow box"
+    green_plant = "green ball"
+    orange_plant = "yellow ball"
+    white_animal = "grey box"
+    white_plant = "grey ball"
+    purple_animal = "purple box"
+    purple_plant = "purple ball"
+    # pink_animal = "pink box"
+    # pink_plant = "pink ball"
+    black_animal = "blue box"
+    black_plant = "blue ball"
+    red_animal = "red box"
+    red_plant = "red ball"
+    replacements = {
+        red_animal: [
+            "rooster",
+            "lobster",
+            "crab",
+            "ladybug",
+            "cardinal",
+        ],
+        red_plant: [
+            "cherry",
+            "tomato",
+            "chili",
+            "apple",
+            "raspberry",
+            "cranberry",
+            "strawberry",
+            "pomegranate",
+            "radish",
+            "beet",
+            "rose",
+        ],
+        black_animal: [
+            "gorilla",
+            "crow",
+            "panther",
+            "raven",
+            "bat",
+        ],
+        black_plant: ["black plant"],
+        # pink_animal: ["flamingo", "pig"],
+        # pink_plant: ["lychee", "dragonfruit"],
+        purple_animal: ["purple animal"],
+        purple_plant: [
+            "grape",
+            "eggplant",
+            "plum",
+            "shallot",
+            "lilac",
+        ],
+        white_animal: [
+            "polar bear",
+            "swan",
+            "ermine",
+            "sheep",
+            "seagull",
+        ],
+        white_plant: [
+            "coconut",
+            "cauliflower",
+            "onion",
+            "garlic",
+        ],
+        green_animal: [
+            "iguana",
+            "frog",
+            "grasshopper",
+            "turtle",
+            "mantis",
+            "lizard",
+            "caterpillar",
+        ],
+        green_plant: [
+            "lime",
+            "kiwi",
+            "broccoli",
+            "lettuce",
+            "kale",
+            "spinach",
+            "avocado",
+            "cucumber",
+            "basil",
+            "pea",
+            "arugula",
+            "celery",
+        ],
+        orange_animal: [
+            "tiger",
+            "lion",
+            "orangutan",
+            "goldfish",
+            "clownfish",
+            "fox",
+        ],
+        orange_plant: [
+            "peach",
+            "yam",
+            "tangerine",
+            "carrot",
+            "papaya",
+            "clementine",
+            "kumquat",
+            "pumpkin",
+            "marigold",
+        ],
+    }
+
+    def observation(self, observation):
+        mission: str = observation["mission"]
+        for k, v in self.replacements.items():
+            if k in mission:
+                replacement = self.np_random.choice(v)
+                mission.replace(k, replacement)
+
+        observation["mission"] = mission
+        return observation
 
 
 class SynonymWrapper(gym.ObservationWrapper):
@@ -182,6 +422,59 @@ class SynonymWrapper(gym.ObservationWrapper):
 
         mission = " ".join(new_mission())
         observation["mission"] = mission
+        return observation
+
+
+class InvalidInstructionError(RuntimeError):
+    pass
+
+
+class SequenceSynonymWrapper(gym.ObservationWrapper):
+    def __init__(self, env, test: bool):
+        super().__init__(env)
+        self.test = test
+
+    def observation(self, observation):
+        mission = observation["mission"]
+
+        def after(instr1: str, instr2: str):
+            return f"{instr2} after you {instr1}"
+
+        def after_reverse(instr1: str, instr2: str):
+            return f"After you {instr1}, {instr2}"
+
+        def before(instr1: str, instr2: str):
+            return f"{instr1} before you {instr2}"
+
+        def before_reverse(instr1: str, instr2: str):
+            return f"Before you {instr2}, {instr1}"
+
+        def then(instr1: str, instr2: str):
+            return f"{instr1}, then {instr2}"
+
+        def _next(instr1: str, instr2: str):
+            return f"{instr1}. Next, {instr2}"
+
+        def having(instr1: str, instr2: str):
+            return f"{instr2}, having already {past(instr1)}"
+
+        wordings = [after, after_reverse, before, before_reverse, then, _next, having]
+
+        def past(instr: str):
+            return instr.replace("pick", "picked")
+
+        match = re.match(r"(.*), then (.*)", mission)
+        if not match:
+            match = re.match(r"(.*) after you (.*)", mission)
+            if not match:
+                breakpoint()
+
+        wording: Callable[[str, str], str] = (
+            before if self.test else self.np_random.choice(wordings)
+        )
+        mission = wording(*match.group(1, 2))
+        observation["mission"] = mission
+
         return observation
 
 
@@ -315,12 +608,13 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = PickupEnv(
-        test=True,
-        room_size=args.room_size,
-        num_dists=args.num_dists,
-        seed=args.seed,
-        strict=args.strict,
+    objects = {*PlantAnimalWrapper.replacements.keys()}
+    test_objects = {
+        PlantAnimalWrapper.purple_animal,
+        PlantAnimalWrapper.black_plant,
+    }
+    env = SequenceEnv(
+        seed=args.seed, num_cols=1, num_rows=1, room_size=args.room_size, strict=True
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
