@@ -92,14 +92,15 @@ class RenderEnv(RoomGridLevel, ABC):
             yield self.horizontal_separator_string()
             yield self.row_string(i)
 
-    def render(self, mode="human", **kwargs):
+    def render(self, mode="human", pause=True, **kwargs):
         if mode == "human":
             for string in self.render_string():
                 print(string)
             print(self.mission)
             print("Reward:", self.__reward)
             print("Done:", self.__done)
-            input("Press enter to coninue.")
+            if pause:
+                input("Press enter to coninue.")
         else:
             return super().render(mode=mode, **kwargs)
 
@@ -414,14 +415,20 @@ class PlantAnimalWrapper(gym.ObservationWrapper):
         ],
     }
 
-    def observation(self, observation):
-        mission: str = observation["mission"]
-        for k, v in self.replacements.items():
-            if k in mission:
-                replacement = self.np_random.choice(v)
-                mission.replace(k, replacement)
+    def render(self, mode="human", pause=True, **kwargs):
+        self.env.render(pause=False)
+        print(self._mission)
+        if pause:
+            input("Press enter to coninue.")
 
-        observation["mission"] = mission
+    def observation(self, observation):
+        self._mission: str = observation["mission"]
+        for k, v in self.replacements.items():
+            if k in self._mission:
+                replacement = self.np_random.choice(v)
+                self._mission = self._mission.replace(k, replacement)
+
+        observation["mission"] = self._mission
         return observation
 
 
