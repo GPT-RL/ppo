@@ -7,6 +7,7 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     FullyObsWrapper,
+    GoToEnv,
     PickupEnv,
     PickupEnvRoomObjects,
     PickupRedEnv,
@@ -15,6 +16,7 @@ from babyai_env import (
     SequenceEnv,
     SequenceSynonymWrapper,
     SynonymWrapper,
+    ToggleEnv,
     TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
@@ -71,13 +73,14 @@ class Trainer(main.Trainer):
                     ]
                 )
             )
-            if env_id == "pickup":
-                env = PickupEnv(
-                    *args,
-                    seed=seed + rank,
-                    num_dists=1,
-                    **kwargs,
-                )
+            if env_id == "goto":
+                env = GoToEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "go to the red ball"
+            elif env_id == "toggle":
+                env = ToggleEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "toggle the red ball"
+            elif env_id == "pickup":
+                env = PickupEnv(*args, seed=seed + rank, num_dists=1, **kwargs)
                 longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
                 env = PickupRedEnv(*args, seed=seed + rank, **kwargs)

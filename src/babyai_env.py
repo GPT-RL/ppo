@@ -1,3 +1,4 @@
+import itertools
 import re
 import typing
 from abc import ABC
@@ -19,10 +20,19 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
+
+T = TypeVar("T")  # Declare type variable
+
+
+@dataclass
+class Spaces:
+    image: T
+    direction: T
+    mission: T
 
 
 @dataclass
@@ -31,6 +41,7 @@ class TrainTest:
     test: list
 
 
+COLORS = [*COLOR_NAMES][:3]
 TYPES = ["key", "ball", "box"]
 
 
@@ -143,6 +154,37 @@ class ToggleInstr(ActionInstr):
             return "failure"  # not allowed to toggle except in front of correct object
 
         return "continue"
+
+
+class GoToEnv(RenderEnv):
+    def __init__(
+        self,
+        goal_objects,
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
+    ):
+        self.strict = strict
+        self.goal_object, *_ = self.goal_objects = goal_objects
+        self.num_dists = num_dists
+        self.__reward = None
+        self.__done = None
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        self.check_objs_reachable()
+        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
 class ToggleEnv(RenderEnv):
@@ -292,16 +334,6 @@ class SequenceEnv(RenderEnv):
             # if self.np_random.choice(2)
             # else AfterInstr(instr2, instr1, strict=True)
         )
-
-
-T = TypeVar("T")  # Declare type variable
-
-
-@dataclass
-class Spaces:
-    image: T
-    direction: T
-    mission: T
 
 
 class PlantAnimalWrapper(gym.ObservationWrapper):
@@ -507,6 +539,22 @@ class SequenceSynonymWrapper(gym.ObservationWrapper):
         observation["mission"] = mission
 
         return observation
+
+
+def get_train_and_test_objects():
+    all_objects = set(itertools.product(TYPES, COLORS))
+
+    def pairs():
+
+        remaining = set(all_objects)
+
+        for _type, color in zip(TYPES, itertools.cycle(COLORS)):
+            remaining.remove((_type, color))
+            yield _type, color
+        # yield from remaining
+
+    train_objects = [*pairs()]
+    return TrainTest(train=train_objects, test=list(all_objects))
 
 
 class ZeroOneRewardWrapper(gym.RewardWrapper):
