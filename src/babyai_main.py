@@ -53,7 +53,9 @@ class Trainer(main.Trainer):
 
     @staticmethod
     def recurrent(args: Args):
-        return "sequence" in args.env
+        if "sequence" in args.env:
+            assert args.recurrent_policy
+        return args.recurrent_policy
 
     @staticmethod
     def make_env(
