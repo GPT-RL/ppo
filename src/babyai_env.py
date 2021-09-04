@@ -141,6 +141,37 @@ class ToggleInstr(ActionInstr):
         if self.strict:
             return "failure"  # not allowed to toggle except in front of correct object
 
+        return "continue"
+
+
+class ToggleEnv(RenderEnv):
+    def __init__(
+        self,
+        goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
+    ):
+        self.strict = strict
+        self.goal_object, *_ = self.goal_objects = list(goal_objects)
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        self.check_objs_reachable()
+        self.instrs = ToggleInstr(ObjDesc(*goal_object), strict=self.strict)
+
 
 class PickupEnv(RenderEnv):
     def __init__(

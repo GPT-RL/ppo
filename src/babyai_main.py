@@ -8,8 +8,12 @@ from babyai_agent import Agent
 from babyai_env import (
     FullyObsWrapper,
     PickupEnv,
+    PickupEnvRoomObjects,
     PickupRedEnv,
+    PlantAnimalWrapper,
     RolloutsWrapper,
+    SequenceEnv,
+    SequenceSynonymWrapper,
     SynonymWrapper,
     TokenizerWrapper,
     ZeroOneRewardWrapper,
