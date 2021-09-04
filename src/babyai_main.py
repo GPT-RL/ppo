@@ -110,7 +110,9 @@ class Trainer(main.Trainer):
                         "pick up the red ball, having already picked up the red key"
                     )
                 elif env_id == "sequence":
-                    env = SequenceEnv(*args, seed=seed + rank, **kwargs)
+                    env = SequenceEnv(
+                        *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
+                    )
                     longest_mission = "pick up the red ball, then pick up the red key"
                 else:
                     raise InvalidEnvIdError()
