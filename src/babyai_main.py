@@ -33,8 +33,8 @@ class InvalidEnvIdError(RuntimeError):
 
 
 class Trainer(main.Trainer):
-    @staticmethod
-    def make_agent(envs: VecPyTorch, args: Args) -> Agent:
+    @classmethod
+    def make_agent(cls, envs: VecPyTorch, args: Args) -> Agent:
         action_space = envs.action_space
         observation_space, *_ = envs.get_attr("original_observation_space")
         return Agent(
@@ -42,7 +42,12 @@ class Trainer(main.Trainer):
             embedding_size=args.embedding_size,
             hidden_size=args.hidden_size,
             observation_space=observation_space,
+            recurrent=cls.recurrent(args),
         )
+
+    @staticmethod
+    def recurrent(args: Args):
+        return "sequence" in args.env
 
     @staticmethod
     def make_env(
@@ -52,16 +57,45 @@ class Trainer(main.Trainer):
             tokenizer = kwargs.pop("tokenizer")
             if env_id == "pickup":
                 env = PickupEnv(*args, seed=seed + rank, num_dists=1, **kwargs)
-                mission = "pick up the red ball"
+                longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
                 env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
                 env = SynonymWrapper(env)
-                mission = "pick-up the crimson phone"
+                longest_mission = "pick-up the crimson phone"
+            elif env_id == "plant-animal":
+                objects = {*PlantAnimalWrapper.replacements.keys()}
+                test_objects = {
+                    PlantAnimalWrapper.purple_animal,
+                    PlantAnimalWrapper.black_plant,
+                }
+                room_objects = test_objects if test else objects - test_objects
+                room_objects = [o.split() for o in room_objects]
+                room_objects = [(t, c) for (c, t) in room_objects]
+                kwargs.update(room_objects=room_objects)
+                env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
+                env = PlantAnimalWrapper(env)
+                longest_mission = "pick up the grasshopper"
             else:
-                raise InvalidEnvIdError()
+                del kwargs["goal_objects"]
+                if env_id == "sequence-paraphrases":
+                    env = SequenceEnv(*args, seed=seed + rank, **kwargs)
+                    env = SequenceSynonymWrapper(env, test=kwargs["test"])
+                    longest_mission = (
+                        "pick up the red ball, having already picked up the red key"
+                    )
+                elif env_id == "sequence":
+                    env = SequenceEnv(*args, seed=seed + rank, **kwargs)
+                    longest_mission = "pick up the red ball, then pick up the red key"
+                else:
+                    raise InvalidEnvIdError()
+
             env = FullyObsWrapper(env)
             env = ZeroOneRewardWrapper(env)
-            env = TokenizerWrapper(env, tokenizer=tokenizer, longest_mission=mission)
+            env = TokenizerWrapper(
+                env,
+                tokenizer=tokenizer,
+                longest_mission=longest_mission,
+            )
             env = RolloutsWrapper(env)
 
             env = Monitor(env, allow_early_resets=allow_early_resets)
@@ -80,8 +114,8 @@ class Trainer(main.Trainer):
             args,
             device,
             room_size=args.room_size,
-            strict=args.strict,
             tokenizer=tokenizer,
+            strict=args.strict,
             **kwargs,
         )
 

@@ -1,3 +1,5 @@
+from dataclasses import astuple
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,7 +7,6 @@ import torch.nn.functional as F
 from gym import Space
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete
 from transformers import GPT2Config
-from dataclasses import astuple
 
 import agent
 from agent import NNBase
@@ -41,8 +42,13 @@ class Base(NNBase):
         embedding_size: str,
         hidden_size: int,
         observation_space: Dict,
+        recurrent: bool,
     ):
-        super().__init__(False, hidden_size, hidden_size)
+        super().__init__(
+            recurrent=recurrent,
+            recurrent_input_size=hidden_size,
+            hidden_size=hidden_size,
+        )
         self.observation_spaces = Spaces(*observation_space.spaces)
         self.num_directions = self.observation_spaces.direction.n
 
@@ -107,9 +113,12 @@ class Base(NNBase):
         image = self.conv(image)
         directions = inputs.direction.long()
         directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
+
         mission = self.embed(inputs.mission.long())
         x = torch.cat([image, directions, mission], dim=-1)
         x = self.merge(x)
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
         return self.critic_linear(x), x, rnn_hxs
 
     def embed(self, inputs):

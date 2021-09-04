@@ -464,7 +464,7 @@ query GetParameters($id: Int!) {
 
     @staticmethod
     def save_path(run_id: int):
-        return Path("logs", str(run_id), "checkpoint.pkl")
+        return Path("/tmp/logs", str(run_id), "checkpoint.pkl")
 
     @staticmethod
     def save(agent, save_path: Path):

@@ -22,8 +22,8 @@ class Args(babyai_main.Args):
 
 
 class Trainer(babyai_main.Trainer):
-    @staticmethod
-    def make_agent(envs: VecPyTorch, args: Args) -> Agent:
+    @classmethod
+    def make_agent(cls, envs: VecPyTorch, args: Args) -> Agent:
         action_space = envs.action_space
         observation_space, *_ = envs.get_attr("original_observation_space")
         return Agent(
@@ -34,6 +34,7 @@ class Trainer(babyai_main.Trainer):
             randomize_parameters=args.randomize_parameters,
             train_ln=args.train_ln,
             train_wpe=args.train_wpe,
+            recurrent=cls.recurrent(args),
         )
 
     @staticmethod
