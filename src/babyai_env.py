@@ -4,8 +4,7 @@ import typing
 from abc import ABC
 from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
-from typing import Callable, Generator, List, Optional, TypeVar
-
+from typing import Callable, Generator, Optional, TypeVar
 
 import babyai.levels.verifier
 import gym
@@ -14,14 +13,12 @@ import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     ActionInstr,
-    AfterInstr,
-    GoToInstr,
     ObjDesc,
     PickupInstr,
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj, MiniGridEnv
+from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
@@ -34,6 +31,7 @@ class Spaces:
     image: T
     direction: T
     mission: T
+    action: T
 
 
 @dataclass
@@ -566,6 +564,28 @@ def get_train_and_test_objects():
     return TrainTest(train=train_objects, test=list(all_objects))
 
 
+class ActionInObsWrapper(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.spaces = dict(
+            **self.observation_space.spaces, action=Discrete(self.action_space.n + 1)
+        )
+        self.observation_space = Dict(spaces=self.spaces)
+
+    def reset(self, **kwargs):
+        s = super().reset(**kwargs)
+        s["action"] = self.spaces["action"].n - 1
+        return s
+
+    def step(self, action):
+        s, r, t, i = super().step(action)
+        s["action"] = action
+        return s, r, t, i
+
+    def observation(self, observation):
+        return observation
+
+
 class ZeroOneRewardWrapper(gym.RewardWrapper):
     def reward(self, reward):
         return int(bool(reward > 0))
@@ -579,10 +599,9 @@ class RolloutsWrapper(gym.ObservationWrapper):
             astuple(Spaces(**self.observation_space.spaces))
         )
         image_space = spaces["image"]
-        # direction_space = spaces["direction"]
         mission_space = spaces["mission"]
         self.observation_space = Box(
-            shape=[np.prod(image_space.shape) + 1 + np.prod(mission_space.shape)],
+            shape=[np.prod(image_space.shape) + 2 + np.prod(mission_space.shape)],
             low=-np.inf,
             high=np.inf,
         )
@@ -593,6 +612,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
                 Spaces(
                     image=observation["image"].flatten(),
                     direction=np.array([observation["direction"]]),
+                    action=np.array([int(observation["action"])]),
                     mission=observation["mission"],
                 )
             )

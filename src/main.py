@@ -555,4 +555,4 @@ query GetParameters($id: Int!) {
 
 
 if __name__ == "__main__":
-    Trainer.main(Args(explicit_bool=True).parse_args())
+    Trainer.main(Args().parse_args())

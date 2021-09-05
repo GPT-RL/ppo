@@ -7,6 +7,7 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     FullyObsWrapper,
+    ActionInObsWrapper,
     GoToEnv,
     PickupEnv,
     PickupEnvRoomObjects,
@@ -118,6 +119,7 @@ class Trainer(main.Trainer):
                     raise InvalidEnvIdError()
 
             env = FullyObsWrapper(env)
+            env = ActionInObsWrapper(env)
             env = ZeroOneRewardWrapper(env)
             env = TokenizerWrapper(
                 env,
@@ -149,4 +151,4 @@ class Trainer(main.Trainer):
 
 
 if __name__ == "__main__":
-    Trainer.main(Args(explicit_bool=True).parse_args())
+    Trainer.main(Args().parse_args())

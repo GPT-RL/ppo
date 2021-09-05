@@ -23,13 +23,10 @@ def get_size(space: Space):
 
 
 class Agent(agent.Agent):
-    def __init__(self, *args, observation_space, **kwargs):
+    def __init__(self, observation_space, **kwargs):
         spaces = Spaces(*observation_space.spaces)
         super().__init__(
-            *args,
-            obs_shape=spaces.image.shape,
-            observation_space=observation_space,
-            **kwargs
+            obs_shape=spaces.image.shape, observation_space=observation_space, **kwargs
         )
 
     def build_base(self, obs_shape, **kwargs):
@@ -51,6 +48,7 @@ class Base(NNBase):
         )
         self.observation_spaces = Spaces(*observation_space.spaces)
         self.num_directions = self.observation_spaces.direction.n
+        self.num_actions = self.observation_spaces.action.n
 
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size),
@@ -79,7 +77,10 @@ class Base(NNBase):
         self.merge = nn.Sequential(
             init_(
                 nn.Linear(
-                    conv_output_size + self.num_directions + self.embedding_size,
+                    conv_output_size
+                    + self.num_directions
+                    + self.num_actions
+                    + self.embedding_size,
                     hidden_size,
                 )
             ),
@@ -116,9 +117,11 @@ class Base(NNBase):
         image = self.conv(image)
         directions = inputs.direction.long()
         directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
+        action = inputs.action.long()
+        action = F.one_hot(action, num_classes=self.num_actions).squeeze(1)
 
         mission = self.embed(inputs.mission.long())
-        x = torch.cat([image, directions, mission], dim=-1)
+        x = torch.cat([image, directions, action, mission], dim=-1)
         x = self.merge(x)
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)

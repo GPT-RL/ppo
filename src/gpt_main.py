@@ -52,4 +52,4 @@ class Trainer(babyai_main.Trainer):
 
 
 if __name__ == "__main__":
-    Trainer.main(Args(explicit_bool=True).parse_args())
+    Trainer.main(Args().parse_args())
