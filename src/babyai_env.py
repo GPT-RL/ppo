@@ -20,6 +20,7 @@ from babyai.levels.verifier import (
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.roomgrid import RoomGrid
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
@@ -144,7 +145,6 @@ class ToggleInstr(ActionInstr):
 
     def reset_verifier(self, env):
         super().reset_verifier(env)
-
         self.desc.find_matching_objs(env)
 
     def verify_action(self, action):
@@ -164,7 +164,60 @@ class ToggleInstr(ActionInstr):
         return "continue"
 
 
-class GoToEnv(RenderEnv):
+class LocDesc:
+    """
+    Description of a set of objects in an environment
+    """
+
+    def __init__(self, grid: RoomGrid, i: int, j: int):
+        assert 1 <= i < grid.height - 1
+        assert 1 <= j < grid.width - 1
+        self.i = i
+        self.j = j
+
+    def __repr__(self):
+        return f"({self.i}, {self.j})"
+
+    def surface(self):
+        """
+        Generate a natural language representation of the object description
+        """
+        return repr(self)
+
+    @property
+    def array(self):
+        return np.array([self.i, self.j])
+
+    @staticmethod
+    def find_matching_objs(*args, **kwargs):
+        return [], []
+
+
+class GoToLoc(ActionInstr):
+    """
+    Pick up an object matching a given description
+    eg: pick up the grey ball
+    """
+
+    def __init__(self, loc_desc: LocDesc):
+        self.desc = loc_desc
+        super().__init__()
+
+    def surface(self, env):
+        return "Go to " + self.desc.surface()
+
+    def reset_verifier(self, env: MiniGridEnv):
+        super().reset_verifier(env)
+
+    def verify_action(self, *args, **kwargs):
+        # Only verify when the pickup action is performed
+        if np.array_equal(self.env.agent_pos, self.desc.array):
+            return "success"
+
+        return "continue"
+
+
+class GoToObjEnv(RenderEnv):
     def __init__(
         self,
         goal_objects,
@@ -193,6 +246,33 @@ class GoToEnv(RenderEnv):
         self.add_object(0, 0, *goal_object)
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
+
+
+class GoToLocEnv(RenderEnv):
+    def __init__(
+        self,
+        room_size: int,
+        seed: int,
+        num_dists: int = 0,
+    ):
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        self.check_objs_reachable()
+        locs = itertools.product(
+            range(1, self.grid.height - 1),
+            range(1, self.grid.width - 1),
+        )
+        self.instrs = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
 
 
 class ToggleEnv(RenderEnv):
@@ -736,9 +816,7 @@ def main(args: "Args"):
         PlantAnimalWrapper.purple_animal,
         PlantAnimalWrapper.black_plant,
     }
-    env = SequenceEnv(
-        seed=args.seed, num_cols=1, num_rows=1, room_size=args.room_size, strict=True
-    )
+    env = GoToLocEnv(seed=args.seed, room_size=args.room_size)
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
         env = ImgObsWrapper(env)

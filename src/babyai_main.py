@@ -8,7 +8,8 @@ from babyai_agent import Agent
 from babyai_env import (
     FullyObsWrapper,
     ActionInObsWrapper,
-    GoToEnv,
+    GoToObjEnv,
+    GoToLocEnv,
     PickupEnv,
     PickupEnvRoomObjects,
     PickupRedEnv,
@@ -76,9 +77,14 @@ class Trainer(main.Trainer):
                     ]
                 )
             )
-            if env_id == "goto":
-                env = GoToEnv(*args, seed=seed + rank, **kwargs)
+            if env_id == "go-to-obj":
+                env = GoToObjEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to the red ball"
+            elif env_id == "go-to-loc":
+                del kwargs["strict"]
+                del kwargs["goal_objects"]
+                env = GoToLocEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "go to (0, 0)"
             elif env_id == "toggle":
                 env = ToggleEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "toggle the red ball"
