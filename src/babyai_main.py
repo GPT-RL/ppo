@@ -112,16 +112,16 @@ class Trainer(main.Trainer):
             else:
                 del kwargs["goal_objects"]
                 if env_id == "sequence-paraphrases":
-                    env = SequenceEnv(*args, seed=seed + rank, **kwargs)
-                    env = SequenceSynonymWrapper(env, test=kwargs["test"])
-                    longest_mission = (
-                        "pick up the red ball, having already picked up the red key"
+                    env = SequenceEnv(
+                        *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
                     )
+                    env = SequenceSynonymWrapper(env, test=test)
+                    longest_mission = "go to (0, 0), having already gone to (0, 0)"
                 elif env_id == "sequence":
                     env = SequenceEnv(
                         *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
                     )
-                    longest_mission = "pick up the red ball, then pick up the red key"
+                    longest_mission = "go to (0, 0), then go to (0, 0)"
                 else:
                     raise InvalidEnvIdError()
 

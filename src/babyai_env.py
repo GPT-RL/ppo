@@ -645,7 +645,7 @@ class SequenceSynonymWrapper(MissionWrapper):
         wordings = [after, after_reverse, before, before_reverse, then, _next, having]
 
         def past(instr: str):
-            return instr.replace("pick", "picked")
+            return instr.replace(" go ", " gone ")
 
         match = re.match(r"(.*), then (.*)", mission)
         if not match:
