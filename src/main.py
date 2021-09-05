@@ -314,17 +314,6 @@ query GetParameters($id: Int!) {
                 if logger.run_id is not None:
                     logger.log(log)
 
-                cls.evaluate(
-                    agent=agent,
-                    envs=cls.make_vec_envs(args, device, test=False, render=False),
-                    num_processes=args.num_processes,
-                    device=device,
-                    start=start,
-                    total_num_steps=total_num_steps,
-                    logger=logger,
-                    test=False,
-                )
-
     @staticmethod
     def load(agent, load_path):
         agent.load_state_dict(torch.load(load_path))
