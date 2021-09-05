@@ -96,6 +96,7 @@ class Trainer(main.Trainer):
                 env = SynonymWrapper(env)
                 longest_mission = "pick-up the crimson phone"
             elif env_id == "plant-animal":
+                del kwargs["goal_objects"]
                 objects = {*PlantAnimalWrapper.replacements.keys()}
                 test_objects = {
                     PlantAnimalWrapper.purple_animal,

@@ -333,21 +333,30 @@ class PickupEnv(RenderEnv):
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class PickupEnvRoomObjects(PickupEnv):
+class PickupEnvRoomObjects(RenderEnv):
     def __init__(
         self,
         *args,
         room_objects: typing.Iterable[typing.Tuple[str, str]],
-        **kwargs,
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
     ):
-        self.room_objects = room_objects
-        kwargs.update(goal_objects=room_objects)
-        super().__init__(*args, **kwargs)
+        self.strict = strict
+        self.room_objects = list(room_objects)
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
 
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        goal_object = self._rand_elem(self.goal_objects)
+        goal_object = self._rand_elem(self.room_objects)
         self.add_object(0, 0, *goal_object)
         objects = {*self.room_objects} - {goal_object}
         for _ in range(self.num_dists):
