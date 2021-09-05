@@ -1,10 +1,7 @@
 import logging
-from pathlib import Path
-from pprint import pformat
 from typing import Optional
 
 import torch
-from transformers import GPT2Model
 
 import babyai_main
 from envs import VecPyTorch
@@ -38,18 +35,36 @@ class Trainer(babyai_main.Trainer):
         )
 
     @staticmethod
-    def save(agent: Agent, args, envs):
-        gpt: GPT2Model = agent.base.gpt
-        gpt_params = {f"base.gpt.{k}": v for k, v in gpt.named_parameters()}
-        non_gpt_params = {
-            k: v for k, v in agent.named_parameters() if k not in gpt_params
+    def save(
+        agent: Agent,
+        save_path,
+        args,
+    ):
+        trainable = {k for k, v in agent.named_parameters() if v.requires_grad}
+        trainable_params = {
+            k: v for k, v in agent.state_dict().items() if k in trainable
         }
-        logging.info("Saving parameters:")
-        logging.info(pformat([*non_gpt_params]))
-        save_path = Path(args.save_dir, f"checkpoint.pkl")
-        torch.save(non_gpt_params, save_path)
-        logging.info(f"Saved to {save_path}")
+        torch.save(trainable_params, save_path)
+        logging.info(f"Saved the following modules to {save_path}:")
+        for p in trainable_params:
+            logging.info(p)
+
+    @staticmethod
+    def load(agent, load_path):
+        loaded = torch.load(load_path)
+        for name, module in agent.named_modules():
+            name_ = f"{name}."
+            parameters = {}
+            for k, v in loaded.items():
+                if k.startswith(name_):
+                    parameters[k[len(name_) :]] = v
+            if parameters:
+                try:
+                    module.load_state_dict(parameters)
+                    logging.info(f"Loaded parameters into {name}.")
+                except RuntimeError:
+                    pass
 
 
 if __name__ == "__main__":
-    Trainer.main(Args(explicit_bool=True).parse_args())
+    Trainer.main(Args().parse_args())

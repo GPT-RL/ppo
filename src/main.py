@@ -170,7 +170,7 @@ query GetParameters($id: Int!) {
         if args.load_id is not None:
             load_path = cls.save_path(args.load_id)
             logging.info(f"Loading checkpoint from {load_path}...")
-            agent.load_state_dict(torch.load(load_path))
+            cls.load(agent, load_path)
         agent.to(device)
 
         ppo = PPO(
@@ -224,7 +224,7 @@ query GetParameters($id: Int!) {
             ):
                 save_path = cls.save_path(logger.run_id)
                 save_path.parent.mkdir(parents=True, exist_ok=True)
-                cls.save(agent, save_path)
+                cls.save(agent, save_path, args)
                 save_count += 1
 
             if args.linear_lr_decay:
@@ -324,6 +324,10 @@ query GetParameters($id: Int!) {
                     logger=logger,
                     test=False,
                 )
+
+    @staticmethod
+    def load(agent, load_path):
+        agent.load_state_dict(torch.load(load_path))
 
     @staticmethod
     def total_num_steps(j, args):
@@ -467,7 +471,7 @@ query GetParameters($id: Int!) {
         return Path("/tmp/logs", str(run_id), "checkpoint.pkl")
 
     @staticmethod
-    def save(agent, save_path: Path):
+    def save(agent, save_path: Path, args: Args):
         torch.save(agent.state_dict(), save_path)
 
     @staticmethod
