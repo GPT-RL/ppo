@@ -407,15 +407,21 @@ class SequenceEnv(RenderEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        color = "red"
-        goal1 = self._rand_elem(TYPES)
-        goal2 = self._rand_elem(set(TYPES) - {goal1})
+        # color = "red"
+        # goal1 = self._rand_elem(TYPES)
+        # goal2 = self._rand_elem(set(TYPES) - {goal1})
+        #
+        # for kind in [goal1, goal2]:
+        #     self.add_object(0, 0, kind=kind, color=color)
+        locs = list(
+            itertools.product(
+                range(1, self.grid.height - 1),
+                range(1, self.grid.width - 1),
+            )
+        )
 
-        for kind in [goal1, goal2]:
-            self.add_object(0, 0, kind=kind, color=color)
-
-        instr1 = ToggleInstr(ObjDesc(type=goal1, color=color), strict=self.strict)
-        instr2 = ToggleInstr(ObjDesc(type=goal2, color=color), strict=self.strict)
+        instr1 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
+        instr2 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
         self.check_objs_reachable()
         self.instrs = (
             BeforeInstr(instr1, instr2, strict=True)
@@ -811,12 +817,20 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    objects = {*PlantAnimalWrapper.replacements.keys()}
-    test_objects = {
-        PlantAnimalWrapper.purple_animal,
-        PlantAnimalWrapper.black_plant,
-    }
-    env = GoToLocEnv(seed=args.seed, room_size=args.room_size)
+    env = SequenceEnv(
+        seed=args.seed,
+        strict=args.strict,
+        room_size=args.room_size,
+        num_rows=1,
+        num_cols=1,
+    )
+    env = SequenceEnv(
+        seed=args.seed,
+        strict=args.strict,
+        room_size=args.room_size,
+        num_rows=1,
+        num_cols=1,
+    )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
         env = ImgObsWrapper(env)
