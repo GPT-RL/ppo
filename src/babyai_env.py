@@ -16,6 +16,8 @@ from babyai.levels.verifier import (
     ActionInstr,
     ObjDesc,
     PickupInstr,
+    BeforeInstr,
+    AfterInstr,
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
@@ -119,7 +121,7 @@ class RenderEnv(RoomGridLevel, ABC):
                 else MiniGridEnv.Actions(self.__action).name,
             )
             if pause:
-                input("Press enter to coninue.")
+                input("Press enter to continue.")
         else:
             return super().render(mode=mode, **kwargs)
 
@@ -382,32 +384,6 @@ class PickupRedEnv(PickupEnv):
         )
 
 
-class BeforeInstr(babyai.levels.verifier.BeforeInstr):
-    def verify(self, action):
-        if self.a_done == "success":
-            self.b_done = self.instr_b.verify(action)
-
-            if self.b_done == "failure":
-                return "failure"
-
-            if self.b_done == "success":
-                return "success"
-        else:
-            self.a_done = self.instr_a.verify(action)
-            if self.a_done == "failure":
-                return "failure"
-
-            if self.a_done == "success":
-                return "continue"
-
-            # In strict mode, completing b first means failure
-            if self.strict:
-                if self.instr_b.verify(action) == "success":
-                    return "failure"
-
-        return "continue"
-
-
 class SequenceEnv(RenderEnv):
     def __init__(self, *args, strict: bool, **kwargs):
         self.strict = strict
@@ -416,12 +392,6 @@ class SequenceEnv(RenderEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        # color = "red"
-        # goal1 = self._rand_elem(TYPES)
-        # goal2 = self._rand_elem(set(TYPES) - {goal1})
-        #
-        # for kind in [goal1, goal2]:
-        #     self.add_object(0, 0, kind=kind, color=color)
         locs = list(
             itertools.product(
                 range(1, self.grid.height - 1),
@@ -454,6 +424,12 @@ class MissionWrapper(gym.Wrapper, abc.ABC):
         observation, reward, done, info = self.env.step(action)
         observation["mission"] = self._mission
         return observation, reward, done, info
+
+    def render(self, mode="human", pause=True, **kwargs):
+        self.env.render(pause=False)
+        print(self._mission)
+        if pause:
+            input("Press enter to coninue.")
 
     def change_mission(self, mission):
         raise NotImplementedError
@@ -569,12 +545,6 @@ class PlantAnimalWrapper(MissionWrapper):
             "marigold",
         ],
     }
-
-    def render(self, mode="human", pause=True, **kwargs):
-        self.env.render(pause=False)
-        print(self._mission)
-        if pause:
-            input("Press enter to coninue.")
 
     def change_mission(self, mission):
         for k, v in self.replacements.items():
