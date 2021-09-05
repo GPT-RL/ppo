@@ -1,3 +1,4 @@
+import abc
 import itertools
 import re
 import typing
@@ -343,7 +344,27 @@ class SequenceEnv(RenderEnv):
         )
 
 
-class PlantAnimalWrapper(gym.ObservationWrapper):
+class MissionWrapper(gym.Wrapper, abc.ABC):
+    def __init__(self, env):
+        self._mission = None
+        super().__init__(env)
+
+    def reset(self, **kwargs):
+        observation = self.env.reset(**kwargs)
+        self._mission = self.change_mission(observation["mission"])
+        observation["mission"] = self._mission
+        return observation
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        observation["mission"] = self._mission
+        return observation, reward, done, info
+
+    def change_mission(self, mission):
+        raise NotImplementedError
+
+
+class PlantAnimalWrapper(MissionWrapper):
     green_animal = "green box"
     orange_animal = "yellow box"
     green_plant = "green ball"
@@ -460,18 +481,16 @@ class PlantAnimalWrapper(gym.ObservationWrapper):
         if pause:
             input("Press enter to coninue.")
 
-    def observation(self, observation):
-        self._mission: str = observation["mission"]
+    def change_mission(self, mission):
         for k, v in self.replacements.items():
-            if k in self._mission:
+            if k in mission:
                 replacement = self.np_random.choice(v)
-                self._mission = self._mission.replace(k, replacement)
+                mission = mission.replace(k, replacement)
 
-        observation["mission"] = self._mission
-        return observation
+        return mission
 
 
-class SynonymWrapper(gym.ObservationWrapper):
+class SynonymWrapper(MissionWrapper):
     synonyms = {
         "pick-up": ["take", "grab", "get"],
         "red": ["crimson"],
@@ -480,8 +499,11 @@ class SynonymWrapper(gym.ObservationWrapper):
         "phone": ["cell", "mobile"],
     }
 
-    def observation(self, observation):
-        mission: str = observation["mission"]
+    def __init__(self, env):
+        super().__init__(env)
+        self._mission
+
+    def change_mission(self, mission):
         mission = mission.replace("key", "phone")
         mission = mission.replace("pick up", "pick-up")
 
@@ -491,22 +513,19 @@ class SynonymWrapper(gym.ObservationWrapper):
                 yield self.np_random.choice(choices)
 
         mission = " ".join(new_mission())
-        observation["mission"] = mission
-        return observation
+        return mission
 
 
 class InvalidInstructionError(RuntimeError):
     pass
 
 
-class SequenceSynonymWrapper(gym.ObservationWrapper):
+class SequenceSynonymWrapper(MissionWrapper):
     def __init__(self, env, test: bool):
         super().__init__(env)
         self.test = test
 
-    def observation(self, observation):
-        mission = observation["mission"]
-
+    def change_mission(self, mission):
         def after(instr1: str, instr2: str):
             return f"{instr2} after you {instr1}"
 
@@ -543,9 +562,7 @@ class SequenceSynonymWrapper(gym.ObservationWrapper):
             before if self.test else self.np_random.choice(wordings)
         )
         mission = wording(*match.group(1, 2))
-        observation["mission"] = mission
-
-        return observation
+        return mission
 
 
 def get_train_and_test_objects():
@@ -564,7 +581,7 @@ def get_train_and_test_objects():
     return TrainTest(train=train_objects, test=list(all_objects))
 
 
-class ActionInObsWrapper(gym.ObservationWrapper):
+class ActionInObsWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.spaces = dict(
@@ -581,9 +598,6 @@ class ActionInObsWrapper(gym.ObservationWrapper):
         s, r, t, i = super().step(action)
         s["action"] = action
         return s, r, t, i
-
-    def observation(self, observation):
-        return observation
 
 
 class ZeroOneRewardWrapper(gym.RewardWrapper):
