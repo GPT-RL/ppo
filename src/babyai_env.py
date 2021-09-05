@@ -603,6 +603,7 @@ class RolloutsWrapper(gym.ObservationWrapper):
         self.observation_space = Box(
             shape=[np.prod(image_space.shape) + 2 + np.prod(mission_space.shape)],
             low=-np.inf,
+            # direction_space = spaces["direction"]
             high=np.inf,
         )
 
