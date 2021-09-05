@@ -6,6 +6,7 @@ from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
 from typing import Callable, Generator, List, Optional, TypeVar
 
+
 import babyai.levels.verifier
 import gym
 import gym_minigrid
@@ -20,7 +21,7 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import COLOR_NAMES, OBJECT_TO_IDX, WorldObj, MiniGridEnv
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
@@ -55,6 +56,7 @@ class RenderEnv(RoomGridLevel, ABC):
         super().__init__(*args, **kwargs)
         self.__reward = None
         self.__done = None
+        self.__action = None
 
     def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
         for j in range(self.width):
@@ -110,12 +112,19 @@ class RenderEnv(RoomGridLevel, ABC):
             print(self.mission)
             print("Reward:", self.__reward)
             print("Done:", self.__done)
+            print(
+                "Action:",
+                None
+                if self.__action is None
+                else MiniGridEnv.Actions(self.__action).name,
+            )
             if pause:
                 input("Press enter to coninue.")
         else:
             return super().render(mode=mode, **kwargs)
 
     def step(self, action):
+        self.__action = action
         s, self.__reward, self.__done, i = super().step(action)
         return s, self.__reward, self.__done, i
 

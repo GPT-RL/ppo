@@ -96,8 +96,10 @@ class Base(NNBase):
 
     def build_embeddings(self):
         num_embeddings = int(self.observation_spaces.mission.nvec[0])
-        return nn.Sequential(nn.Embedding(num_embeddings, self.embedding_size),
-                             nn.GRU(self.embedding_size, self.embedding_size, batch_first=True),)
+        return nn.Sequential(
+            nn.Embedding(num_embeddings, self.embedding_size),
+            nn.GRU(self.embedding_size, self.embedding_size, batch_first=True),
+        )
 
     def forward(self, inputs, rnn_hxs, masks):
         inputs = Spaces(

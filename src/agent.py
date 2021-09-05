@@ -58,6 +58,10 @@ class Agent(nn.Module):
             action = dist.sample()
 
         action_log_probs = dist.log_probs(action)
+        # try:
+        # action[:] = float(input("go:"))
+        # except ValueError:
+        # pass
 
         return value, action, action_log_probs, rnn_hxs
 
