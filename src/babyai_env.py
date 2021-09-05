@@ -206,7 +206,7 @@ class GoToLoc(ActionInstr):
         super().__init__()
 
     def surface(self, env):
-        return "Go to " + self.desc.surface()
+        return "go to " + self.desc.surface()
 
     def reset_verifier(self, env: MiniGridEnv):
         super().reset_verifier(env)
@@ -402,11 +402,7 @@ class SequenceEnv(RenderEnv):
         instr1 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
         instr2 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
         self.check_objs_reachable()
-        self.instrs = (
-            BeforeInstr(instr1, instr2, strict=True)
-            # if self.np_random.choice(2)
-            # else AfterInstr(instr2, instr1, strict=True)
-        )
+        self.instrs = BeforeInstr(instr1, instr2, strict=True)
 
 
 class MissionWrapper(gym.Wrapper, abc.ABC):
@@ -591,17 +587,11 @@ class SequenceSynonymWrapper(MissionWrapper):
         self.test = test
 
     def change_mission(self, mission):
-        def after(instr1: str, instr2: str):
-            return f"{instr2} after you {instr1}"
-
         def after_reverse(instr1: str, instr2: str):
             return f"After you {instr1}, {instr2}"
 
         def before(instr1: str, instr2: str):
             return f"{instr1} before you {instr2}"
-
-        def before_reverse(instr1: str, instr2: str):
-            return f"Before you {instr2}, {instr1}"
 
         def then(instr1: str, instr2: str):
             return f"{instr1}, then {instr2}"
@@ -612,7 +602,13 @@ class SequenceSynonymWrapper(MissionWrapper):
         def having(instr1: str, instr2: str):
             return f"{instr2}, having already {past(instr1)}"
 
-        wordings = [after, after_reverse, before, before_reverse, then, _next, having]
+        def after(instr1: str, instr2: str):
+            return f"{instr2} after you {instr1}"
+
+        def before_reverse(instr1: str, instr2: str):
+            return f"Before you {instr2}, {instr1}"
+
+        wordings = [after, after_reverse, before_reverse, then, _next, having]
 
         def past(instr: str):
             return instr.replace(" go ", " gone ")
