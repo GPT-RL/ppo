@@ -68,7 +68,7 @@ class Base(NNBase):
         h, w, d = self.observation_spaces.image.shape
 
         self.conv = nn.Sequential(
-            init_(nn.Conv2d(d, 32, 3, 2)),
+            init_(nn.Conv2d(d, 32, kernel_size=3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
         )
