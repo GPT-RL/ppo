@@ -388,13 +388,15 @@ class SequenceEnv(RenderEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        objs = {(ty, COLOR) for ty in TYPES}
-        goal1 = self._rand_elem(objs)
-        goal2 = self._rand_elem(objs - {goal1})
-        for obj in [goal1, goal2]:
-            self.add_object(0, 0, *obj)
-        instr1 = GoToInstr(ObjDesc(*goal1))
-        instr2 = GoToInstr(ObjDesc(*goal2))
+        locs = list(
+            itertools.product(
+                range(1, self.grid.height - 1),
+                range(1, self.grid.width - 1),
+            )
+        )
+
+        instr1 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
+        instr2 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
         self.check_objs_reachable()
         self.instrs = BeforeInstr(instr1, instr2, strict=True)
 
