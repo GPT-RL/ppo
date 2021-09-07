@@ -608,13 +608,7 @@ class SequenceSynonymWrapper(MissionWrapper):
         def before_reverse(instr1: str, instr2: str):
             return f"Before you {instr2}, {instr1}"
 
-        wordings = [
-            # after, after_reverse,
-            before_reverse,
-            then,
-            _next,
-            having,
-        ]
+        wordings = [after, after_reverse, before_reverse, then, _next, having]
 
         def past(instr: str):
             return instr.replace(" go ", " gone ")
