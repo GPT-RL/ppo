@@ -7,18 +7,11 @@ from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
 from typing import Callable, Generator, Optional, TypeVar
 
-import babyai.levels.verifier
 import gym
 import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
-from babyai.levels.verifier import (
-    ActionInstr,
-    ObjDesc,
-    PickupInstr,
-    BeforeInstr,
-    AfterInstr,
-)
+from babyai.levels.verifier import ActionInstr, BeforeInstr, ObjDesc, PickupInstr
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
@@ -338,7 +331,6 @@ class PickupEnv(RenderEnv):
 class PickupEnvRoomObjects(RenderEnv):
     def __init__(
         self,
-        *args,
         room_objects: typing.Iterable[typing.Tuple[str, str]],
         room_size: int,
         seed: int,

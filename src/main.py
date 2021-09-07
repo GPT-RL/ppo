@@ -117,7 +117,7 @@ class Args(Tap):
     num_processes: int = 8  # number of parallel environments
     num_steps: int = 128  # number of forward steps in A2C
     ppo_epoch: int = 3  # number of PPO updates
-    recurrent_policy: bool = False  # use recurrence in the policy
+    recurrent: bool = False  # use recurrence in the policy
     render: bool = False
     render_test: bool = False
     save_interval: Optional[int] = None  # how many updates to save between
@@ -470,7 +470,7 @@ query GetParameters($id: Int!) {
         return Agent(
             obs_shape=obs_shape,
             action_space=action_space,
-            recurrent=args.recurrent_policy,
+            recurrent=args.recurrent,
         )
 
     @classmethod

@@ -6,10 +6,10 @@ from transformers import GPT2Tokenizer
 import main
 from babyai_agent import Agent
 from babyai_env import (
-    FullyObsWrapper,
     ActionInObsWrapper,
-    GoToObjEnv,
+    FullyObsWrapper,
     GoToLocEnv,
+    GoToObjEnv,
     PickupEnv,
     PickupEnvRoomObjects,
     PickupRedEnv,
@@ -33,7 +33,6 @@ class Args(main.Args):
     env: str = "GoToLocal"  # env ID for gym
     room_size: int = 5
     strict: bool = True
-    record_interval: int = 200
 
 
 class InvalidEnvIdError(RuntimeError):
@@ -56,8 +55,8 @@ class Trainer(main.Trainer):
     @staticmethod
     def recurrent(args: Args):
         if "sequence" in args.env:
-            assert args.recurrent_policy
-        return args.recurrent_policy
+            assert args.recurrent
+        return args.recurrent
 
     @staticmethod
     def make_env(
