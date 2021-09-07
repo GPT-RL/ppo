@@ -11,7 +11,13 @@ import gym
 import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
-from babyai.levels.verifier import ActionInstr, BeforeInstr, ObjDesc, PickupInstr
+from babyai.levels.verifier import (
+    ActionInstr,
+    BeforeInstr,
+    ObjDesc,
+    PickupInstr,
+    GoToInstr,
+)
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
@@ -224,8 +230,35 @@ class GoToObjEnv(RenderEnv):
         self.strict = strict
         self.goal_object, *_ = self.goal_objects = goal_objects
         self.num_dists = num_dists
-        self.__reward = None
-        self.__done = None
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        goal_object = self._rand_elem(self.goal_objects)
+        self.add_object(0, 0, *goal_object)
+        self.check_objs_reachable()
+        self.instrs = GoToInstr(ObjDesc(*goal_object))
+
+
+class PickupEnv(RenderEnv):
+    def __init__(
+        self,
+        goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
+    ):
+        self.strict = strict
+        self.goal_object, *_ = self.goal_objects = list(goal_objects)
+        self.num_dists = num_dists
         super().__init__(
             room_size=room_size,
             num_rows=1,
@@ -299,35 +332,6 @@ class ToggleEnv(RenderEnv):
         self.instrs = ToggleInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class PickupEnv(RenderEnv):
-    def __init__(
-        self,
-        goal_objects: typing.Iterable[typing.Tuple[str, str]],
-        room_size: int,
-        seed: int,
-        strict: bool,
-        num_dists: int = 1,
-    ):
-        self.strict = strict
-        self.goal_object, *_ = self.goal_objects = list(goal_objects)
-        self.num_dists = num_dists
-        super().__init__(
-            room_size=room_size,
-            num_rows=1,
-            num_cols=1,
-            seed=seed,
-        )
-
-    def gen_mission(self):
-        self.place_agent()
-        self.connect_all()
-        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
-        goal_object = self._rand_elem(self.goal_objects)
-        self.add_object(0, 0, *goal_object)
-        self.check_objs_reachable()
-        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
-
-
 class PickupEnvRoomObjects(RenderEnv):
     def __init__(
         self,
@@ -384,15 +388,13 @@ class SequenceEnv(RenderEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        locs = list(
-            itertools.product(
-                range(1, self.grid.height - 1),
-                range(1, self.grid.width - 1),
-            )
-        )
-
-        instr1 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
-        instr2 = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
+        objs = {(ty, COLOR) for ty in TYPES}
+        goal1 = self._rand_elem(objs)
+        goal2 = self._rand_elem(objs - {goal1})
+        for obj in [goal1, goal2]:
+            self.add_object(0, 0, *obj)
+        instr1 = GoToInstr(ObjDesc(*goal1))
+        instr2 = GoToInstr(ObjDesc(*goal2))
         self.check_objs_reachable()
         self.instrs = BeforeInstr(instr1, instr2, strict=True)
 
