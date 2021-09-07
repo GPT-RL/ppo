@@ -591,7 +591,7 @@ class SequenceSynonymWrapper(MissionWrapper):
             return f"After you {instr1}, {instr2}"
 
         def before(instr1: str, instr2: str):
-            return f"{instr1} before you {instr2}"
+            return f"{instr2} before you {instr1}"
 
         def then(instr1: str, instr2: str):
             return f"{instr1}, then {instr2}"
