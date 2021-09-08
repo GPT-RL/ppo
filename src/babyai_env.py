@@ -600,10 +600,10 @@ class SequenceSynonymWrapper(MissionWrapper):
             return f"{instr1}. Next, {instr2}"
 
         def having(instr1: str, instr2: str):
-            return f"{instr2}, having already {past(instr1)}"
+            return f"{instr1}, having already {past(instr2)}"
 
         def after(instr1: str, instr2: str):
-            return f"{instr1} after you {instr2}"
+            return f"{instr2} after you {instr1}"
 
         def before_reverse(instr1: str, instr2: str):
             return f"Before you {instr2}, {instr1}"
