@@ -441,26 +441,26 @@ class PlantAnimalWrapper(MissionWrapper):
     red_animal = "red box"
     red_plant = "red ball"
     replacements = {
-        # red_animal: [
-        # "rooster",
-        # "lobster",
-        # "crab",
-        # "ladybug",
-        # "cardinal",
-        # ],
-        # red_plant: [
-        # "cherry",
-        # "tomato",
-        # "chili",
-        # "apple",
-        # "raspberry",
-        # "cranberry",
-        # "strawberry",
-        # "pomegranate",
-        # "radish",
-        # "beet",
-        # "rose",
-        # ],
+        red_animal: [
+        "rooster",
+        "lobster",
+        "crab",
+        "ladybug",
+        "cardinal",
+        ],
+        red_plant: [
+        "cherry",
+        "tomato",
+        "chili",
+        "apple",
+        "raspberry",
+        "cranberry",
+        "strawberry",
+        "pomegranate",
+        "radish",
+        "beet",
+        "rose",
+        ],
         black_animal: [
             "gorilla",
             "crow",
