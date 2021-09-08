@@ -606,7 +606,7 @@ class SequenceSynonymWrapper(MissionWrapper):
             return f"{instr1} after you {instr2}"
 
         def before_reverse(instr1: str, instr2: str):
-            return f"Before you {instr1}, {instr2}"
+            return f"Before you {instr2}, {instr1}"
 
         wordings = [after, after_reverse, before_reverse, then, _next, having]
 
