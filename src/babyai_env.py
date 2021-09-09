@@ -583,11 +583,29 @@ class SequenceSynonymWrapper(MissionWrapper):
         self.test = test
 
     def change_mission(self, mission):
+        def before(instr1: str, instr2: str):
+            return f"{instr1} before you {instr2}"
+
+        def before_reverse(instr1: str, instr2: str):
+            return f"Before you {instr2}, {instr1}"
+
+        def after(instr1: str, instr2: str):
+            return f"{instr2} after you {instr1}"
+
         def after_reverse(instr1: str, instr2: str):
             return f"After you {instr1}, {instr2}"
 
-        def before(instr1: str, instr2: str):
-            return f"{instr1} before you {instr2}"
+        def once(instr1: str, instr2: str):
+            return f"{instr2} once you {instr1}"
+
+        def once_reverse(instr1: str, instr2: str):
+            return f"Once you {instr1}, {instr2}"
+
+        def having_reverse(instr1: str, instr2: str):
+            return f"Having already {past(instr1)}, {instr2}"
+
+        def having(instr1: str, instr2: str):
+            return f"{instr2}, having already {past(instr1)}"
 
         def then(instr1: str, instr2: str):
             return f"{instr1}, then {instr2}"
@@ -595,16 +613,11 @@ class SequenceSynonymWrapper(MissionWrapper):
         def _next(instr1: str, instr2: str):
             return f"{instr1}. Next, {instr2}"
 
-        def having(instr1: str, instr2: str):
-            return f"{instr2}, having already {past(instr1)}"
-
-        def after(instr1: str, instr2: str):
-            return f"{instr2} after you {instr1}"
-
-        def before_reverse(instr1: str, instr2: str):
-            return f"Before you {instr2}, {instr1}"
-
-        wordings = [after, after_reverse, before_reverse, then, _next, having]
+        wordings = [
+            before_reverse,
+            after_reverse,
+            after,
+        ]
 
         def past(instr: str):
             return instr.replace(" go ", " gone ")
