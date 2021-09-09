@@ -16,7 +16,7 @@ from babyai_env import (
     PlantAnimalWrapper,
     RolloutsWrapper,
     SequenceEnv,
-    SequenceSynonymWrapper,
+    SequenceParaphrasesWrapper,
     SynonymWrapper,
     ToggleEnv,
     TokenizerWrapper,
@@ -33,6 +33,8 @@ class Args(main.Args):
     env: str = "GoToLocal"  # env ID for gym
     room_size: int = 5
     strict: bool = True
+    wordings: str = ""
+    test_wordings: str = ""
 
 
 class InvalidEnvIdError(RuntimeError):
@@ -65,6 +67,8 @@ class Trainer(main.Trainer):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             test = kwargs.pop("test")
+            wordings = kwargs.pop("wordings")
+            test_wordings = kwargs.pop("test_wordings")
             kwargs.update(
                 goal_objects=(
                     [("ball", "green")]
@@ -114,7 +118,9 @@ class Trainer(main.Trainer):
                     env = SequenceEnv(
                         *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
                     )
-                    env = SequenceSynonymWrapper(env, test=test)
+                    env = SequenceParaphrasesWrapper(
+                        env, test=test, wordings=wordings, test_wordings=test_wordings
+                    )
                     longest_mission = "go to (0, 0), having already gone to (0, 0)"
                 elif env_id == "sequence":
                     env = SequenceEnv(
@@ -152,6 +158,8 @@ class Trainer(main.Trainer):
             room_size=args.room_size,
             tokenizer=tokenizer,
             strict=args.strict,
+            wordings=args.wordings.split(","),
+            test_wordings=args.test_wordings.split(","),
             **kwargs,
         )
 

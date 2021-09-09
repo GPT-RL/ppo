@@ -14,9 +14,9 @@ from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     ActionInstr,
     BeforeInstr,
+    GoToInstr,
     ObjDesc,
     PickupInstr,
-    GoToInstr,
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
@@ -577,12 +577,16 @@ class InvalidInstructionError(RuntimeError):
     pass
 
 
-class SequenceSynonymWrapper(MissionWrapper):
-    def __init__(self, env, test: bool):
+class SequenceParaphrasesWrapper(MissionWrapper):
+    def __init__(
+        self,
+        env,
+        test: bool,
+        wordings: typing.List[str],
+        test_wordings: typing.List[str],
+    ):
         super().__init__(env)
-        self.test = test
 
-    def change_mission(self, mission):
         def before(instr1: str, instr2: str):
             return f"{instr1} before you {instr2}"
 
@@ -613,23 +617,36 @@ class SequenceSynonymWrapper(MissionWrapper):
         def _next(instr1: str, instr2: str):
             return f"{instr1}. Next, {instr2}"
 
-        wordings = [
-            before_reverse,
-            after_reverse,
-            after,
-        ]
+        wordings = dict(
+            before=before,
+            before_reverse=before_reverse,
+            after=after,
+            after_reverse=after_reverse,
+            once=once,
+            once_reverse=once_reverse,
+            having_reverse=having_reverse,
+            having=having,
+            then=then,
+            _next=_next,
+        )
+
+        self.wordings = [wordings[w] for w in wordings]
+        self.test_wordings = [wordings[w] for w in test_wordings]
 
         def past(instr: str):
             return instr.replace(" go ", " gone ")
 
+        self.test = test
+
+    def change_mission(self, mission):
         match = re.match(r"(.*), then (.*)", mission)
         if not match:
             match = re.match(r"(.*) after you (.*)", mission)
             if not match:
                 breakpoint()
 
-        wording: Callable[[str, str], str] = (
-            before if self.test else self.np_random.choice(wordings)
+        wording: Callable[[str, str], str] = self.np_random.choice(
+            self.test_wordings if self.test else self.wordings
         )
         mission = wording(*match.group(1, 2))
         return mission
