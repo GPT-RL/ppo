@@ -582,7 +582,7 @@ class SequenceParaphrasesWrapper(MissionWrapper):
         self,
         env,
         test: bool,
-        wordings: typing.List[str],
+        train_wordings: typing.List[str],
         test_wordings: typing.List[str],
     ):
         super().__init__(env)
@@ -630,7 +630,7 @@ class SequenceParaphrasesWrapper(MissionWrapper):
             _next=_next,
         )
 
-        self.wordings = [wordings[w] for w in wordings]
+        self.wordings = [wordings[w] for w in train_wordings]
         self.test_wordings = [wordings[w] for w in test_wordings]
 
         def past(instr: str):

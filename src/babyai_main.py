@@ -33,7 +33,7 @@ class Args(main.Args):
     env: str = "GoToLocal"  # env ID for gym
     room_size: int = 5
     strict: bool = True
-    wordings: str = ""
+    train_wordings: str = ""
     test_wordings: str = ""
 
 
@@ -67,7 +67,7 @@ class Trainer(main.Trainer):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             test = kwargs.pop("test")
-            wordings = kwargs.pop("wordings")
+            train_wordings = kwargs.pop("train_wordings")
             test_wordings = kwargs.pop("test_wordings")
             kwargs.update(
                 goal_objects=(
@@ -119,7 +119,10 @@ class Trainer(main.Trainer):
                         *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
                     )
                     env = SequenceParaphrasesWrapper(
-                        env, test=test, wordings=wordings, test_wordings=test_wordings
+                        env,
+                        test=test,
+                        train_wordings=train_wordings,
+                        test_wordings=test_wordings,
                     )
                     longest_mission = "go to (0, 0), having already gone to (0, 0)"
                 elif env_id == "sequence":
@@ -158,7 +161,7 @@ class Trainer(main.Trainer):
             room_size=args.room_size,
             tokenizer=tokenizer,
             strict=args.strict,
-            wordings=args.wordings.split(","),
+            train_wordings=args.train_wordings.split(","),
             test_wordings=args.test_wordings.split(","),
             **kwargs,
         )
