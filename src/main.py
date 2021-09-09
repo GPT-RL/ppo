@@ -150,6 +150,8 @@ query GetParameters($id: Int!) {
             )["run_by_pk"]["metadata"]
             cls.update_args(args, parameters, check_hasattr=False)
 
+        logging.info(pformat(args.as_dict()))
+
         if args.render or args.render_test:
             args.num_processes = 1
 
@@ -523,7 +525,6 @@ query GetParameters($id: Int!) {
                 logger.update_metadata(
                     dict(parameters=args.as_dict(), run_id=logger.run_id)
                 )
-            logging.info(pformat(args.as_dict()))
             return cls.train(args=args, logger=logger)
 
     @classmethod
