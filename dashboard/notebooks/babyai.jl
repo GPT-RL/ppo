@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.15.1
+# v0.16.0
 
 using Markdown
 using InteractiveUtils
@@ -44,6 +44,13 @@ end
 
 # ╔═╡ 82de7854-3ac9-435a-ad34-c59fb8262bfe
 html"<button onclick='present()'>Present</button>"
+
+# ╔═╡ b7087c67-0d3f-4c33-9650-1200b3ffbaee
+html"""<style>
+main {
+    max-width: 90vw;
+}
+"""
 
 # ╔═╡ 5cfc0e11-523a-4c99-8797-cf3da0f5367b
 md"""
@@ -125,12 +132,25 @@ If the pretrained architecture outperforms the random architecture on this task,
   - `phone|cell|mobile` for `phone`
 """
 
+# ╔═╡ d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
+@chain synonyms_df  begin
+	filter(row -> row["train_wpe"] != true, _)
+	filter(row -> row["hidden_size"] == 512, _)
+	# filter(row -> row[x] < 2.5e6, _)
+	plot_df(_)(
+		color="architecture",
+		ygroup="hidden_size",
+		xgroup="embedding_size",
+	)
+end
+
+
 # ╔═╡ a148cea3-b636-4bdf-94b6-ff661843796a
 md"""
 # Plant-Animal Environment
 The purpose of this environment is to test the model's ability to exploit GPT's knowledge about semantic similarity between objects.
 
-In this task the instruction is always to `pick up the [object]`, but the `[object]` is specified using the name of an exemplar rather than a list of properties (e.g. "pick up the tomato" instead of "pick up the red ball"). Each target object is identified with mutliple exmplars during training (e.g. an object reprented by a red ball in observation-space might be refered to as "tomato" in some training trials and "apple" in other training trials).
+In this task the instruction is always to `pick up the [object]`, but the `[object]` is specified using the name of an exemplar rather than a list of properties (e.g. "pick up the tomato" instead of "pick up the red ball"). Each target object is identified with mutliple exemplars during training (e.g. an object reprented by a red ball in observation-space might be refered to as "tomato" in some training trials and "apple" in other training trials).
 
 The hope is that the agent learns to identify which aspects of GPT's embeddings correlate with the relavent object properties (e.g. "red" and "ball"), thereby improving generalization for unseen objects or categories.
 
@@ -166,15 +186,81 @@ The hope is that GPT's syntactic knowledge acts as a prior to help the model mor
 We are having some difficulty getting any of the architectures to fully converge on training for this environment. Currently debugging.
 """
 
-# ╔═╡ 027fa45e-b7b1-4c5b-90e3-c998d6fbd778
-md"""
-# Composition Environment
-- Train on `pick up`
-  - `red ball`
-  - `blue box`
-  - `green key`
-- Test on `pick up (red|blue|green) (ball|box|key)`
-"""
+# ╔═╡ bd42e1da-60d7-46b5-9944-ae96b0b8602a
+@chain query([1125]) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		ygroup="test_wordings",
+		xgroup="train_wordings",
+	)
+end
+
+# ╔═╡ c8597b63-5b43-4359-93ae-d3f8067e8d84
+@chain query([1125]) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	filter(row -> row["train_wordings"] == "before_reverse,after", _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		ygroup="test_wordings",
+		xgroup="train_wordings",
+	)
+end
+
+# ╔═╡ 349bd7b9-1660-4d9c-87d1-0c07bbebcc98
+@chain query([1126]) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		ygroup="test_wordings",
+		xgroup="train_wordings",
+	)
+end
 
 # ╔═╡ 80c04a29-612c-4ee9-90f6-147f5eed5a1c
 md"""
@@ -239,7 +325,7 @@ function mean_and_std(
 				])
 		DataFrames.transform(_, [stat_key, "$(stat_key)_std"] => (
 			(means, stds) -> 
-				[map((m,s)-> [m - s, m + s], means, stds)...]
+				[map((m,s)-> [max(0, m - s), min(1, m + s)], means, stds)...]
 		) => ["ymin", "ymax"])
 	end
 end
@@ -301,7 +387,10 @@ function run_query(query::String, variables::Dict{String, Any}, key::String)
 							"train_wpe",
 							"train_ln",
 							"data_parallel",
-							"linguistic_analysis_save_interval"
+							"linguistic_analysis_save_interval",
+							"recurrent",
+							"recurrent_policy",
+							"record_interval",
 						]]...,
 				), _)
 			vcat(DataFrame.(_)...)
@@ -324,6 +413,9 @@ function query(sweep_ids::Vector{Int})
   	""", Dict{String, Any}("ids" => sweep_ids), "run_log"
 	)
 end
+
+# ╔═╡ 58707566-c01e-40b5-ba95-e21b3b0872bf
+plant_animal_df = query([1111]); #[1069, 1068])
 
 # ╔═╡ 37f04425-7cdd-4001-a598-06ac6a6be0e6
 x = "step"
@@ -381,6 +473,7 @@ function plot_df(df::DataFrame; y=test_return,title_keywords::Vector{String}=Str
 					_,
 					x=x, y=y, 
 					ymin="ymin", ymax="ymax",
+					# Scale.y_continuous(minvalue=0, maxvalue=1),
 					# yintercept=[yintercept],
 					# linestyle="pretrained",
 					Scale.color_discrete(preserve_order=false),
@@ -399,37 +492,8 @@ function plot_df(df::DataFrame; y=test_return,title_keywords::Vector{String}=Str
 	_plot
 end
 
-# ╔═╡ 7efb604c-853a-4e4b-a98b-4c31a372b4ae
-@chain  get_data([1013, 1014, 1015]) begin
-	filter(row -> row["train_wpe"] != true, _)
-	filter(row -> row["hidden_size"] == 256, _)
-	filter(row -> row[x] < 2e6, _)
-
-	plot_df(_)(
-		color="architecture",
-		# ygroup="train_wpe",
-		xgroup="embedding_size",
-	)
-end
-
 # ╔═╡ 642f7e89-7b21-4721-97d9-b20c7e2e5567
 synonyms_df = get_data([1019, 1036]);
-
-# ╔═╡ d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
-@chain synonyms_df  begin
-	filter(row -> row["train_wpe"] != true, _)
-	filter(row -> row["hidden_size"] == 512, _)
-	# filter(row -> row[x] < 2.5e6, _)
-	plot_df(_)(
-		color="architecture",
-		ygroup="hidden_size",
-		xgroup="embedding_size",
-	)
-end
-
-
-# ╔═╡ 9e773083-6fcb-4a55-b128-7d2571676b14
-seq_df = query([1025, 1027]) ;
 
 # ╔═╡ 8275f4fb-b7ee-4805-b500-9827379d3886
 keys = [
@@ -442,109 +506,11 @@ keys = [
 	"hidden_size",
 ];
 
-# ╔═╡ fdcb85c9-c1ac-4665-94d9-eea37ca5ee46
-begin
-
-	@chain seq_df begin
-		filter(row -> !isnothing(row[test_return]), _)
-		mean_and_std(
-			_, 
-			group_keys=[keys..., x],
-			keep_keys=[keys..., "run_id", "host_machine"],
-			stat_key=test_return
-		)
-		DataFrames.transform(_, "randomize_parameters" => (
-			rps -> rps .|> 
-				rp -> @match rp begin
-					true => "untrained"
-					false => "pretrained"
-					nothing => "PPO"
-					x => "$(x)"
-				end
-		) => "architecture")
-		filter(row -> row["train_wpe"] != true, _)
-		filter(row -> row["hidden_size"] == 512, _)
-		filter(row -> row["embedding_size"] == "small", _)
-		plot_df(_)(
-			color="architecture",
-			# ygroup="train_wpe",
-			xgroup="embedding_size",
-		)
-	end
-end
-
-# ╔═╡ 591d7f42-583d-4d9f-83c1-8bca32c7cad2
-@chain seq_df begin
-	filter(row -> row["time"] != nothing, _)
-	groupby(_, ["hidden_size",
-				"randomize_parameters",
-				 "train_wpe",
-				 "embedding_size",
-				"run_id",
-			])
-	combine(_, [
-					name => last => name
-					for name in [
-					"time",
-					"host_machine",
-					"step"
-					]
-				])
-	transform(_, "time" => (x -> unix2datetime.(round.(x ./ 1000000))) => "date")
-	transform(_, "date" => (date -> now() - date) => "diff")
-	filter(row -> row["diff"] < convert(Millisecond, Hour(1)), _)
-			filter(row -> row["hidden_size"] == 512, _)
-			filter(row -> row["train_wpe"] != true, _)
-
-end
-
-# ╔═╡ 858fc987-0950-4be4-b82a-9f50ac337688
-begin	
-	@chain query([1073]) begin
-		filter(row -> !isnothing(row["episode return"]), _)
-		mean_and_std(
-			_, 
-			group_keys=[keys..., x],
-			keep_keys=[keys..., "run_id", "host_machine"],
-			stat_key="episode return"
-		)
-		DataFrames.transform(_, "randomize_parameters" => (
-			rps -> rps .|> 
-				rp -> @match rp begin
-					true => "untrained"
-					false => "pretrained"
-					nothing => "PPO"
-					x => "$(x)"
-				end
-		) => "architecture")
-		Gadfly.with_theme(:default) do
-			Gadfly.plot(
-				_,
-				x=x, y="episode return", 
-				ymin="ymin", ymax="ymax",
-				# yintercept=[yintercept],
-				# linestyle="pretrained",
-				Scale.color_discrete(preserve_order=false),
-				# Guide.title(title),
-				Geom.subplot_grid(
-					Geom.line, 
-					Geom.ribbon, 			
-					# Geom.hline(style=:dot,color="#b88fff")
-				);
-		color="lr",
-		group="run_id",
-		ygroup="hidden_size",
-		xgroup="embedding_size",
-			) |> HTMLDocument
-		end
-	end
-end
-
 # ╔═╡ 81f994ee-f572-400b-96e1-b0f07a8df4ec
 pa_df = query([1045, 1048]) ;
 
 # ╔═╡ 8ac97bea-be54-4337-9ec7-c5645a35e2b2
-pa_df_filtered = @chain pa_df begin
+pa_df_filtered = @chain plant_animal_df begin
 	filter(row -> !isnothing(row[test_return]), _)
 	mean_and_std(
 		_, 
@@ -561,39 +527,16 @@ pa_df_filtered = @chain pa_df begin
 				x => "$(x)"
 			end
 	) => "architecture")
-	filter(row -> row["step"] < 1e7, _)
-	filter(row -> row["embedding_size"] == "small", _)
+	# filter(row -> row["step"] < 1e7, _)
+	# filter(row -> row["embedding_size"] == "small", _)
 end
 
 # ╔═╡ da1ddaaf-a2f8-40ef-ab82-d9703973d11f
 plot_df(pa_df_filtered)(
 	color="architecture",
-	xgroup="hidden_size",
-	# ygroup="embedding_size",
+	# xgroup="hidden_size",
+	xgroup="embedding_size",
 )
-
-# ╔═╡ 58707566-c01e-40b5-ba95-e21b3b0872bf
-plant_animal_df = query([1082]) #[1069, 1068])
-
-# ╔═╡ 605bf463-95b4-4a90-b7f0-86e11a01d54b
-
-@chain query([1069]) begin
-	groupby(_, ["run_id"])
-	combine(_, names(_) .=> last .=> names(_))
-	_[!, ["run_id", "host_machine", "embedding_size", "hidden_size", "randomize_parameters"]]
-	# filter(row -> row["hidden_size"] == 512, _)
-end
-
-
-# ╔═╡ 2b3e488e-ea47-4160-8075-79e37848accd
-@chain query([1069]) begin
-	groupby(_, ["run_id"])
-	combine(_, names(_) .=> (
-x -> last(x)			))
-	# 		begin
-	# 		x -> typeof(s1)
-	# 		end))
-end
 
 # ╔═╡ b6ccd2ad-e4e4-4df9-9fe4-9752e26257c3
 @chain plant_animal_df begin
@@ -613,36 +556,22 @@ end
 				x => "$(x)"
 			end
 	) => "architecture")
-	filter(row -> row["embedding_size"] =="small", _)
-	filter(row -> row["step"] < 1e7, _)
-					Gadfly.plot(
-					_,
-					x=x, y="episode return", 
-					# ymin="ymin", ymax="ymax",
-					# yintercept=[yintercept],
-					# linestyle="pretrained",
-					Scale.color_discrete(preserve_order=false),
-					# Guide.title(title),
-					# Geom.subplot_grid(
-						Geom.line, 
-						# Geom.ribbon, 			
-						# Geom.hline(style=:dot,color="#b88fff")
-					# );
-	color="run_id",
-	xgroup="hidden_size",
-	ygroup="embedding_size",
+					plot_df(_)(
+	color="architecture",
+	# xgroup="hidden_size",
+	xgroup="embedding_size",
 		)
 end
 
-# ╔═╡ ac274116-6265-4e4f-aed7-0f8cd49b3af1
+# ╔═╡ a2010695-9d84-411a-9266-f5160365c686
 @chain plant_animal_df begin
-	filter(row -> !isnothing(row[ "episode return"]), _)
-	# mean_and_std(
-	# 	_, 
-	# 	group_keys=[keys..., x],
-	# 	keep_keys=[keys..., "run_id", "host_machine"],
-	# 	stat_key= "episode return"
-	# )
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=test_return
+	)
 	DataFrames.transform(_, "randomize_parameters" => (
 		rps -> rps .|> 
 			rp -> @match rp begin
@@ -652,27 +581,51 @@ end
 				x => "$(x)"
 			end
 	) => "architecture")
-	# filter(row -> row["room_size"] == 8, _)
-	# filter(row -> row["hidden_size"] == 512, _)
-	Gadfly.plot(
+					plot_df(_)(
+	xgroup="architecture",
+	# xgroup="hidden_size",
+	color="embedding_size",
+		)
+end
+
+# ╔═╡ f5ad1614-7371-4cef-b0cc-477f0c1ac4e7
+train_return = "episode return"
+
+# ╔═╡ ca92ac10-a1dc-4245-af7a-737083ca5d05
+@chain plant_animal_df begin
+	filter(row -> !isnothing(row[train_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=train_return,
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+					Gadfly.plot(
 					_,
-					x=x, y="episode return", 
-					# ymin="ymin", ymax="ymax",
+					x=x, y=train_return, 
+					ymin="ymin", ymax="ymax",
 					# yintercept=[yintercept],
 					# linestyle="pretrained",
 					Scale.color_discrete(preserve_order=false),
 					# Guide.title(title),
-					# Geom.subplot_grid(
+					Geom.subplot_grid(
 						Geom.line, 
-		Geom.smooth(method=:loess,smoothing=0.9),
-						# Geom.ribbon, 			
+						Geom.ribbon, 			
 						# Geom.hline(style=:dot,color="#b88fff")
-					# );
-	color="room_size",
-		group="run_id",
-	xgroup="hidden_size",
-	ygroup="embedding_size",
-		) |> HTMLDocument
+					);
+	color="architecture",
+	# xgroup="hidden_size",
+	xgroup="embedding_size",
+		)
 end
 
 # ╔═╡ 6669cde7-d946-4186-8d69-61506b6406db
@@ -710,6 +663,9 @@ md"""
 - Exploit similarities in locality
 - Conditionals? Control-structure?
 """
+
+# ╔═╡ f07f1c51-be90-4bb2-ae31-6ab3ace2e6e9
+
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2178,6 +2134,7 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╟─82de7854-3ac9-435a-ad34-c59fb8262bfe
+# ╠═b7087c67-0d3f-4c33-9650-1200b3ffbaee
 # ╟─5cfc0e11-523a-4c99-8797-cf3da0f5367b
 # ╟─a323735a-ce8b-431f-b428-8790a95bbe8b
 # ╟─38bb6397-e0bd-4693-8fad-e2bf8ec2b4c9
@@ -2185,11 +2142,12 @@ version = "0.9.1+5"
 # ╟─a295de65-0329-49ca-96fa-0c87b60cc907
 # ╠═d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
 # ╟─a148cea3-b636-4bdf-94b6-ff661843796a
-# ╟─da1ddaaf-a2f8-40ef-ab82-d9703973d11f
+# ╠═da1ddaaf-a2f8-40ef-ab82-d9703973d11f
+# ╠═58707566-c01e-40b5-ba95-e21b3b0872bf
 # ╟─c6379954-066d-4d70-9255-5bfb24b102eb
-# ╟─fdcb85c9-c1ac-4665-94d9-eea37ca5ee46
-# ╟─027fa45e-b7b1-4c5b-90e3-c998d6fbd778
-# ╠═7efb604c-853a-4e4b-a98b-4c31a372b4ae
+# ╠═bd42e1da-60d7-46b5-9944-ae96b0b8602a
+# ╠═c8597b63-5b43-4359-93ae-d3f8067e8d84
+# ╠═349bd7b9-1660-4d9c-87d1-0c07bbebcc98
 # ╟─80c04a29-612c-4ee9-90f6-147f5eed5a1c
 # ╟─6010292d-aae5-421d-b45f-99db6e564cc6
 # ╟─dcef07bf-684d-440c-86a5-742db737f9d1
@@ -2202,18 +2160,15 @@ version = "0.9.1+5"
 # ╠═51d9223a-08e6-11ec-17f9-af13c3a79465
 # ╠═24ddebdf-f619-46da-b1ca-0357aa709ce7
 # ╠═642f7e89-7b21-4721-97d9-b20c7e2e5567
-# ╠═9e773083-6fcb-4a55-b128-7d2571676b14
 # ╠═8275f4fb-b7ee-4805-b500-9827379d3886
-# ╠═591d7f42-583d-4d9f-83c1-8bca32c7cad2
-# ╠═858fc987-0950-4be4-b82a-9f50ac337688
 # ╠═81f994ee-f572-400b-96e1-b0f07a8df4ec
 # ╠═8ac97bea-be54-4337-9ec7-c5645a35e2b2
-# ╠═58707566-c01e-40b5-ba95-e21b3b0872bf
-# ╠═605bf463-95b4-4a90-b7f0-86e11a01d54b
-# ╠═2b3e488e-ea47-4160-8075-79e37848accd
 # ╠═b6ccd2ad-e4e4-4df9-9fe4-9752e26257c3
-# ╠═ac274116-6265-4e4f-aed7-0f8cd49b3af1
+# ╠═a2010695-9d84-411a-9266-f5160365c686
+# ╠═f5ad1614-7371-4cef-b0cc-477f0c1ac4e7
+# ╠═ca92ac10-a1dc-4245-af7a-737083ca5d05
 # ╠═6669cde7-d946-4186-8d69-61506b6406db
 # ╠═5d5a6a9c-694f-4067-8056-b3981a13577e
+# ╠═f07f1c51-be90-4bb2-ae31-6ab3ace2e6e9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

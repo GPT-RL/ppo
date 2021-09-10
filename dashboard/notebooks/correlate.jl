@@ -96,11 +96,12 @@ function get_sweep(sweep_ids::AbstractVector{Int}, max_step::Int)
 						]]...,
 				), _)
 			vcat(DataFrame.(_)...)
+	
 	end
 end;
 
 # ╔═╡ da091e45-0d08-490a-ba85-ee9acb6700bc
-sweeps = get_sweep([1074], 1000000)
+
 
 # ╔═╡ 16afb1df-73f6-483b-9d4b-eb07aaa877e0
 SWEEP= 1079

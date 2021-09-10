@@ -3,7 +3,8 @@ services:
   pluto-dashboard:
     build: .
     command:
-      - ${SCRIPT}
+      - --notebook=${SCRIPT}
+      - --secret=${PLUTO_SECRET}
     volumes:
       - "./notebooks:/workspace/notebooks"
       - "$HOME/.cache/GPT/linguistic_analysis:/workspace/linguistic_analysis"

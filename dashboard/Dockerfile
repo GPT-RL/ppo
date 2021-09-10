@@ -1,6 +1,6 @@
 FROM julia:1.6.1-buster AS main
 WORKDIR /workspace
-RUN julia --project=. -e "using Pkg; Pkg.add(name=\"Pluto\", rev=\"main\")"
+RUN julia --project=. -e "using Pkg; Pkg.add(name=\"Pluto\", rev=\"main\"); Pkg.add(\"ArgParse\")"
 
 COPY ./pluto/run_server.jl .
 
