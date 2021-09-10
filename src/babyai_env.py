@@ -119,10 +119,14 @@ class RenderEnv(RoomGridLevel, ABC):
                 if self.__action is None
                 else MiniGridEnv.Actions(self.__action).name,
             )
-            if pause:
-                input("Press enter to continue.")
+            self.pause(pause)
         else:
             return super().render(mode=mode, **kwargs)
+
+    @staticmethod
+    def pause(pause):
+        if pause:
+            input("Press enter to continue.")
 
     def step(self, action):
         self.__action = action
@@ -400,6 +404,11 @@ class SequenceEnv(RenderEnv):
         self.check_objs_reachable()
         self.instrs = BeforeInstr(instr1, instr2, strict=True)
 
+    def render(self, mode="human", pause=True, **kwargs):
+        super().render(mode=mode, pause=False, **kwargs)
+        print("Done:", self.instrs.a_done, self.instrs.b_done)
+        self.pause(pause)
+
 
 class MissionWrapper(gym.Wrapper, abc.ABC):
     def __init__(self, env):
@@ -420,8 +429,7 @@ class MissionWrapper(gym.Wrapper, abc.ABC):
     def render(self, mode="human", pause=True, **kwargs):
         self.env.render(pause=False)
         print(self._mission)
-        if pause:
-            input("Press enter to coninue.")
+        self.env.pause(pause)
 
     def change_mission(self, mission):
         raise NotImplementedError
