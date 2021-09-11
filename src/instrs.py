@@ -37,9 +37,9 @@ class GoToCornerInstr(ActionInstr):
 
         if (x, y) in [(0, 1), (1, 0)]:
             return validate_direction(OrdinalDirection.northwest)
-        if (x, y) in [(0, height - 2), (1, height - 1)]:
-            return validate_direction(OrdinalDirection.northeast)
         if (x, y) in [(width - 2, 0), (width - 1, 1)]:
+            return validate_direction(OrdinalDirection.northeast)
+        if (x, y) in [(0, height - 2), (1, height - 1)]:
             return validate_direction(OrdinalDirection.southwest)
         if (x, y) in [(width - 2, height - 1), (width - 1, height - 2)]:
             return validate_direction(OrdinalDirection.southeast)

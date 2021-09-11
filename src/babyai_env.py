@@ -61,26 +61,26 @@ class RenderEnv(RoomGridLevel, ABC):
         self.__done = None
         self.__action = None
 
-    def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
-        for j in range(self.width):
-            if np.all(self.agent_pos == (i, j)):
+    def row_objs(self, y: int) -> Generator[Optional[WorldObj], None, None]:
+        for x in range(self.width):
+            if np.all(self.agent_pos == (y, x)):
                 yield Agent(color="blue", type="agent")
             else:
-                yield self.grid.get(i, j)
+                yield self.grid.get(y, x)
 
-    def row_strings(self, i: int) -> Generator[str, None, None]:
-        for obj in self.row_objs(i):
+    def row_strings(self, y: int) -> Generator[str, None, None]:
+        for obj in self.row_objs(y):
             if obj is None:
                 string = ""
             elif isinstance(obj, Agent):
                 if self.agent_dir == 0:
-                    string = "v"
-                elif self.agent_dir == 1:
                     string = ">"
+                elif self.agent_dir == 1:
+                    string = "v"
                 elif self.agent_dir == 2:
-                    string = "^"
-                elif self.agent_dir == 3:
                     string = "<"
+                elif self.agent_dir == 3:
+                    string = "^"
                 else:
                     breakpoint()
                     raise RuntimeError
@@ -96,17 +96,17 @@ class RenderEnv(RoomGridLevel, ABC):
     def max_string_length(self):
         return max(map(len, OBJECT_TO_IDX)) + 1
 
-    def row_string(self, i: int):
-        return "|".join(self.row_strings(i))
+    def row_string(self, y: int):
+        return "|".join(self.row_strings(y))
 
     def horizontal_separator_string(self):
         return "-" * ((self.max_string_length + 1) * self.grid.width - 1)
 
     def render_string(self):
         yield self.row_string(0)
-        for i in range(1, self.grid.height):
+        for y in range(1, self.grid.height):
             yield self.horizontal_separator_string()
-            yield self.row_string(i)
+            yield self.row_string(y)
 
     def render(self, mode="human", pause=True, **kwargs):
         if mode == "human":
@@ -774,7 +774,7 @@ def main(args: "Args"):
         seed=args.seed,
         room_size=args.room_size,
         strict=True,
-        directions={*OrdinalDirection},
+        directions={OrdinalDirection.southeast},
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
