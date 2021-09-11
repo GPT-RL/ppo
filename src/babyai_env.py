@@ -26,7 +26,14 @@ from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
 from descs import CardinalDirection, CornerDesc, LocDesc, OrdinalDirection, WallDesc
-from instrs import GoToCornerInstr, GoToLoc, GoToWallInstr, ToggleInstr
+from instrs import (
+    AndDoneInstr,
+    FaceInstr,
+    GoToCornerInstr,
+    GoToLoc,
+    GoToWallInstr,
+    ToggleInstr,
+)
 
 T = TypeVar("T")  # Declare type variable
 
@@ -249,6 +256,41 @@ class DirectionsEnv(GoToLocEnv):
             self.instrs = GoToCornerInstr(CornerDesc(direction), strict=self.strict)
         else:
             raise InvalidDirectionError
+
+
+class GoAndFaceDirections(typing.NamedTuple):
+    go_direction: Union[CardinalDirection, OrdinalDirection]
+    face_direction: CardinalDirection
+
+
+class GoAndFaceEnv(GoToLocEnv):
+    def __init__(
+        self,
+        room_size: int,
+        seed: int,
+        strict: bool,
+        directions: Set[GoAndFaceDirections],
+    ):
+        self.directions = directions
+        self.strict = strict
+        super().__init__(room_size, seed)
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        self.check_objs_reachable()
+        go_to_direction, face_direction = self._rand_elem(self.directions)
+        if isinstance(go_to_direction, CardinalDirection):
+            go_to_instr = GoToWallInstr(WallDesc(go_to_direction), strict=self.strict)
+        elif isinstance(go_to_direction, OrdinalDirection):
+            go_to_instr = GoToCornerInstr(
+                CornerDesc(go_to_direction), strict=self.strict
+            )
+        else:
+            raise InvalidDirectionError
+        face_instr = FaceInstr(face_direction)
+        self.instrs = AndDoneInstr(go_to_instr, face_instr)
 
 
 class ToggleEnv(RenderEnv):
@@ -770,11 +812,11 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = DirectionsEnv(
+    env = GoAndFaceEnv(
         seed=args.seed,
         room_size=args.room_size,
         strict=True,
-        directions={*OrdinalDirection},
+        directions={*itertools.product(OrdinalDirection, CardinalDirection)},
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)

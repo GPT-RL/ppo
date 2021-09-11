@@ -1,8 +1,8 @@
 import numpy as np
-from babyai.levels.verifier import ActionInstr
+from babyai.levels.verifier import ActionInstr, AndInstr
 from gym_minigrid.minigrid import MiniGridEnv
 
-from descs import CardinalDirection, LocDesc, OrdinalDirection, WallDesc, CornerDesc
+from descs import CardinalDirection, CornerDesc, LocDesc, OrdinalDirection, WallDesc
 
 
 class GoToCornerInstr(ActionInstr):
@@ -20,7 +20,7 @@ class GoToCornerInstr(ActionInstr):
         return "Go to " + self.desc.surface()
 
     def verify_action(self, action):
-        x, y = self.env.front_pos
+        x, y = self.env.agent_pos
         direction = self.desc.direction
 
         def validate_direction(positional_direction: OrdinalDirection):
@@ -35,13 +35,13 @@ class GoToCornerInstr(ActionInstr):
         height = self.env.height
         width = self.env.width
 
-        if (x, y) in [(0, 1), (1, 0)]:
+        if (x, y) == (1, 1):
             return validate_direction(OrdinalDirection.northwest)
-        if (x, y) in [(width - 2, 0), (width - 1, 1)]:
+        if (x, y) == (width - 2, 1):
             return validate_direction(OrdinalDirection.northeast)
-        if (x, y) in [(0, height - 2), (1, height - 1)]:
+        if (x, y) == (1, height - 2):
             return validate_direction(OrdinalDirection.southwest)
-        if (x, y) in [(width - 2, height - 1), (width - 1, height - 2)]:
+        if (x, y) == (width - 2, height - 2):
             return validate_direction(OrdinalDirection.southeast)
 
         return "continue"
@@ -62,7 +62,7 @@ class GoToWallInstr(ActionInstr):
         return "Go to " + self.desc.surface()
 
     def verify_action(self, action):
-        x, y = self.env.front_pos
+        x, y = self.env.agent_pos
         direction = self.desc.direction
 
         def validate_direction(positional_direction: CardinalDirection):
@@ -75,16 +75,38 @@ class GoToWallInstr(ActionInstr):
 
         self.env: MiniGridEnv
 
-        if y == 0:
+        if y == 1:
             return validate_direction(CardinalDirection.north)
-        if y == self.env.height - 1:
+        if y == self.env.height - 2:
             return validate_direction(CardinalDirection.south)
-        if x == 0:
+        if x == 1:
             return validate_direction(CardinalDirection.west)
-        if x == self.env.width - 1:
+        if x == self.env.width - 2:
             return validate_direction(CardinalDirection.east)
 
         return "continue"
+
+
+class FaceInstr(ActionInstr):
+    """
+    Pick up an object matching a given description
+    eg: pick up the grey ball
+    """
+
+    def __init__(self, direction: CardinalDirection):
+        super().__init__()
+        self.direction = direction
+
+    def surface(self, env):
+        return "face " + self.direction.name
+
+    def verify_action(self, action):
+        self.env: MiniGridEnv
+        return (
+            "success"
+            if self.env.agent_dir == [*CardinalDirection].index(self.direction)
+            else "continue"
+        )
 
 
 class ToggleInstr(ActionInstr):
@@ -143,4 +165,17 @@ class GoToLoc(ActionInstr):
         if np.array_equal(self.env.agent_pos, self.desc.array):
             return "success"
 
+        return "continue"
+
+
+class AndDoneInstr(AndInstr):
+    def verify(self, action):
+        if action is self.env.actions.done:
+            a_done = self.instr_a.verify(action)
+            b_done = self.instr_b.verify(action)
+            return (
+                "success"
+                if (a_done == "success" and b_done == "success")
+                else "failure"
+            )
         return "continue"

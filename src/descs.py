@@ -8,10 +8,10 @@ from gym_minigrid.roomgrid import RoomGrid
 
 
 class CardinalDirection(Enum):
-    north = auto()
-    south = auto()
     east = auto()
+    south = auto()
     west = auto()
+    north = auto()
 
 
 class OrdinalDirection(Enum):
