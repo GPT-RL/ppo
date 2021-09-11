@@ -13,6 +13,7 @@ import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
+    AndInstr,
     BeforeInstr,
     GoToInstr,
     ObjDesc,
@@ -27,7 +28,6 @@ from transformers import GPT2Tokenizer
 
 from descs import CardinalDirection, CornerDesc, LocDesc, OrdinalDirection, WallDesc
 from instrs import (
-    AndDoneInstr,
     FaceInstr,
     GoToCornerInstr,
     GoToLoc,
@@ -290,7 +290,7 @@ class GoAndFaceEnv(GoToLocEnv):
         else:
             raise InvalidDirectionError
         face_instr = FaceInstr(face_direction)
-        self.instrs = AndDoneInstr(go_to_instr, face_instr)
+        self.instrs = AndInstr(go_to_instr, face_instr)
 
 
 class ToggleEnv(RenderEnv):
