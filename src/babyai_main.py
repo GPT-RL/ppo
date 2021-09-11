@@ -7,6 +7,7 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     ActionInObsWrapper,
+    DirectionsEnv,
     FullyObsWrapper,
     GoToLocEnv,
     GoToObjEnv,
@@ -22,6 +23,7 @@ from babyai_env import (
     TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
+from descs import CardinalDirection, OrdinalDirection
 from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
 
@@ -112,6 +114,16 @@ class Trainer(main.Trainer):
                 env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
                 env = PlantAnimalWrapper(env)
                 longest_mission = "pick up the grasshopper"
+            elif env_id == "directions":
+                del kwargs["goal_objects"]
+                test_direction = {CardinalDirection.north}
+                kwargs.update(
+                    directions=test_direction
+                    if test
+                    else {*OrdinalDirection, *CardinalDirection} - test_direction
+                )
+                env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "go to northwest corner"
             else:
                 del kwargs["goal_objects"]
                 if env_id == "sequence-paraphrases":
