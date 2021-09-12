@@ -104,7 +104,9 @@ class Trainer(main.Trainer):
                 )
                 longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
-                env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
+                env = PickupRedEnv(
+                    *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
+                )
                 env = SynonymWrapper(env)
                 longest_mission = "pick-up the crimson phone"
             elif env_id == "plant-animal":
