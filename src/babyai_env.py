@@ -68,12 +68,12 @@ class RenderEnv(RoomGridLevel, ABC):
         self.__done = None
         self.__action = None
 
-    def row_objs(self, i: int) -> Generator[Optional[WorldObj], None, None]:
-        for j in range(self.width):
-            if np.all(self.agent_pos == (i, j)):
+    def row_objs(self, y: int) -> Generator[Optional[WorldObj], None, None]:
+        for x in range(self.width):
+            if np.all(self.agent_pos == (x, y)):
                 yield Agent(color="blue", type="agent")
             else:
-                yield self.grid.get(i, j)
+                yield self.grid.get(x, y)
 
     def row_strings(self, i: int) -> Generator[str, None, None]:
         for obj in self.row_objs(i):
@@ -81,13 +81,13 @@ class RenderEnv(RoomGridLevel, ABC):
                 string = ""
             elif isinstance(obj, Agent):
                 if self.agent_dir == 0:
-                    string = "v"
-                elif self.agent_dir == 1:
                     string = ">"
+                elif self.agent_dir == 1:
+                    string = "v"
                 elif self.agent_dir == 2:
-                    string = "^"
-                elif self.agent_dir == 3:
                     string = "<"
+                elif self.agent_dir == 3:
+                    string = "^"
                 else:
                     breakpoint()
                     raise RuntimeError
