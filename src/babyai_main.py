@@ -130,9 +130,10 @@ class Trainer(main.Trainer):
                 env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to northwest corner"
             elif env_id == "go-and-face":
-                test_directions = GoAndFaceDirections(
-                    OrdinalDirection.southeast, CardinalDirection.north
-                )
+                test_directions = {
+                    GoAndFaceDirections(OrdinalDirection.southeast, d)
+                    for d in CardinalDirection
+                }
                 directions = {
                     GoAndFaceDirections(d1, d2)
                     for d1, d2 in itertools.product(
@@ -140,9 +141,7 @@ class Trainer(main.Trainer):
                     )
                 }
                 kwargs.update(
-                    directions={test_directions}
-                    if test
-                    else directions - {test_directions}
+                    directions=test_directions if test else directions - test_directions
                 )
                 env = GoAndFaceEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to northwest corner and face west"
