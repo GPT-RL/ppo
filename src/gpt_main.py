@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 import torch
 
@@ -9,10 +8,6 @@ from gpt_agent import Agent
 
 
 class Args(babyai_main.Args):
-    data_parallel: bool = True
-    linguistic_analysis_save_interval: Optional[
-        str
-    ] = None  # path to save linguistic analysis data
     randomize_parameters: bool = False
     train_ln: bool = True
     train_wpe: bool = False

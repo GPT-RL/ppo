@@ -150,7 +150,10 @@ query GetParameters($id: Int!) {
             )["run_by_pk"]["metadata"]
             cls.update_args(args, parameters, check_hasattr=False)
 
-        if args.render or args.render_test:
+        logging.info(pformat(args.as_dict()))
+
+        render = args.render or args.render_test
+        if render:
             args.num_processes = 1
 
         torch.manual_seed(args.seed)
@@ -221,6 +224,7 @@ query GetParameters($id: Int!) {
                 args.save_interval is not None
                 and logger.run_id is not None
                 and (j % args.save_interval == 0 or j == num_updates - 1)
+                and not render
             ):
                 save_path = cls.save_path(logger.run_id)
                 save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -523,7 +527,6 @@ query GetParameters($id: Int!) {
                 logger.update_metadata(
                     dict(parameters=args.as_dict(), run_id=logger.run_id)
                 )
-            logging.info(pformat(args.as_dict()))
             return cls.train(args=args, logger=logger)
 
     @classmethod
