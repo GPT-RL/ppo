@@ -107,7 +107,8 @@ class Trainer(main.Trainer):
                 env = PickupRedEnv(
                     *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
                 )
-                env = SynonymWrapper(env)
+                if test:
+                    env = SynonymWrapper(env)
                 longest_mission = "pick-up the crimson phone"
             elif env_id == "plant-animal":
                 objects = {*PlantAnimalWrapper.replacements.keys()}
