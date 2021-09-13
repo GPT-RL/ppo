@@ -290,33 +290,36 @@ query GetParameters($id: Int!) {
                 use_proper_time_limits=args.use_proper_time_limits,
             )
 
-            value_loss, action_loss, dist_entropy, gradient_norm = ppo.update(rollouts)
-
-            rollouts.after_update()
-
             total_num_steps = cls.total_num_steps(j + 1, args)
-            if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
-                now = time.time()
-                fps = int(total_num_steps / (now - start))
-                log = {
-                    EPISODE_RETURN: np.mean(episode_rewards),
-                    ACTION_LOSS: action_loss,
-                    VALUE_LOSS: value_loss,
-                    FPS: fps,
-                    TIME: now * 1000000,
-                    HOURS: (now - start) / 3600,
-                    GRADIENT_NORM: gradient_norm,
-                    STEP: total_num_steps,
-                    ENTROPY: dist_entropy,
-                    SAVE_COUNT: save_count,
-                }
-                logging.info(pformat(log))
-                if logger.run_id is not None:
-                    log.update({"run ID": logger.run_id})
+            if not render:
+                value_loss, action_loss, dist_entropy, gradient_norm = ppo.update(
+                    rollouts
+                )
 
-                logging.info(pformat(log))
-                if logger.run_id is not None:
-                    logger.log(log)
+                rollouts.after_update()
+
+                if j % args.log_interval == 0:  # and len(episode_rewards) > 1:
+                    now = time.time()
+                    fps = int(total_num_steps / (now - start))
+                    log = {
+                        EPISODE_RETURN: np.mean(episode_rewards),
+                        ACTION_LOSS: action_loss,
+                        VALUE_LOSS: value_loss,
+                        FPS: fps,
+                        TIME: now * 1000000,
+                        HOURS: (now - start) / 3600,
+                        GRADIENT_NORM: gradient_norm,
+                        STEP: total_num_steps,
+                        ENTROPY: dist_entropy,
+                        SAVE_COUNT: save_count,
+                    }
+                    logging.info(pformat(log))
+                    if logger.run_id is not None:
+                        log.update({"run ID": logger.run_id})
+
+                    logging.info(pformat(log))
+                    if logger.run_id is not None:
+                        logger.log(log)
 
     @staticmethod
     def load(agent, load_path):
