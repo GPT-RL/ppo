@@ -61,6 +61,11 @@ class Agent(WorldObj):
         pass
 
 
+class ReproducibleEnv(RoomGridLevel, ABC):
+    def _rand_elem(self, iterable):
+        return super()._rand_elem(sorted(iterable))
+
+
 class RenderEnv(RoomGridLevel, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -143,7 +148,7 @@ class RenderEnv(RoomGridLevel, ABC):
         return s, self.__reward, self.__done, i
 
 
-class GoToObjEnv(RenderEnv):
+class GoToObjEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects,
@@ -172,7 +177,7 @@ class GoToObjEnv(RenderEnv):
         self.instrs = GoToInstr(ObjDesc(*goal_object))
 
 
-class PickupEnv(RenderEnv):
+class PickupEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects: typing.Iterable[typing.Tuple[str, str]],
@@ -201,7 +206,7 @@ class PickupEnv(RenderEnv):
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class GoToLocEnv(RenderEnv):
+class GoToLocEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         room_size: int,
@@ -293,7 +298,7 @@ class GoAndFaceEnv(GoToLocEnv):
         self.instrs = AndInstr(go_to_instr, face_instr)
 
 
-class ToggleEnv(RenderEnv):
+class ToggleEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects: typing.Iterable[typing.Tuple[str, str]],
@@ -322,7 +327,7 @@ class ToggleEnv(RenderEnv):
         self.instrs = ToggleInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class PickupEnvRoomObjects(RenderEnv):
+class PickupEnvRoomObjects(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         room_objects: typing.Iterable[typing.Tuple[str, str]],
@@ -370,7 +375,7 @@ class PickupRedEnv(PickupEnv):
         )
 
 
-class SequenceEnv(RenderEnv):
+class SequenceEnv(RenderEnv, ReproducibleEnv):
     def __init__(self, *args, strict: bool, **kwargs):
         self.strict = strict
         super().__init__(*args, **kwargs)
@@ -658,8 +663,8 @@ def get_train_and_test_objects():
             yield _type, color
         # yield from remaining
 
-    train_objects = [*pairs()]
-    return TrainTest(train=train_objects, test=list(all_objects))
+    train_objects = sorted(pairs())
+    return TrainTest(train=train_objects, test=sorted(all_objects))
 
 
 class ActionInObsWrapper(gym.Wrapper):
