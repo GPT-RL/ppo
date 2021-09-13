@@ -6,6 +6,7 @@ from abc import ABC
 from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
 from typing import Callable, Generator, Optional, TypeVar
+from typing import Set, Union
 
 import gym
 import gym_minigrid
@@ -21,10 +22,18 @@ from babyai.levels.verifier import (
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
-from gym_minigrid.roomgrid import RoomGrid
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
+
+from descs import CardinalDirection, CornerDesc, LocDesc, OrdinalDirection, WallDesc
+from instrs import (
+    FaceInstr,
+    GoToCornerInstr,
+    GoToLoc,
+    GoToWallInstr,
+    ToggleInstr,
+)
 
 T = TypeVar("T")  # Declare type variable
 
@@ -137,94 +146,6 @@ class RenderEnv(RoomGridLevel, ABC):
         self.__action = action
         s, self.__reward, self.__done, i = super().step(action)
         return s, self.__reward, self.__done, i
-
-
-class ToggleInstr(ActionInstr):
-    """
-    Pick up an object matching a given description
-    eg: pick up the grey ball
-    """
-
-    def __init__(self, obj_desc, strict=False):
-        super().__init__()
-        self.desc = obj_desc
-        self.strict = strict
-
-    def surface(self, env):
-        return "toggle " + self.desc.surface(env)
-
-    def reset_verifier(self, env):
-        super().reset_verifier(env)
-        self.desc.find_matching_objs(env)
-
-    def verify_action(self, action):
-        # Only verify when the pickup action is performed
-        if action != self.env.actions.toggle:
-            return "continue"
-
-        # For each object position
-        for pos in self.desc.obj_poss:
-            # If the agent is next to (and facing) the object
-            if np.array_equal(pos, self.env.front_pos):
-                return "success"
-
-        if self.strict:
-            return "failure"  # not allowed to toggle except in front of correct object
-
-        return "continue"
-
-
-class LocDesc:
-    """
-    Description of a set of objects in an environment
-    """
-
-    def __init__(self, grid: RoomGrid, i: int, j: int):
-        assert 1 <= i < grid.height - 1
-        assert 1 <= j < grid.width - 1
-        self.i = i
-        self.j = j
-
-    def __repr__(self):
-        return f"({self.i}, {self.j})"
-
-    def surface(self):
-        """
-        Generate a natural language representation of the object description
-        """
-        return repr(self)
-
-    @property
-    def array(self):
-        return np.array([self.i, self.j])
-
-    @staticmethod
-    def find_matching_objs(*args, **kwargs):
-        return [], []
-
-
-class GoToLoc(ActionInstr):
-    """
-    Pick up an object matching a given description
-    eg: pick up the grey ball
-    """
-
-    def __init__(self, loc_desc: LocDesc):
-        self.desc = loc_desc
-        super().__init__()
-
-    def surface(self, env):
-        return "go to " + self.desc.surface()
-
-    def reset_verifier(self, env: MiniGridEnv):
-        super().reset_verifier(env)
-
-    def verify_action(self, *args, **kwargs):
-        # Only verify when the pickup action is performed
-        if np.array_equal(self.env.agent_pos, self.desc.array):
-            return "success"
-
-        return "continue"
 
 
 class GoToObjEnv(RenderEnv, ReproducibleEnv):
