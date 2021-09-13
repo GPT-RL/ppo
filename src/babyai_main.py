@@ -104,7 +104,7 @@ class Trainer(main.Trainer):
                 room_objects = test_objects if test else objects - test_objects
                 room_objects = [o.split() for o in room_objects]
                 room_objects = [(t, c) for (c, t) in room_objects]
-                kwargs.update(room_objects=room_objects)
+                kwargs.update(room_objects=sorted(room_objects))
                 env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
                 env = PlantAnimalWrapper(env)
                 longest_mission = "pick up the grasshopper"

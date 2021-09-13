@@ -14,9 +14,9 @@ from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     ActionInstr,
     BeforeInstr,
+    GoToInstr,
     ObjDesc,
     PickupInstr,
-    GoToInstr,
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
@@ -50,6 +50,11 @@ TYPES = ["key", "ball", "box"]
 class Agent(WorldObj):
     def render(self, r):
         pass
+
+
+class ReproducibleEnv(RoomGridLevel, ABC):
+    def _rand_elem(self, iterable):
+        return super()._rand_elem(sorted(iterable))
 
 
 class RenderEnv(RoomGridLevel, ABC):
@@ -218,7 +223,7 @@ class GoToLoc(ActionInstr):
         return "continue"
 
 
-class GoToObjEnv(RenderEnv):
+class GoToObjEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects,
@@ -247,7 +252,7 @@ class GoToObjEnv(RenderEnv):
         self.instrs = GoToInstr(ObjDesc(*goal_object))
 
 
-class PickupEnv(RenderEnv):
+class PickupEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects: typing.Iterable[typing.Tuple[str, str]],
@@ -276,7 +281,7 @@ class PickupEnv(RenderEnv):
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class GoToLocEnv(RenderEnv):
+class GoToLocEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         room_size: int,
@@ -303,7 +308,7 @@ class GoToLocEnv(RenderEnv):
         self.instrs = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
 
 
-class ToggleEnv(RenderEnv):
+class ToggleEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects: typing.Iterable[typing.Tuple[str, str]],
@@ -332,7 +337,7 @@ class ToggleEnv(RenderEnv):
         self.instrs = ToggleInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class PickupEnvRoomObjects(RenderEnv):
+class PickupEnvRoomObjects(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         room_objects: typing.Iterable[typing.Tuple[str, str]],
@@ -380,7 +385,7 @@ class PickupRedEnv(PickupEnv):
         )
 
 
-class SequenceEnv(RenderEnv):
+class SequenceEnv(RenderEnv, ReproducibleEnv):
     def __init__(self, *args, strict: bool, **kwargs):
         self.strict = strict
         super().__init__(*args, **kwargs)
@@ -632,8 +637,8 @@ def get_train_and_test_objects():
             yield _type, color
         # yield from remaining
 
-    train_objects = [*pairs()]
-    return TrainTest(train=train_objects, test=list(all_objects))
+    train_objects = sorted(pairs())
+    return TrainTest(train=train_objects, test=sorted(all_objects))
 
 
 class ActionInObsWrapper(gym.Wrapper):
