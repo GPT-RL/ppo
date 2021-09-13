@@ -810,19 +810,11 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = SequenceEnv(
+    env = GoAndFaceEnv(
         seed=args.seed,
-        strict=args.strict,
         room_size=args.room_size,
-        num_rows=1,
-        num_cols=1,
-    )
-    env = SequenceEnv(
-        seed=args.seed,
-        strict=args.strict,
-        room_size=args.room_size,
-        num_rows=1,
-        num_cols=1,
+        strict=True,
+        directions={*itertools.product(OrdinalDirection, CardinalDirection)},
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
