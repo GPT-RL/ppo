@@ -233,6 +233,71 @@ class GoToLocEnv(RenderEnv, ReproducibleEnv):
         self.instrs = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
 
 
+class InvalidDirectionError(RuntimeError):
+    pass
+
+
+class DirectionsEnv(GoToLocEnv):
+    def __init__(
+        self,
+        room_size: int,
+        seed: int,
+        strict: bool,
+        directions: Set[Union[CardinalDirection, OrdinalDirection]],
+    ):
+        self.directions = list(directions)
+        self.strict = strict
+        super().__init__(room_size, seed)
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        self.check_objs_reachable()
+        direction = self.np_random.choice(self.directions)
+        if isinstance(direction, CardinalDirection):
+            self.instrs = GoToWallInstr(WallDesc(direction), strict=self.strict)
+        elif isinstance(direction, OrdinalDirection):
+            self.instrs = GoToCornerInstr(CornerDesc(direction), strict=self.strict)
+        else:
+            raise InvalidDirectionError
+
+
+class GoAndFaceDirections(typing.NamedTuple):
+    go_direction: Union[CardinalDirection, OrdinalDirection]
+    face_direction: CardinalDirection
+
+
+class GoAndFaceEnv(GoToLocEnv):
+    def __init__(
+        self,
+        room_size: int,
+        seed: int,
+        strict: bool,
+        directions: Set[GoAndFaceDirections],
+    ):
+        self.directions = directions
+        self.strict = strict
+        super().__init__(room_size, seed)
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        self.check_objs_reachable()
+        go_to_direction, face_direction = self._rand_elem(self.directions)
+        if isinstance(go_to_direction, CardinalDirection):
+            go_to_instr = GoToWallInstr(WallDesc(go_to_direction), strict=self.strict)
+        elif isinstance(go_to_direction, OrdinalDirection):
+            go_to_instr = GoToCornerInstr(
+                CornerDesc(go_to_direction), strict=self.strict
+            )
+        else:
+            raise InvalidDirectionError
+        face_instr = FaceInstr(face_direction)
+        self.instrs = AndInstr(go_to_instr, face_instr)
+
+
 class ToggleEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
