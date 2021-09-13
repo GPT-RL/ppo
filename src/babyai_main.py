@@ -1,3 +1,4 @@
+import itertools
 from typing import Literal
 
 from stable_baselines3.common.monitor import Monitor
@@ -7,7 +8,10 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     ActionInObsWrapper,
+    DirectionsEnv,
     FullyObsWrapper,
+    GoAndFaceDirections,
+    GoAndFaceEnv,
     GoToLocEnv,
     GoToObjEnv,
     PickupEnv,
@@ -22,6 +26,7 @@ from babyai_env import (
     TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
+from descs import CardinalDirection, OrdinalDirection
 from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
 
@@ -33,6 +38,8 @@ class Args(main.Args):
     env: str = "GoToLocal"  # env ID for gym
     room_size: int = 5
     strict: bool = True
+    train_wordings: str = None
+    test_wordings: str = None
 
 
 class InvalidEnvIdError(RuntimeError):
@@ -65,37 +72,44 @@ class Trainer(main.Trainer):
         def _thunk():
             tokenizer = kwargs.pop("tokenizer")
             test = kwargs.pop("test")
-            kwargs.update(
-                goal_objects=(
-                    [("ball", "green")]
-                    if test
-                    else [
-                        ("box", "green"),
-                        ("box", "yellow"),
-                        ("ball", "yellow"),
-                    ]
-                )
+            train_wordings = kwargs.pop("train_wordings")
+            test_wordings = kwargs.pop("test_wordings")
+            goal_objects = (
+                [("ball", "green")]
+                if test
+                else [
+                    ("box", "green"),
+                    ("box", "yellow"),
+                    ("ball", "yellow"),
+                ]
             )
             if env_id == "go-to-obj":
-                env = GoToObjEnv(*args, seed=seed + rank, **kwargs)
+                env = GoToObjEnv(
+                    *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
+                )
                 longest_mission = "go to the red ball"
             elif env_id == "go-to-loc":
-                del kwargs["strict"]
-                del kwargs["goal_objects"]
                 env = GoToLocEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to (0, 0)"
             elif env_id == "toggle":
                 env = ToggleEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "toggle the red ball"
             elif env_id == "pickup":
-                env = PickupEnv(*args, seed=seed + rank, num_dists=1, **kwargs)
+                env = PickupEnv(
+                    *args,
+                    seed=seed + rank,
+                    num_dists=1,
+                    goal_objects=goal_objects,
+                    **kwargs,
+                )
                 longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
-                env = PickupRedEnv(*args, seed=seed + rank, **kwargs)
+                env = PickupRedEnv(
+                    *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
+                )
                 env = SynonymWrapper(env)
                 longest_mission = "pick-up the crimson phone"
             elif env_id == "plant-animal":
-                del kwargs["goal_objects"]
                 objects = {*PlantAnimalWrapper.replacements.keys()}
                 test_objects = {
                     PlantAnimalWrapper.purple_animal,
@@ -108,13 +122,42 @@ class Trainer(main.Trainer):
                 env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
                 env = PlantAnimalWrapper(env)
                 longest_mission = "pick up the grasshopper"
+            elif env_id == "directions":
+                test_directions = {CardinalDirection.north}
+                kwargs.update(
+                    directions=test_directions
+                    if test
+                    else {*OrdinalDirection, *CardinalDirection} - test_directions
+                )
+                env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "go to northwest corner"
+            elif env_id == "go-and-face":
+                test_directions = {
+                    GoAndFaceDirections(OrdinalDirection.southeast, d)
+                    for d in CardinalDirection
+                }
+                directions = {
+                    GoAndFaceDirections(d1, d2)
+                    for d1, d2 in itertools.product(
+                        [*CardinalDirection, *OrdinalDirection], CardinalDirection
+                    )
+                }
+                kwargs.update(
+                    directions=test_directions if test else directions - test_directions
+                )
+                env = GoAndFaceEnv(*args, seed=seed + rank, **kwargs)
+                longest_mission = "go to northwest corner and face west"
             else:
-                del kwargs["goal_objects"]
                 if env_id == "sequence-paraphrases":
                     env = SequenceEnv(
                         *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
                     )
-                    env = SequenceParaphrasesWrapper(env, test=test)
+                    env = SequenceParaphrasesWrapper(
+                        env,
+                        test=test,
+                        train_wordings=train_wordings.split(","),
+                        test_wordings=test_wordings.split(","),
+                    )
                     longest_mission = "go to (0, 0), having already gone to (0, 0)"
                 elif env_id == "sequence":
                     env = SequenceEnv(
@@ -152,6 +195,8 @@ class Trainer(main.Trainer):
             room_size=args.room_size,
             tokenizer=tokenizer,
             strict=args.strict,
+            train_wordings=args.train_wordings,
+            test_wordings=args.test_wordings,
             **kwargs,
         )
 
