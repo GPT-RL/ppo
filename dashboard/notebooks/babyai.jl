@@ -48,29 +48,36 @@ html"<button onclick='present()'>Present</button>"
 # ╔═╡ b7087c67-0d3f-4c33-9650-1200b3ffbaee
 html"""<style>
 main {
-    max-width: 90vw;
+    max-width: 50vw;
 }
 """
+
+# ╔═╡ 2044fb71-3ee3-4def-9404-48a8ca3c8e9c
+set_default_plot_size(8inch, 8inch)
 
 # ╔═╡ 5cfc0e11-523a-4c99-8797-cf3da0f5367b
 md"""
 # Looking Back
 
 ### Updates from last time
-- Analysis of reproduction of Abbeel results 
-- Questions about whether to "abandon ship"
+- New results on BabyAI domain
 
 ### Goals set last time
-- Work on getting generalization results
-- Start with supervised tasks
+- Develop new environments for testing ability of vanilla RL to generalize using novel outputs from GPT.
+- Fix issues with previous experiments.
 """
 
 # ╔═╡ a323735a-ce8b-431f-b428-8790a95bbe8b
 md"""
 # Overview
-- We tried 4 different experiments, and present the results here.
-  - We will focus on the first two (others are still runnning / pending changes).
-- We have some "GPT tricks" to present from reading some recent papers using frozen language models in applied settings.
+- Improvements on
+  - Synonyms task
+  - Plant-Animal task
+- Negative result on Sequence task
+- Three new experiment proposals
+  - Directions task
+  - Negation task
+  - Colors task
 """
 
 # ╔═╡ 38bb6397-e0bd-4693-8fad-e2bf8ec2b4c9
@@ -92,7 +99,7 @@ md"""
 - Termination function:
   - Upon successful completion of mission
   - Upon expiration of time-limit (dynamically computed to ensure possibility of success)
-  - If agent picks up wrong object on pick-up task
+  - For some tasks, the episode terminates if the agent meets the success condition on the wrong object.
 """
 
 # ╔═╡ dfec2144-f4cf-4fc5-9958-26e7e8112246
@@ -110,7 +117,7 @@ md"""
     - For GPT architecture: encode instruction with GPT-2
 - Concatenate (a), (b), and (c) and feed through
     - Linear layer 
-      - output-size is the `hidden_size` hyperparameter, usually 256 or 512
+      - output-size is the `hidden_size` hyperparameter
     - ReLU
     - In parallel:
       - Project to action distribution with linear layer
@@ -132,19 +139,6 @@ If the pretrained architecture outperforms the random architecture on this task,
   - `phone|cell|mobile` for `phone`
 """
 
-# ╔═╡ d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
-@chain synonyms_df  begin
-	filter(row -> row["train_wpe"] != true, _)
-	filter(row -> row["hidden_size"] == 512, _)
-	# filter(row -> row[x] < 2.5e6, _)
-	plot_df(_)(
-		color="architecture",
-		ygroup="hidden_size",
-		xgroup="embedding_size",
-	)
-end
-
-
 # ╔═╡ a148cea3-b636-4bdf-94b6-ff661843796a
 md"""
 # Plant-Animal Environment
@@ -152,7 +146,7 @@ The purpose of this environment is to test the model's ability to exploit GPT's 
 
 In this task the instruction is always to `pick up the [object]`, but the `[object]` is specified using the name of an exemplar rather than a list of properties (e.g. "pick up the tomato" instead of "pick up the red ball"). Each target object is identified with mutliple exemplars during training (e.g. an object reprented by a red ball in observation-space might be refered to as "tomato" in some training trials and "apple" in other training trials).
 
-The hope is that the agent learns to identify which aspects of GPT's embeddings correlate with the relavent object properties (e.g. "red" and "ball"), thereby improving generalization for unseen objects or categories.
+We hypothesize that the agent learns to identify which aspects of GPT's embeddings correlate with the relavent object properties (e.g. "red" and "ball"), thereby improving generalization for unseen objects or categories.
 
 - Training mission is `pick up the [object]` where object falls into one of 10 categories 
   - (green|orange|white|red) (animal|plant), for example:
@@ -171,96 +165,348 @@ md"""
 # Sequence Paraphrase Environment
 The purpose of this environment is similar to the Plant-Animal environment, but instead of exploiting GPT's semantic knowledge, this envorinment tests the ability to exploit syntactic knowledge.
 
-The hope is that GPT's syntactic knowledge acts as a prior to help the model more easily learn to decompose a sequence of instructions into actions (while respecting the action ordering specified in the instructions).
+The hope was that GPT's syntactic knowledge would act as a prior to help the model more easily learn to decompose a sequence of instructions into actions (while respecting the action ordering specified in the instructions).
 
-- Train on 
-  - `<instr2> after you <instr2>`
-  - `After you <instr1>, <instr2>`
-  - `Before you <instr2>, <instr1>`
-  - `<instr1>, then <instr2>`
-  - `<instr1>. Next, <instr2>`
-  - `<instr2>, having already <past(instr2)>`, where `past(...)` converts `instr2` into past-tense.
-- Test on
-  - `<instr1> before you <instr2>`
+The agent is trained on various expressions of the mission
+> Perform instruction-1, then perform instruction-2
 
-We are having some difficulty getting any of the architectures to fully converge on training for this environment. Currently debugging.
+Instructions are of the kind `Go to (x,y)`, where `x` and `y` indicate row and column respectively. Because initial results were negative, we examined several train sets and test sets in order to better understand the dynamics of learning.
 """
 
-# ╔═╡ bd42e1da-60d7-46b5-9944-ae96b0b8602a
-@chain query([1125]) begin
-	filter(row -> !isnothing(row[test_return]), _)
-	mean_and_std(
-		_, 
-		group_keys=[keys..., x],
-		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
-		stat_key=test_return
-	)
-	DataFrames.transform(_, "randomize_parameters" => (
-		rps -> rps .|> 
-			rp -> @match rp begin
-				true => "untrained"
-				false => "pretrained"
-				nothing => "PPO"
-				x => "$(x)"
-			end
-	) => "architecture")
-	plot_df(_)(
-		color="architecture",
-		ygroup="test_wordings",
-		xgroup="train_wordings",
-	)
-end
+# ╔═╡ f830ef9b-0190-42e9-b086-44284e651bc2
+md"""
+Train set:
+- After you go to (x,y), go to (x,y)
+- Go to (x,y) after you go to (x, y)
+Test set:
+- Before you go to (x,y), go to (x,y)
 
-# ╔═╡ c8597b63-5b43-4359-93ae-d3f8067e8d84
-@chain query([1125]) begin
-	filter(row -> !isnothing(row[test_return]), _)
-	filter(row -> row["train_wordings"] == "before_reverse,after", _)
-	mean_and_std(
-		_, 
-		group_keys=[keys..., x],
-		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
-		stat_key=test_return
-	)
-	DataFrames.transform(_, "randomize_parameters" => (
-		rps -> rps .|> 
-			rp -> @match rp begin
-				true => "untrained"
-				false => "pretrained"
-				nothing => "PPO"
-				x => "$(x)"
-			end
-	) => "architecture")
-	plot_df(_)(
-		color="architecture",
-		ygroup="test_wordings",
-		xgroup="train_wordings",
-	)
-end
+**Assessment**: the agent seems to think that the test phrase "Before you go to (x,y), go to (x,y)" with the superficially similar training phrase "After you go to (x,y), go to (x,y)".
+"""
 
-# ╔═╡ 349bd7b9-1660-4d9c-87d1-0c07bbebcc98
-@chain query([1126]) begin
-	filter(row -> !isnothing(row[test_return]), _)
-	mean_and_std(
-		_, 
-		group_keys=[keys..., x],
-		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
-		stat_key=test_return
-	)
-	DataFrames.transform(_, "randomize_parameters" => (
-		rps -> rps .|> 
-			rp -> @match rp begin
-				true => "untrained"
-				false => "pretrained"
-				nothing => "PPO"
-				x => "$(x)"
-			end
-	) => "architecture")
-	plot_df(_)(
-		color="architecture",
-		ygroup="test_wordings",
-		xgroup="train_wordings",
-	)
-end
+# ╔═╡ ef5062be-47cf-462f-93ac-67eee0931a09
+md"""
+##
+In these quadrants, the test set is indicated by the rotated word along the y-axis and the train set is indicated by the words along the bottom next to the x-axis.
+
+- `once`: Go to (x,y) once you go to (x,y)
+- `once_reverse`: Once you go to (x,y), go to (x,y)
+- `having`: Go to (x,y), having gone to (x,y)
+- `then`: Go to (x,y), then go to (x,y)
+- `after`: Go to (x,y) after you go to (x,y)
+- `after_reverse`: After you go to (x,y), go to (x,y)
+- `before`: Go to (x,y) after you go to (x,y)
+- `before_reverse`: After you go to (x,y), go to (x,y)
+
+**Assessment**: The pretrained architecture generally seems to express *exaggerated* preference but not more accurate preference. The `once`/`after,after_reverse,before,before_reverse` quadrant is especially surprising since apparently the agent identifies "once" more closely with "before" than with "after."
+"""
+
+# ╔═╡ df5e4cef-f2b1-4a18-9a9d-d74bac5cca50
+md"""
+# Text experiments on sequences.
+
+##
+Input:
+> Go to A after you go to B. Which should you go to first? 
+Output (wrong):
+>  A: A is the first one.
+GPT-3 output (wrong):
+> A.
+##
+Input:
+> Go to A, having already gone to B. Which should you go to first? B. 
+>
+> Go to A, then go to B. Which should you go to first? A.
+>
+> Go to A after you go to B. Which should you go to first?
+Output (wrong):
+> A 
+GPT-3 Output (correct):
+> B
+##
+Input:
+> Having already gone to A, go to B. Which should you go to first? A.
+>
+> Go to A, then go to B. Which should you go to first? A.
+>
+> Go to A, having already gone to B. Which should you go to first? B. 
+>
+> Go to A, then go to B. Which should you go to first? A.
+>
+> Go to A after you go to B. Which should you go to first? B
+>
+> Go to A before you go to B. Which should you go to first? A
+>
+> Go to A once you go to B. Which should you go to first? 
+Output (wrong):
+> A
+GPT-3 Output (correct):
+> B
+"""
+
+# ╔═╡ b3c93ec9-14d0-40a5-98f2-d8f8b74242d3
+md"""
+
+# Text experiments on directions.
+##
+Input:
+> North is up. You should go down. Should you go north or south?
+Output (correct):
+> The answer is, you should go south.
+
+##
+Input:
+> North is up. South is down. East is right. West is 
+Output (correct):
+> left.
+
+##
+Input:
+> If south is the opposite direction from north, what is the opposite direction from south?
+Output (sort of right):
+> The answer is that south is the opposite direction from north.
+GPT-3 Output (neither wrong nor right):
+> If east is the opposite direction from west
+
+##
+Input: 
+> South is the opposite direction from north.
+>
+> North is the opposite direction from 
+Output (correct):
+> south.
+
+##
+Input:
+> East is the opposite direction from West. 
+>
+> South is the opposite direction from north.
+>
+> North is the opposite direction from 
+Output (wrong):
+> east.
+GPT-3 Output (correct):
+> south.
+
+##
+Input:
+> East is the opposite direction from West.
+> 
+> West is the opposite direction from East.
+>
+> South is the opposite direction from north.
+>
+> North is the opposite direction from
+Output (correct):
+> south.
+
+##
+Input:
+> Southwest is between south and west.
+>
+> What is between north and east?
+>
+Output (wrong):
+> The answer is that the answer is that the answer is that the answer is that
+GPT-3 output (wrong):
+> The answer is: nothing.
+
+##
+Input:
+> Southwest is between south and west.
+>
+> What is between south and west?
+Output (not quite):
+> The Southwest is between north and east.
+GPT-3 Output (wrong):
+> East.
+
+##
+Input:
+> Northeast is between north and east.
+>
+> Southwest is between south and west.
+>
+> Northwest is between
+Output (wrong):
+> north and east.
+GPT-3 output (correct):
+> north and west.
+"""
+
+# ╔═╡ 886f5207-45c8-49bf-960f-a9b20694b64f
+md"""
+# Negation text experiments
+##
+Input:
+> There is a blue box and a red box. Which box is not a red box? 
+Output (correct):
+> The blue box is the box that is not a red box.
+##
+Input:
+> There is a blue box and a red box. Which box is not a blue box? 
+Output (not quite):
+> The blue box is the box that is not a red box.
+##
+Input:
+> You should go left or right. You should not go left. You should go 
+Output (correct):
+> right.
+##
+Input:
+> You should go left or right. You should not go right. You should go 
+Output (correct):
+> left.
+"""
+
+# ╔═╡ d37ed09f-7f89-4bed-acc8-ba9ec083c3d6
+md"""
+# Color text experiments
+##
+Input:
+> Orange is between red and yellow.
+>
+> Green is between blue and yellow.
+>
+> Purple is between 
+Output (wrong):
+> orange and yellow.
+##
+Input:
+> red, orange, yellow, green, blue, 
+Output (correct):
+> purple, pink, red, blue, magenta, cyan, white, black,
+##
+Input:
+> red, orange,  
+Output:
+> and yellow.
+##
+Input:
+> red, orange, yellow,  
+Output (wrong):
+> and red.
+GPT-3 Output (correct):
+> green, blue, indigo, and violet.
+##
+Input:
+> red, orange, yellow, green,
+Output (correct):
+> blue, purple, and red.
+##
+Input:
+> red + yellow = orange
+>
+> red + blue = purple
+> 
+> blue + yellow =
+Output (correct):
+> green
+>
+> green + yellow = blue
+>
+> blue + red = purple
+>
+> red + blue
+##
+Input:
+> orange + purple = red
+>
+> purple + green = blue
+>
+> green + orange = 
+Output (correct):
+> yellow
+>
+> orange + yellow = green
+>
+> orange + blue = blue
+>
+> orange + purple
+
+##
+Input:
+> red + yellow = orange
+
+> red + blue = 
+Output (wrong):
+> green
+>
+> red + purple = blue
+>
+> red + green = yellow
+>
+> red + purple = orange
+>
+> red
+GPT-3 Output (correct):
+> purple
+
+> red + green = brown
+## 
+Input:
+> red + yellow = orange
+>
+> yellow + blue = 
+Output (wrong):
+> red
+>
+> blue + green = green
+>
+> green + blue = blue
+>
+> blue + red = red
+GPT-3 Output (correct):
+> green
+>
+> green + red = brown
+"""
+
+# ╔═╡ 644e556b-6db8-43da-afb0-c95d457dc088
+md"""
+# New experiments
+## Directions tasks:
+Train: 
+> Go to the (north|south|east) wall
+Test:
+> Go to the west wall
+
+or
+
+Train:
+> Go to the (north|south|east|west|northeast|southeast) wall
+Test:
+> Go to the (northwest|southwest) wall
+
+or
+
+Train:
+> Go to the (north|south|east|west) wall and look (north|south|east|west)
+Hold out combinations for testing.
+
+## Negation tasks:
+Train:
+> Go to the (red|blue) box
+Test:
+> Go to the box that is not (red|blue)
+
+## Colors task
+This task must use an RGB (as opposed to symbolic) representation of the environment.
+
+Train:
+> Go to the (yellow|green|blue|purple|red) box
+Test:
+> Go to the orange box
+"""
+
+# ╔═╡ 73ba54ae-cba0-473d-883e-08fce583160e
+md"""
+# To do
+- make sure baseline trains fully
+- get graphs plotting generalization performance vs. number of tasks trained.
+- Communicate dynamics in language
+- other modes of negation (away, opposite)
+"""
 
 # ╔═╡ 80c04a29-612c-4ee9-90f6-147f5eed5a1c
 md"""
@@ -415,7 +661,7 @@ function query(sweep_ids::Vector{Int})
 end
 
 # ╔═╡ 58707566-c01e-40b5-ba95-e21b3b0872bf
-plant_animal_df = query([1111]); #[1069, 1068])
+plant_animal_df = query([1111]);
 
 # ╔═╡ 37f04425-7cdd-4001-a598-06ac6a6be0e6
 x = "step"
@@ -466,23 +712,32 @@ end
 function plot_df(df::DataFrame; y=test_return,title_keywords::Vector{String}=String[])
 	# yintercept = Dict("mnist" => 98.0, "xor" => 100.0)[dataset]
 	title = join(["$(keyword): $(first(df)[keyword])" for keyword in title_keywords], ", ")
+	error_bar = "ymin" in names(df) && "ymax" in names(df)
 	function _plot(; kwargs...)
 		@chain df begin
 			Gadfly.with_theme(:default) do
 				Gadfly.plot(
 					_,
 					x=x, y=y, 
-					ymin="ymin", ymax="ymax",
-					# Scale.y_continuous(minvalue=0, maxvalue=1),
-					# yintercept=[yintercept],
-					# linestyle="pretrained",
+
 					Scale.color_discrete(preserve_order=false),
 					Guide.title(title),
-					Geom.subplot_grid(
-						Geom.line, 
-						Geom.ribbon, 			
-						# Geom.hline(style=:dot,color="#b88fff")
-					);
+
+					(
+						(haskey(kwargs, :xgroup) | haskey(kwargs, :ygroup)) 
+						? [
+							Geom.subplot_grid(
+								Geom.line, 
+								(error_bar ? [Geom.ribbon] : [])..., 		
+							)
+						]
+						: (error_bar ? [Geom.line, Geom.ribbon] : [Geom.line])
+					)...;
+					(
+						("ymin" in names(_) && "ymax" in names(_)) 
+						? Dict(:ymin=>"ymin", :ymax=>"ymax") 
+						: Dict()
+					)...,
 					kwargs...,
 
 				) |> HTMLDocument
@@ -492,8 +747,24 @@ function plot_df(df::DataFrame; y=test_return,title_keywords::Vector{String}=Str
 	_plot
 end
 
+# ╔═╡ 6e57be2a-324d-4790-9b97-252d944f856c
+Dict("a"=>1)
+
 # ╔═╡ 642f7e89-7b21-4721-97d9-b20c7e2e5567
 synonyms_df = get_data([1019, 1036]);
+
+# ╔═╡ d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
+@chain synonyms_df  begin
+	filter(row -> row["train_wpe"] != true, _)
+	filter(row -> row["hidden_size"] == 512, _)
+	# filter(row -> row[x] < 2.5e6, _)
+	plot_df(_)(
+		color="architecture",
+		ygroup="hidden_size",
+		xgroup="embedding_size",
+	)
+end
+
 
 # ╔═╡ 8275f4fb-b7ee-4805-b500-9827379d3886
 keys = [
@@ -505,6 +776,64 @@ keys = [
 	"sweep_id",
 	"hidden_size",
 ];
+
+# ╔═╡ bd42e1da-60d7-46b5-9944-ae96b0b8602a
+@chain vcat(
+	query([1127]),
+	# filter(
+	# 	row -> row["train_wordings"] in ["after,after_reverse", "before,before_reverse"], 
+	# 	query([1126])
+	# )
+	) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	filter(row -> occursin("once",  row["test_wordings"]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., "train_wordings", "test_wordings", x],
+		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		ygroup="test_wordings",
+		xgroup="train_wordings",
+	)
+end
+
+# ╔═╡ 21d57cbf-1df4-4967-b8ea-267e30f2e48b
+@chain query([1134]) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		# group="run_id"
+		# ygroup="test_wordings",
+		# xgroup="train_wordings",
+	)
+end
 
 # ╔═╡ 81f994ee-f572-400b-96e1-b0f07a8df4ec
 pa_df = query([1045, 1048]) ;
@@ -590,6 +919,32 @@ end
 
 # ╔═╡ f5ad1614-7371-4cef-b0cc-477f0c1ac4e7
 train_return = "episode return"
+
+# ╔═╡ b16db565-7d78-491a-86aa-2a69fa2444ef
+@chain query([1055]) begin
+	filter(row -> !isnothing(row[train_return]), _)
+	# mean_and_std(
+	# 	_, 
+	# 	group_keys=[keys..., x],
+	# 	keep_keys=[keys..., "run_id", "host_machine"],
+	# 	stat_key=test_return
+	# )
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_; y=train_return)(
+		color="hidden_size",
+		group="run_id"
+		# ygroup="test_wordings",
+		# xgroup="train_wordings",
+	)
+end
 
 # ╔═╡ ca92ac10-a1dc-4245-af7a-737083ca5d05
 @chain plant_animal_df begin
@@ -2135,6 +2490,7 @@ version = "0.9.1+5"
 # ╔═╡ Cell order:
 # ╟─82de7854-3ac9-435a-ad34-c59fb8262bfe
 # ╠═b7087c67-0d3f-4c33-9650-1200b3ffbaee
+# ╠═2044fb71-3ee3-4def-9404-48a8ca3c8e9c
 # ╟─5cfc0e11-523a-4c99-8797-cf3da0f5367b
 # ╟─a323735a-ce8b-431f-b428-8790a95bbe8b
 # ╟─38bb6397-e0bd-4693-8fad-e2bf8ec2b4c9
@@ -2142,12 +2498,20 @@ version = "0.9.1+5"
 # ╟─a295de65-0329-49ca-96fa-0c87b60cc907
 # ╠═d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
 # ╟─a148cea3-b636-4bdf-94b6-ff661843796a
-# ╠═da1ddaaf-a2f8-40ef-ab82-d9703973d11f
+# ╟─da1ddaaf-a2f8-40ef-ab82-d9703973d11f
 # ╠═58707566-c01e-40b5-ba95-e21b3b0872bf
 # ╟─c6379954-066d-4d70-9255-5bfb24b102eb
-# ╠═bd42e1da-60d7-46b5-9944-ae96b0b8602a
-# ╠═c8597b63-5b43-4359-93ae-d3f8067e8d84
-# ╠═349bd7b9-1660-4d9c-87d1-0c07bbebcc98
+# ╟─f830ef9b-0190-42e9-b086-44284e651bc2
+# ╟─ef5062be-47cf-462f-93ac-67eee0931a09
+# ╟─bd42e1da-60d7-46b5-9944-ae96b0b8602a
+# ╠═21d57cbf-1df4-4967-b8ea-267e30f2e48b
+# ╠═b16db565-7d78-491a-86aa-2a69fa2444ef
+# ╟─df5e4cef-f2b1-4a18-9a9d-d74bac5cca50
+# ╟─b3c93ec9-14d0-40a5-98f2-d8f8b74242d3
+# ╟─886f5207-45c8-49bf-960f-a9b20694b64f
+# ╟─d37ed09f-7f89-4bed-acc8-ba9ec083c3d6
+# ╟─644e556b-6db8-43da-afb0-c95d457dc088
+# ╠═73ba54ae-cba0-473d-883e-08fce583160e
 # ╟─80c04a29-612c-4ee9-90f6-147f5eed5a1c
 # ╟─6010292d-aae5-421d-b45f-99db6e564cc6
 # ╟─dcef07bf-684d-440c-86a5-742db737f9d1
@@ -2159,6 +2523,7 @@ version = "0.9.1+5"
 # ╠═2f138caf-a07a-4760-b325-5b2198dc5d84
 # ╠═51d9223a-08e6-11ec-17f9-af13c3a79465
 # ╠═24ddebdf-f619-46da-b1ca-0357aa709ce7
+# ╠═6e57be2a-324d-4790-9b97-252d944f856c
 # ╠═642f7e89-7b21-4721-97d9-b20c7e2e5567
 # ╠═8275f4fb-b7ee-4805-b500-9827379d3886
 # ╠═81f994ee-f572-400b-96e1-b0f07a8df4ec

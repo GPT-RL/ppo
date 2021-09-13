@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.15.1
+# v0.16.0
 
 using Markdown
 using InteractiveUtils
@@ -14,6 +14,8 @@ begin
 	using CSV
 
 	using HTTP
+	
+	using Dates
 
 	using Tables
 	using DataFrames
@@ -40,6 +42,448 @@ begin
 	end
 end
 
+# ╔═╡ 82de7854-3ac9-435a-ad34-c59fb8262bfe
+html"<button onclick='present()'>Present</button>"
+
+# ╔═╡ b7087c67-0d3f-4c33-9650-1200b3ffbaee
+html"""<style>
+main {
+    max-width: 50vw;
+}
+"""
+
+# ╔═╡ 2044fb71-3ee3-4def-9404-48a8ca3c8e9c
+set_default_plot_size(8inch, 8inch)
+
+# ╔═╡ a295de65-0329-49ca-96fa-0c87b60cc907
+md"""
+# Synonyms environment
+The goal of this environment is to test zero-shot generalization to instructions expressed using synonyms (i.e. the vocabulary used to express instructions at test-time contains synonyms of the vocabulary used during training).
+
+If the pretrained architecture outperforms the random architecture on this task, then it demonstrates that the agent was able to extract (at least some) linguistic knowledge from GPT.
+
+- For training, mission is: `Pick-up red ball|box|phone`
+- For testing, randomly substitute (using uniform distribution)
+  - `pick-up|take|grab|get` for `pick-up`
+  - `red|crimson` for `red`
+  - `box|carton|package` for `box`
+  - `phone|cell|mobile` for `phone`
+"""
+
+# ╔═╡ a148cea3-b636-4bdf-94b6-ff661843796a
+md"""
+# Plant-Animal Environment
+The purpose of this environment is to test the model's ability to exploit GPT's knowledge about semantic similarity between objects.
+
+In this task the instruction is always to `pick up the [object]`, but the `[object]` is specified using the name of an exemplar rather than a list of properties (e.g. "pick up the tomato" instead of "pick up the red ball"). Each target object is identified with mutliple exemplars during training (e.g. an object reprented by a red ball in observation-space might be refered to as "tomato" in some training trials and "apple" in other training trials).
+
+We hypothesize that the agent learns to identify which aspects of GPT's embeddings correlate with the relavent object properties (e.g. "red" and "ball"), thereby improving generalization for unseen objects or categories.
+
+- Training mission is `pick up the [object]` where object falls into one of 10 categories 
+  - (green|orange|white|red) (animal|plant), for example:
+    - red animal might be `rooster`
+    - orange plant might be `pumpkin`
+  - There are also black animals (e.g. `raven`) and purple plants (e.g. `eggplant`).
+  - observation encodes object by color and type, e.g. color channel would be red and type channel would be animal for rooster.
+- Testing mission is one of
+  - `pick up the black plant` 
+  - `pick up the purple animal`
+- Agent must infer underlying properties (color and type) in order to successfully generalize to test set.
+"""
+
+# ╔═╡ c6379954-066d-4d70-9255-5bfb24b102eb
+md"""
+# Sequence Paraphrase Environment
+The purpose of this environment is similar to the Plant-Animal environment, but instead of exploiting GPT's semantic knowledge, this envorinment tests the ability to exploit syntactic knowledge.
+
+The hope was that GPT's syntactic knowledge would act as a prior to help the model more easily learn to decompose a sequence of instructions into actions (while respecting the action ordering specified in the instructions).
+
+The agent is trained on various expressions of the mission
+> Perform instruction-1, then perform instruction-2
+
+Instructions are of the kind `Go to (x,y)`, where `x` and `y` indicate row and column respectively. Because initial results were negative, we examined several train sets and test sets in order to better understand the dynamics of learning.
+"""
+
+# ╔═╡ f830ef9b-0190-42e9-b086-44284e651bc2
+md"""
+Train set:
+- After you go to (x,y), go to (x,y)
+- Go to (x,y) after you go to (x, y)
+Test set:
+- Before you go to (x,y), go to (x,y)
+
+**Assessment**: the agent seems to think that the test phrase "Before you go to (x,y), go to (x,y)" with the superficially similar training phrase "After you go to (x,y), go to (x,y)".
+"""
+
+# ╔═╡ ef5062be-47cf-462f-93ac-67eee0931a09
+md"""
+##
+In these quadrants, the test set is indicated by the rotated word along the y-axis and the train set is indicated by the words along the bottom next to the x-axis.
+
+- `once`: Go to (x,y) once you go to (x,y)
+- `once_reverse`: Once you go to (x,y), go to (x,y)
+- `having`: Go to (x,y), having gone to (x,y)
+- `then`: Go to (x,y), then go to (x,y)
+- `after`: Go to (x,y) after you go to (x,y)
+- `after_reverse`: After you go to (x,y), go to (x,y)
+- `before`: Go to (x,y) after you go to (x,y)
+- `before_reverse`: After you go to (x,y), go to (x,y)
+
+**Assessment**: The pretrained architecture generally seems to express *exaggerated* preference but not more accurate preference. The `once`/`after,after_reverse,before,before_reverse` quadrant is especially surprising since apparently the agent identifies "once" more closely with "before" than with "after."
+"""
+
+# ╔═╡ df5e4cef-f2b1-4a18-9a9d-d74bac5cca50
+md"""
+# Text experiments on sequences.
+
+##
+Input:
+> Go to A after you go to B. Which should you go to first? 
+Output (wrong):
+>  A: A is the first one.
+GPT-3 output (wrong):
+> A.
+##
+Input:
+> Go to A, having already gone to B. Which should you go to first? B. 
+>
+> Go to A, then go to B. Which should you go to first? A.
+>
+> Go to A after you go to B. Which should you go to first?
+Output (wrong):
+> A 
+GPT-3 Output (correct):
+> B
+##
+Input:
+> Having already gone to A, go to B. Which should you go to first? A.
+>
+> Go to A, then go to B. Which should you go to first? A.
+>
+> Go to A, having already gone to B. Which should you go to first? B. 
+>
+> Go to A, then go to B. Which should you go to first? A.
+>
+> Go to A after you go to B. Which should you go to first? B
+>
+> Go to A before you go to B. Which should you go to first? A
+>
+> Go to A once you go to B. Which should you go to first? 
+Output (wrong):
+> A
+GPT-3 Output (correct):
+> B
+"""
+
+# ╔═╡ b3c93ec9-14d0-40a5-98f2-d8f8b74242d3
+md"""
+
+# Text experiments on directions.
+##
+Input:
+> North is up. You should go down. Should you go north or south?
+Output (correct):
+> The answer is, you should go south.
+
+##
+Input:
+> North is up. South is down. East is right. West is 
+Output (correct):
+> left.
+
+##
+Input:
+> If south is the opposite direction from north, what is the opposite direction from south?
+Output (sort of right):
+> The answer is that south is the opposite direction from north.
+GPT-3 Output (neither wrong nor right):
+> If east is the opposite direction from west
+
+##
+Input: 
+> South is the opposite direction from north.
+>
+> North is the opposite direction from 
+Output (correct):
+> south.
+
+##
+Input:
+> East is the opposite direction from West. 
+>
+> South is the opposite direction from north.
+>
+> North is the opposite direction from 
+Output (wrong):
+> east.
+GPT-3 Output (correct):
+> south.
+
+##
+Input:
+> East is the opposite direction from West.
+> 
+> West is the opposite direction from East.
+>
+> South is the opposite direction from north.
+>
+> North is the opposite direction from
+Output (correct):
+> south.
+
+##
+Input:
+> Southwest is between south and west.
+>
+> What is between north and east?
+>
+Output (wrong):
+> The answer is that the answer is that the answer is that the answer is that
+GPT-3 output (wrong):
+> The answer is: nothing.
+
+##
+Input:
+> Southwest is between south and west.
+>
+> What is between south and west?
+Output (not quite):
+> The Southwest is between north and east.
+GPT-3 Output (wrong):
+> East.
+
+##
+Input:
+> Northeast is between north and east.
+>
+> Southwest is between south and west.
+>
+> Northwest is between
+Output (wrong):
+> north and east.
+GPT-3 output (correct):
+> north and west.
+"""
+
+# ╔═╡ 886f5207-45c8-49bf-960f-a9b20694b64f
+md"""
+# Negation text experiments
+##
+Input:
+> There is a blue box and a red box. Which box is not a red box? 
+Output (correct):
+> The blue box is the box that is not a red box.
+##
+Input:
+> There is a blue box and a red box. Which box is not a blue box? 
+Output (not quite):
+> The blue box is the box that is not a red box.
+##
+Input:
+> You should go left or right. You should not go left. You should go 
+Output (correct):
+> right.
+##
+Input:
+> You should go left or right. You should not go right. You should go 
+Output (correct):
+> left.
+"""
+
+# ╔═╡ d37ed09f-7f89-4bed-acc8-ba9ec083c3d6
+md"""
+# Color text experiments
+##
+Input:
+> Orange is between red and yellow.
+>
+> Green is between blue and yellow.
+>
+> Purple is between 
+Output (wrong):
+> orange and yellow.
+##
+Input:
+> red, orange, yellow, green, blue, 
+Output (correct):
+> purple, pink, red, blue, magenta, cyan, white, black,
+##
+Input:
+> red, orange,  
+Output:
+> and yellow.
+##
+Input:
+> red, orange, yellow,  
+Output (wrong):
+> and red.
+GPT-3 Output (correct):
+> green, blue, indigo, and violet.
+##
+Input:
+> red, orange, yellow, green,
+Output (correct):
+> blue, purple, and red.
+##
+Input:
+> red + yellow = orange
+>
+> red + blue = purple
+> 
+> blue + yellow =
+Output (correct):
+> green
+>
+> green + yellow = blue
+>
+> blue + red = purple
+>
+> red + blue
+##
+Input:
+> orange + purple = red
+>
+> purple + green = blue
+>
+> green + orange = 
+Output (correct):
+> yellow
+>
+> orange + yellow = green
+>
+> orange + blue = blue
+>
+> orange + purple
+
+##
+Input:
+> red + yellow = orange
+
+> red + blue = 
+Output (wrong):
+> green
+>
+> red + purple = blue
+>
+> red + green = yellow
+>
+> red + purple = orange
+>
+> red
+GPT-3 Output (correct):
+> purple
+
+> red + green = brown
+## 
+Input:
+> red + yellow = orange
+>
+> yellow + blue = 
+Output (wrong):
+> red
+>
+> blue + green = green
+>
+> green + blue = blue
+>
+> blue + red = red
+GPT-3 Output (correct):
+> green
+>
+> green + red = brown
+"""
+
+# ╔═╡ 644e556b-6db8-43da-afb0-c95d457dc088
+md"""
+# New experiments
+## Directions tasks:
+Train: 
+> Go to the (north|south|east) wall
+Test:
+> Go to the west wall
+
+or
+
+Train:
+> Go to the (north|south|east|west|northeast|southeast) wall
+Test:
+> Go to the (northwest|southwest) wall
+
+or
+
+Train:
+> Go to the (north|south|east|west) wall and look (north|south|east|west)
+Hold out combinations for testing.
+
+## Negation tasks:
+Train:
+> Go to the (red|blue) box
+Test:
+> Go to the box that is not (red|blue)
+
+## Colors task
+This task must use an RGB (as opposed to symbolic) representation of the environment.
+
+Train:
+> Go to the (yellow|green|blue|purple|red) box
+Test:
+> Go to the orange box
+"""
+
+# ╔═╡ 73ba54ae-cba0-473d-883e-08fce583160e
+md"""
+# To do
+- make sure baseline trains fully
+- get graphs plotting generalization performance vs. number of tasks trained.
+- Communicate dynamics in language
+- other modes of negation (away, opposite)
+"""
+
+# ╔═╡ 80c04a29-612c-4ee9-90f6-147f5eed5a1c
+md"""
+# Sequence Extension Environment
+This environment test the ability of the agent to generalize to instructions through nesting of syntactic trees.
+- Train on:
+  - `<instr1>. Then, <instr2>.`
+  - `<instr2> after you, <instr1>.`
+- Test on:
+  - `<instr2> after you <instr1>. Then <instr3>`.
+This environment is not yet implemented. It is likely the agent will need to train on sequences length 2, 3, and perhaps 4 before being able to generalize to longer sequences.
+"""
+
+# ╔═╡ 6010292d-aae5-421d-b45f-99db6e564cc6
+md"""
+# GPT Tricks Notes
+[Representing Images as GPT Inputs](https://arxiv.org/pdf/2106.13884.pdf):
+- Images -> Encoder -> Flatten -> Linear Map -> Reshape to get Embeddings.
+  - (This is the same approach we used initially.
+- For their multimodal few-shot learning task they tried n_embeddings = 1, 2, and 4.
+  - 2 worked the best, but they note that this is likely sensitive to architecture.
+
+[Relative Position Representations](https://arxiv.org/pdf/1803.02155.pdf)
+- Improves generalization, allows more interleaving of multimodal information. E.g. Improves generalization from text-image-text to image-text-image, image-image-text, etc. https://arxiv.org/pdf/2106.13884.pdf
+- Replaces GPT’s positional embeddings? Or not? Unclear. If not, then positional embeddings are NOT fine-tuned in this paper.
+
+[Prefix Tuning](https://arxiv.org/pdf/2101.00190v1.pdf):
+- Learn a task-specific prefix of embeddings that is fixed (reused across all inputs).
+- Backprop thru frozen LM to obtain prefix.
+
+[Do Fine-tune LM, but only the bias terms](https://arxiv.org/pdf/2106.13353.pdf):
+- This work was using masked LMs (RoBERTa; ALBERT), not autoregressive (GPT).
+- Authors conjecture that this method works better for masked LMs vs. autogressive LMs (compared to prefix tuning).
+- Authors note that other work shows that prefix tuning is less effective with smaller LMs (vs. bigger LMs).
+
+Also interesting:
+[Linguistic Knowledge and Transferability of Contextual Representations](https://arxiv.org/pdf/1903.08855.pdf)
+- We find that linear models trained on top of frozen contextual representations are competitive with state-of-the-art task-specific models in many cases, but fail on tasks requiring fine-grained linguistic knowledge (e.g., conjunct identification).
+- “For any given task, pretraining on a closely related task yields better performance than language model pretraining (which is better on average) when the pretraining dataset is fixed. However, language model pretraining on more data gives the best results.”
+"""
+
+# ╔═╡ dcef07bf-684d-440c-86a5-742db737f9d1
+md"""
+# Next steps
+"""
+
 # ╔═╡ 3cd1bee8-c26f-47c3-9775-f6f0619f8aaf
 function mean_and_std(
 		df::DataFrame; 
@@ -58,7 +502,7 @@ function mean_and_std(
 				])
 		DataFrames.transform(_, [stat_key, "$(stat_key)_std"] => (
 			(means, stds) -> 
-				[map((m,s)-> [m - s, m + s], means, stds)...]
+				[map((m,s)-> [max(0, m - s), min(1, m + s)], means, stds)...]
 		) => ["ymin", "ymax"])
 	end
 end
@@ -85,7 +529,8 @@ function run_query(query::String, variables::Dict{String, Any}, key::String)
 				"run_id" => d["run_id"],
 				"sweep_id" => d["run"]["sweep_id"],
 				d["log"]...,
-				d["run"]["metadata"]["parameters"]...
+				d["run"]["metadata"]["parameters"]...,
+				"host_machine" => d["run"]["metadata"]["host_machine"],
 				), _)
 
 		map(d -> Dict(
@@ -105,7 +550,6 @@ function run_query(query::String, variables::Dict{String, Any}, key::String)
 								(k2, get(d, k2, v2)),
 								]]...,				
 				[name => get(d, name, false) for name in [
-							"randomize_parameters"
 						]]...,
 				[name => get(d, name, nothing) for name in [
 							"action loss", 
@@ -113,13 +557,17 @@ function run_query(query::String, variables::Dict{String, Any}, key::String)
 							"episode return", 
 							"fps", 
 							"gradient norm", 
+							"randomize_parameters",
 							"save count",
 							"value loss",
 							"test episode return",
 							"train_wpe",
 							"train_ln",
 							"data_parallel",
-							"linguistic_analysis_save_interval"
+							"linguistic_analysis_save_interval",
+							"recurrent",
+							"recurrent_policy",
+							"record_interval",
 						]]...,
 				), _)
 			vcat(DataFrame.(_)...)
@@ -143,11 +591,14 @@ function query(sweep_ids::Vector{Int})
 	)
 end
 
+# ╔═╡ 58707566-c01e-40b5-ba95-e21b3b0872bf
+plant_animal_df = query([1111]);
+
 # ╔═╡ 37f04425-7cdd-4001-a598-06ac6a6be0e6
 x = "step"
 
 # ╔═╡ 2f138caf-a07a-4760-b325-5b2198dc5d84
-y = "test episode return"
+test_return = "test episode return"
 
 # ╔═╡ 51d9223a-08e6-11ec-17f9-af13c3a79465
 function get_data(sweep_ids::Vector{Int64}; 
@@ -162,14 +613,23 @@ function get_data(sweep_ids::Vector{Int64};
 	]
 	)
 	mnist0 = @chain query(sweep_ids) begin
-		filter(row -> !isnothing(row[y]), _)
+		filter(row -> !isnothing(row[test_return]), _)
 		mean_and_std(
 			_, 
 			group_keys=[keys..., x],
-			keep_keys=keys,
-			stat_key=y
+			keep_keys=[keys..., "run_id", "host_machine"],
+			stat_key=test_return
 		)
-		transform(_, "randomize_parameters" => (x -> .!x) => "pretrained")
+		# transform(_, "randomize_parameters" => (x -> .!x) => "pretrained")
+		DataFrames.transform(_, "randomize_parameters" => (
+			rps -> rps .|> 
+				rp -> @match rp begin
+					true => "untrained"
+					false => "pretrained"
+					nothing => "PPO"
+					x => "$(x)"
+				end
+		) => "architecture")
 		# rename(
 		# 	_, 
 		# 	"train_wpe" => "train positional embeddings", 
@@ -179,35 +639,36 @@ function get_data(sweep_ids::Vector{Int64};
 	end
 end
 
-# ╔═╡ c53101de-15a5-417c-bfd9-c1f032f14804
-df =  get_data([1013, 1014])
-
-# ╔═╡ 75afb089-21a6-4f76-936d-a329a8d4dceb
-train_wpe = filter(row -> row["train_wpe"] != false, df)
-
-# ╔═╡ 7efb604c-853a-4e4b-a98b-4c31a372b4ae
-freeze_wpe = filter(row -> row["train_wpe"] != true, df)
-
 # ╔═╡ 24ddebdf-f619-46da-b1ca-0357aa709ce7
-function plot_df(df::DataFrame; title_keywords::Vector{String}=String[])
+function plot_df(df::DataFrame; y=test_return,title_keywords::Vector{String}=String[])
 	# yintercept = Dict("mnist" => 98.0, "xor" => 100.0)[dataset]
 	title = join(["$(keyword): $(first(df)[keyword])" for keyword in title_keywords], ", ")
+	error_bar = "ymin" in names(df) && "ymax" in names(df)
 	function _plot(; kwargs...)
 		@chain df begin
 			Gadfly.with_theme(:default) do
 				Gadfly.plot(
 					_,
 					x=x, y=y, 
-					ymin="ymin", ymax="ymax",
-					# yintercept=[yintercept],
-					# linestyle="pretrained",
+
 					Scale.color_discrete(preserve_order=false),
 					Guide.title(title),
-					Geom.subplot_grid(
-						Geom.line, 
-						Geom.ribbon, 			
-						# Geom.hline(style=:dot,color="#b88fff")
-					);
+
+					(
+						(haskey(kwargs, :xgroup) | haskey(kwargs, :ygroup)) 
+						? [
+							Geom.subplot_grid(
+								Geom.line, 
+								(error_bar ? [Geom.ribbon] : [])..., 		
+							)
+						]
+						: (error_bar ? [Geom.line, Geom.ribbon] : [Geom.line])
+					)...;
+					(
+						("ymin" in names(_) && "ymax" in names(_)) 
+						? Dict(:ymin=>"ymin", :ymax=>"ymax") 
+						: Dict()
+					)...,
 					kwargs...,
 
 				) |> HTMLDocument
@@ -217,21 +678,280 @@ function plot_df(df::DataFrame; title_keywords::Vector{String}=String[])
 	_plot
 end
 
-# ╔═╡ 29cb6383-44d5-4189-a132-53f420129860
-plot_df(freeze_wpe)(
-	color="sweep_id",
-	ygroup="hidden_size",
+# ╔═╡ 6e57be2a-324d-4790-9b97-252d944f856c
+Dict("a"=>1)
+
+# ╔═╡ 642f7e89-7b21-4721-97d9-b20c7e2e5567
+synonyms_df = get_data([1019, 1036]);
+
+# ╔═╡ d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
+@chain synonyms_df  begin
+	filter(row -> row["train_wpe"] != true, _)
+	filter(row -> row["hidden_size"] == 512, _)
+	# filter(row -> row[x] < 2.5e6, _)
+	plot_df(_)(
+		color="architecture",
+		ygroup="hidden_size",
+		xgroup="embedding_size",
+	)
+end
+
+
+# ╔═╡ 8275f4fb-b7ee-4805-b500-9827379d3886
+keys = [
+	"randomize_parameters",
+	"train_wpe",
+	"train_ln",
+	"embedding_size",
+	"lr",
+	"sweep_id",
+	"hidden_size",
+];
+
+# ╔═╡ bd42e1da-60d7-46b5-9944-ae96b0b8602a
+@chain vcat(
+	query([1127]),
+	# filter(
+	# 	row -> row["train_wordings"] in ["after,after_reverse", "before,before_reverse"], 
+	# 	query([1126])
+	# )
+	) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	filter(row -> occursin("once",  row["test_wordings"]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., "train_wordings", "test_wordings", x],
+		keep_keys=[keys..., "run_id", "host_machine", "train_wordings", "test_wordings"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		ygroup="test_wordings",
+		xgroup="train_wordings",
+	)
+end
+
+# ╔═╡ 21d57cbf-1df4-4967-b8ea-267e30f2e48b
+@chain query([1134]) begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_)(
+		color="architecture",
+		# group="run_id"
+		# ygroup="test_wordings",
+		# xgroup="train_wordings",
+	)
+end
+
+# ╔═╡ 81f994ee-f572-400b-96e1-b0f07a8df4ec
+pa_df = query([1045, 1048]) ;
+
+# ╔═╡ 8ac97bea-be54-4337-9ec7-c5645a35e2b2
+pa_df_filtered = @chain plant_animal_df begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	# filter(row -> row["step"] < 1e7, _)
+	# filter(row -> row["embedding_size"] == "small", _)
+end
+
+# ╔═╡ da1ddaaf-a2f8-40ef-ab82-d9703973d11f
+plot_df(pa_df_filtered)(
+	color="architecture",
+	# xgroup="hidden_size",
 	xgroup="embedding_size",
-	# group="run_id"
 )
 
-# ╔═╡ aa39d49a-a311-4d86-844c-815dd13d23c0
-plot_df(train_wpe)(
-	color="sweep_id",
-	ygroup="hidden_size",
+# ╔═╡ b6ccd2ad-e4e4-4df9-9fe4-9752e26257c3
+@chain plant_animal_df begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+					plot_df(_)(
+	color="architecture",
+	# xgroup="hidden_size",
 	xgroup="embedding_size",
-	# group="run_id"
-)
+		)
+end
+
+# ╔═╡ a2010695-9d84-411a-9266-f5160365c686
+@chain plant_animal_df begin
+	filter(row -> !isnothing(row[test_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=test_return
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+					plot_df(_)(
+	xgroup="architecture",
+	# xgroup="hidden_size",
+	color="embedding_size",
+		)
+end
+
+# ╔═╡ f5ad1614-7371-4cef-b0cc-477f0c1ac4e7
+train_return = "episode return"
+
+# ╔═╡ b16db565-7d78-491a-86aa-2a69fa2444ef
+@chain query([1055]) begin
+	filter(row -> !isnothing(row[train_return]), _)
+	# mean_and_std(
+	# 	_, 
+	# 	group_keys=[keys..., x],
+	# 	keep_keys=[keys..., "run_id", "host_machine"],
+	# 	stat_key=test_return
+	# )
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+	plot_df(_; y=train_return)(
+		color="hidden_size",
+		group="run_id"
+		# ygroup="test_wordings",
+		# xgroup="train_wordings",
+	)
+end
+
+# ╔═╡ ca92ac10-a1dc-4245-af7a-737083ca5d05
+@chain plant_animal_df begin
+	filter(row -> !isnothing(row[train_return]), _)
+	mean_and_std(
+		_, 
+		group_keys=[keys..., x],
+		keep_keys=[keys..., "run_id", "host_machine"],
+		stat_key=train_return,
+	)
+	DataFrames.transform(_, "randomize_parameters" => (
+		rps -> rps .|> 
+			rp -> @match rp begin
+				true => "untrained"
+				false => "pretrained"
+				nothing => "PPO"
+				x => "$(x)"
+			end
+	) => "architecture")
+					Gadfly.plot(
+					_,
+					x=x, y=train_return, 
+					ymin="ymin", ymax="ymax",
+					# yintercept=[yintercept],
+					# linestyle="pretrained",
+					Scale.color_discrete(preserve_order=false),
+					# Guide.title(title),
+					Geom.subplot_grid(
+						Geom.line, 
+						Geom.ribbon, 			
+						# Geom.hline(style=:dot,color="#b88fff")
+					);
+	color="architecture",
+	# xgroup="hidden_size",
+	xgroup="embedding_size",
+		)
+end
+
+# ╔═╡ 6669cde7-d946-4186-8d69-61506b6406db
+md"""
+- Sequence
+  - Train:
+    - After x, do y
+    - Before x, do y
+    - Do y before x
+  - Test:
+    - Do y after x
+- Sequence:
+  - Train:
+    - Do x, then do y.
+    - After x, do y.
+  - Test:
+    - After x, do y. Then do z.
+- Composition:
+  - Train on synonyms for:
+    - Red ball
+    - Green ball
+    - Red box
+  - Test on synonyms for:
+    - Green box
+"""
+
+# ╔═╡ 5d5a6a9c-694f-4067-8056-b3981a13577e
+md"""
+# To do
+- Compare RL architectures
+- Generalizing to very long instructions.
+- List ways that language represents similar meanings:
+  - synonym
+  - paraphrase
+- Exploit similarities in locality
+- Conditionals? Control-structure?
+"""
+
+# ╔═╡ f07f1c51-be90-4bb2-ae31-6ab3ace2e6e9
+
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -239,6 +959,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Gadfly = "c91e804a-d5a3-530f-b6f0-dfbca275c004"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
@@ -258,13 +979,13 @@ CSV = "~0.8.5"
 Chain = "~0.4.8"
 DataFrames = "~1.2.2"
 Gadfly = "~1.3.3"
-HTTP = "~0.9.13"
+HTTP = "~0.9.14"
 Images = "~0.24.1"
 JSON3 = "~1.9.1"
 JSONLines = "~2.0.1"
 Match = "~1.1.0"
 PerceptualColourMaps = "~0.3.5"
-Plots = "~1.20.1"
+Plots = "~1.21.3"
 PlutoUI = "~0.7.9"
 RollingFunctions = "~0.6.2"
 Tables = "~1.5.0"
@@ -291,9 +1012,9 @@ uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 
 [[ArrayInterface]]
 deps = ["IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
-git-tree-sha1 = "cdb00a6fb50762255021e5571cf95df3e1797a51"
+git-tree-sha1 = "85d03b60274807181bae7549bb22b2204b6e5a0e"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "3.1.23"
+version = "3.1.30"
 
 [[Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -315,9 +1036,9 @@ uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
 [[Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "c3598e525718abcc440f69cc6d5f60dda0a1b61e"
+git-tree-sha1 = "19a35467a82e236ff51bc17a3a44b69ef35185a2"
 uuid = "6e34b625-4abd-537c-b88f-471c36dfa7a0"
-version = "1.0.6+5"
+version = "1.0.8+0"
 
 [[CEnum]]
 git-tree-sha1 = "215a9aa4a1f23fbd05b92769fdd62559488d70e9"
@@ -332,9 +1053,9 @@ version = "0.8.5"
 
 [[Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "e2f47f6d8337369411569fd45ae5753ca10394c6"
+git-tree-sha1 = "f2202b55d816427cd385a9a4f3ffb226bee80f99"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
-version = "1.16.0+6"
+version = "1.16.1+0"
 
 [[CatIndices]]
 deps = ["CustomUnitRanges", "OffsetArrays"]
@@ -496,9 +1217,9 @@ uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "92d8f9f208637e8d2d28c664051a00569c01493d"
+git-tree-sha1 = "3f3a2501fa7236e9b911e0f7a588c657e822bb6d"
 uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
-version = "2.1.5+1"
+version = "2.2.3+0"
 
 [[EllipsisNotation]]
 deps = ["ArrayInterface"]
@@ -519,10 +1240,10 @@ uuid = "c87230d0-a227-11e9-1b43-d7ebe4e7570a"
 version = "0.4.1"
 
 [[FFMPEG_jll]]
-deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "LAME_jll", "LibVPX_jll", "Libdl", "Ogg_jll", "OpenSSL_jll", "Opus_jll", "Pkg", "Zlib_jll", "libass_jll", "libfdk_aac_jll", "libvorbis_jll", "x264_jll", "x265_jll"]
-git-tree-sha1 = "3cc57ad0a213808473eafef4845a74766242e05f"
+deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "LAME_jll", "Libdl", "Ogg_jll", "OpenSSL_jll", "Opus_jll", "Pkg", "Zlib_jll", "libass_jll", "libfdk_aac_jll", "libvorbis_jll", "x264_jll", "x265_jll"]
+git-tree-sha1 = "d8a578692e3077ac998b50c0217dfd67f21d1e5f"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
-version = "4.3.1+4"
+version = "4.4.0+0"
 
 [[FFTViews]]
 deps = ["CustomUnitRanges", "FFTW"]
@@ -562,9 +1283,9 @@ version = "0.8.4"
 
 [[Fontconfig_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Expat_jll", "FreeType2_jll", "JLLWrappers", "Libdl", "Libuuid_jll", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "35895cf184ceaab11fd778b4590144034a167a2f"
+git-tree-sha1 = "21efd19106a55620a188615da6d3d06cd7f6ee03"
 uuid = "a3f928ae-7b40-5064-980b-68af3947d34b"
-version = "2.13.1+14"
+version = "2.13.93+0"
 
 [[Formatting]]
 deps = ["Printf"]
@@ -574,9 +1295,9 @@ version = "0.4.2"
 
 [[FreeType2_jll]]
 deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "cbd58c9deb1d304f5a245a0b7eb841a2560cfec6"
+git-tree-sha1 = "87eb71354d8ec1a96d4a7636bd57a7347dde3ef9"
 uuid = "d7e528f0-a631-5988-bf34-fe36492bcfd7"
-version = "2.10.1+5"
+version = "2.10.4+0"
 
 [[FriBidi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -602,9 +1323,9 @@ version = "0.58.1"
 
 [[GR_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Pkg", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "d59e8320c2747553788e4fc42231489cc602fa50"
+git-tree-sha1 = "ef49a187604f865f4708c90e3f431890724e9012"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
-version = "0.58.1+0"
+version = "0.59.0+0"
 
 [[Gadfly]]
 deps = ["Base64", "CategoricalArrays", "Colors", "Compose", "Contour", "CoupledFields", "DataAPI", "DataStructures", "Dates", "Distributions", "DocStringExtensions", "Hexagons", "IndirectArrays", "IterTools", "JSON", "Juno", "KernelDensity", "LinearAlgebra", "Loess", "Measures", "Printf", "REPL", "Random", "Requires", "Showoff", "Statistics"]
@@ -636,6 +1357,12 @@ git-tree-sha1 = "2c1cf4df419938ece72de17f368a021ee162762e"
 uuid = "a2bd30eb-e257-5431-a919-1863eab51364"
 version = "1.1.0"
 
+[[Graphite2_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "344bf40dcab1073aca04aa0df4fb092f920e4011"
+uuid = "3b182d85-2403-5c21-9c21-1e1f0cc25472"
+version = "1.3.14+0"
+
 [[Grisu]]
 git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
 uuid = "42e2da0e-8278-4e71-bc24-59509adca0fe"
@@ -643,9 +1370,15 @@ version = "1.0.2"
 
 [[HTTP]]
 deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
-git-tree-sha1 = "44e3b40da000eab4ccb1aecdc4801c040026aeb5"
+git-tree-sha1 = "60ed5f1643927479f845b0135bb369b031b541fa"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "0.9.13"
+version = "0.9.14"
+
+[[HarfBuzz_jll]]
+deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
+git-tree-sha1 = "8a954fed8ac097d5be04921d595f741115c1b2ad"
+uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
+version = "2.8.1+0"
 
 [[Hexagons]]
 deps = ["Test"]
@@ -696,9 +1429,9 @@ version = "0.6.21"
 
 [[ImageIO]]
 deps = ["FileIO", "Netpbm", "OpenEXR", "PNGFiles", "TiffImages", "UUIDs"]
-git-tree-sha1 = "ba5334adebad6bcf43f2586e7151d2c83f09f9b6"
+git-tree-sha1 = "13c826abd23931d909e4c5538643d9691f62a617"
 uuid = "82e4d734-157c-48bb-816b-45c225c6df19"
-version = "0.5.7"
+version = "0.5.8"
 
 [[ImageMagick]]
 deps = ["FileIO", "ImageCore", "ImageMagick_jll", "InteractiveUtils", "Libdl", "Pkg", "Random"]
@@ -898,12 +1631,6 @@ uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
 deps = ["Artifacts", "Libdl", "MbedTLS_jll"]
 uuid = "29816b5a-b9ab-546f-933c-edad1886dfa8"
 
-[[LibVPX_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "12ee7e23fa4d18361e7c2cde8f8337d4c3101bc7"
-uuid = "dd192d2f-8180-539f-9fb4-cc70b1dcf69a"
-version = "1.10.0+0"
-
 [[Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 
@@ -1055,9 +1782,9 @@ uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 
 [[OffsetArrays]]
 deps = ["Adapt"]
-git-tree-sha1 = "c0f4a4836e5f3e0763243b8324200af6d0e0f90c"
+git-tree-sha1 = "c870a0d713b51e4b49be6432eff0e26a4325afee"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.10.5"
+version = "1.10.6"
 
 [[Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1114,9 +1841,9 @@ version = "0.11.1"
 
 [[PNGFiles]]
 deps = ["Base64", "CEnum", "ImageCore", "IndirectArrays", "OffsetArrays", "libpng_jll"]
-git-tree-sha1 = "520e28d4026d16dcf7b8c8140a3041f0e20a9ca8"
+git-tree-sha1 = "e14c485f6beee0c7a8dcf6128bf70b85f1fe201e"
 uuid = "f57f5aa1-a3ce-4bc8-8ab9-96f992907883"
-version = "0.3.7"
+version = "0.3.9"
 
 [[PaddedViews]]
 deps = ["OffsetArrays"]
@@ -1166,15 +1893,15 @@ version = "2.0.1"
 
 [[PlotUtils]]
 deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Statistics"]
-git-tree-sha1 = "501c20a63a34ac1d015d5304da0e645f42d91c9f"
+git-tree-sha1 = "9ff1c70190c1c30aebca35dc489f7411b256cd23"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
-version = "1.0.11"
+version = "1.0.13"
 
 [[Plots]]
-deps = ["Base64", "Contour", "Dates", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs"]
-git-tree-sha1 = "8365fa7758e2e8e4443ce866d6106d8ecbb4474e"
+deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs"]
+git-tree-sha1 = "2dbafeadadcf7dadff20cd60046bba416b4912be"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.20.1"
+version = "1.21.3"
 
 [[PlutoUI]]
 deps = ["Base64", "Dates", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "Suppressor"]
@@ -1184,9 +1911,9 @@ version = "0.7.9"
 
 [[PooledArrays]]
 deps = ["DataAPI", "Future"]
-git-tree-sha1 = "cde4ce9d6f33219465b55162811d8de8139c0414"
+git-tree-sha1 = "a193d6ad9c45ada72c14b731a318bedd3c2f00cf"
 uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
-version = "1.2.1"
+version = "1.3.0"
 
 [[Preferences]]
 deps = ["TOML"]
@@ -1264,14 +1991,14 @@ version = "1.1.2"
 
 [[RecipesPipeline]]
 deps = ["Dates", "NaNMath", "PlotUtils", "RecipesBase"]
-git-tree-sha1 = "2a7a2469ed5d94a98dea0e85c46fa653d76be0cd"
+git-tree-sha1 = "d4491becdc53580c6dadb0f6249f90caae888554"
 uuid = "01d81517-befc-4cb6-b9ec-a95719d0359c"
-version = "0.3.4"
+version = "0.4.0"
 
 [[Reexport]]
-git-tree-sha1 = "5f6c21241f0f655da3952fd60aa18477cf96c220"
+git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
-version = "1.1.0"
+version = "1.2.2"
 
 [[Requires]]
 deps = ["UUIDs"]
@@ -1314,9 +2041,9 @@ version = "1.1.0"
 
 [[SentinelArrays]]
 deps = ["Dates", "Random"]
-git-tree-sha1 = "a3a337914a035b2d59c9cbe7f1a38aaba1265b02"
+git-tree-sha1 = "54f37736d8934a12a200edea2f9206b03bdf3159"
 uuid = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
-version = "1.3.6"
+version = "1.3.7"
 
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -1364,9 +2091,9 @@ version = "0.1.1"
 
 [[Static]]
 deps = ["IfElse"]
-git-tree-sha1 = "62701892d172a2fa41a1f829f66d2b0db94a9a63"
+git-tree-sha1 = "854b024a4a81b05c0792a4b45293b85db228bd27"
 uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
-version = "0.3.0"
+version = "0.3.1"
 
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
@@ -1385,27 +2112,27 @@ version = "1.0.0"
 
 [[StatsBase]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
-git-tree-sha1 = "fed1ec1e65749c4d96fc20dd13bea72b55457e62"
+git-tree-sha1 = "8cbbc098554648c84f79a463c9ff0fd277144b6c"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
-version = "0.33.9"
+version = "0.33.10"
 
 [[StatsFuns]]
-deps = ["IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "20d1bb720b9b27636280f751746ba4abb465f19d"
+deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "46d7ccc7104860c38b11966dd1f72ff042f382e4"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "0.9.9"
+version = "0.9.10"
 
 [[StructArrays]]
 deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
-git-tree-sha1 = "000e168f5cc9aded17b6999a560b7c11dda69095"
+git-tree-sha1 = "1700b86ad59348c0f9f68ddc95117071f947072d"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
-version = "0.6.0"
+version = "0.6.1"
 
 [[StructTypes]]
 deps = ["Dates", "UUIDs"]
-git-tree-sha1 = "e36adc471280e8b346ea24c5c87ba0571204be7a"
+git-tree-sha1 = "8445bf99a36d703a09c601f9a57e2f83000ef2ae"
 uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
-version = "1.7.2"
+version = "1.7.3"
 
 [[SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -1641,16 +2368,16 @@ uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
 version = "1.5.0+0"
 
 [[libass_jll]]
-deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "acc685bcf777b2202a904cdcb49ad34c2fa1880c"
+deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
+git-tree-sha1 = "5982a94fcba20f02f42ace44b9894ee2b140fe47"
 uuid = "0ac62f75-1d6f-5e53-bd7c-93b484bb37c0"
-version = "0.14.0+4"
+version = "0.15.1+0"
 
 [[libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "7a5780a0d9c6864184b3a2eeeb833a0c871f00ab"
+git-tree-sha1 = "daacc84a041563f965be61859a36e17c4e4fcd55"
 uuid = "f638f0a6-7fb0-5443-88ba-1cc74229b280"
-version = "0.1.6+4"
+version = "2.0.2+0"
 
 [[libpng_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
@@ -1674,15 +2401,15 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 
 [[x264_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "d713c1ce4deac133e3334ee12f4adff07f81778f"
+git-tree-sha1 = "4fea590b89e6ec504593146bf8b988b2c00922b2"
 uuid = "1270edf5-f2f9-52d2-97e9-ab00b5d0237a"
-version = "2020.7.14+2"
+version = "2021.5.5+0"
 
 [[x265_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "487da2f8f2f0c8ee0e83f39d13037d6bbf0a45ab"
+git-tree-sha1 = "ee567a171cce03570d77ad3a43e90218e38937a9"
 uuid = "dfaa095f-4041-5dcd-9319-2fabd8486b76"
-version = "3.0.0+3"
+version = "3.5.0+0"
 
 [[xkbcommon_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Wayland_jll", "Wayland_protocols_jll", "Xorg_libxcb_jll", "Xorg_xkeyboard_config_jll"]
@@ -1692,6 +2419,29 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
+# ╟─82de7854-3ac9-435a-ad34-c59fb8262bfe
+# ╠═b7087c67-0d3f-4c33-9650-1200b3ffbaee
+# ╠═2044fb71-3ee3-4def-9404-48a8ca3c8e9c
+# ╟─a295de65-0329-49ca-96fa-0c87b60cc907
+# ╠═d7c724fd-adf3-4478-9e66-0ef7e86ae4c1
+# ╟─a148cea3-b636-4bdf-94b6-ff661843796a
+# ╟─da1ddaaf-a2f8-40ef-ab82-d9703973d11f
+# ╠═58707566-c01e-40b5-ba95-e21b3b0872bf
+# ╟─c6379954-066d-4d70-9255-5bfb24b102eb
+# ╟─f830ef9b-0190-42e9-b086-44284e651bc2
+# ╟─ef5062be-47cf-462f-93ac-67eee0931a09
+# ╟─bd42e1da-60d7-46b5-9944-ae96b0b8602a
+# ╠═21d57cbf-1df4-4967-b8ea-267e30f2e48b
+# ╠═b16db565-7d78-491a-86aa-2a69fa2444ef
+# ╟─df5e4cef-f2b1-4a18-9a9d-d74bac5cca50
+# ╟─b3c93ec9-14d0-40a5-98f2-d8f8b74242d3
+# ╟─886f5207-45c8-49bf-960f-a9b20694b64f
+# ╟─d37ed09f-7f89-4bed-acc8-ba9ec083c3d6
+# ╟─644e556b-6db8-43da-afb0-c95d457dc088
+# ╠═73ba54ae-cba0-473d-883e-08fce583160e
+# ╟─80c04a29-612c-4ee9-90f6-147f5eed5a1c
+# ╟─6010292d-aae5-421d-b45f-99db6e564cc6
+# ╟─dcef07bf-684d-440c-86a5-742db737f9d1
 # ╠═227ffba9-d603-421d-8f0c-95f43795894a
 # ╠═3cd1bee8-c26f-47c3-9775-f6f0619f8aaf
 # ╠═56602730-6910-42db-b7b6-58d8c9cf9cde
@@ -1699,11 +2449,18 @@ version = "0.9.1+5"
 # ╠═37f04425-7cdd-4001-a598-06ac6a6be0e6
 # ╠═2f138caf-a07a-4760-b325-5b2198dc5d84
 # ╠═51d9223a-08e6-11ec-17f9-af13c3a79465
-# ╠═75afb089-21a6-4f76-936d-a329a8d4dceb
-# ╠═7efb604c-853a-4e4b-a98b-4c31a372b4ae
-# ╠═c53101de-15a5-417c-bfd9-c1f032f14804
 # ╠═24ddebdf-f619-46da-b1ca-0357aa709ce7
-# ╠═29cb6383-44d5-4189-a132-53f420129860
-# ╠═aa39d49a-a311-4d86-844c-815dd13d23c0
+# ╠═6e57be2a-324d-4790-9b97-252d944f856c
+# ╠═642f7e89-7b21-4721-97d9-b20c7e2e5567
+# ╠═8275f4fb-b7ee-4805-b500-9827379d3886
+# ╠═81f994ee-f572-400b-96e1-b0f07a8df4ec
+# ╠═8ac97bea-be54-4337-9ec7-c5645a35e2b2
+# ╠═b6ccd2ad-e4e4-4df9-9fe4-9752e26257c3
+# ╠═a2010695-9d84-411a-9266-f5160365c686
+# ╠═f5ad1614-7371-4cef-b0cc-477f0c1ac4e7
+# ╠═ca92ac10-a1dc-4245-af7a-737083ca5d05
+# ╠═6669cde7-d946-4186-8d69-61506b6406db
+# ╠═5d5a6a9c-694f-4067-8056-b3981a13577e
+# ╠═f07f1c51-be90-4bb2-ae31-6ab3ace2e6e9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
