@@ -16,7 +16,7 @@ from babyai_env import (
     PlantAnimalWrapper,
     RolloutsWrapper,
     SequenceEnv,
-    SequenceSynonymWrapper,
+    SequenceParaphrasesWrapper,
     SynonymWrapper,
     ToggleEnv,
     TokenizerWrapper,
@@ -114,7 +114,7 @@ class Trainer(main.Trainer):
                     env = SequenceEnv(
                         *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
                     )
-                    env = SequenceSynonymWrapper(env, test=test)
+                    env = SequenceParaphrasesWrapper(env, test=test)
                     longest_mission = "go to (0, 0), having already gone to (0, 0)"
                 elif env_id == "sequence":
                     env = SequenceEnv(

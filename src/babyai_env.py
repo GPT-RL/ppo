@@ -13,7 +13,7 @@ import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
-    ActionInstr,
+    AndInstr,
     BeforeInstr,
     GoToInstr,
     ObjDesc,
@@ -413,8 +413,7 @@ class MissionWrapper(gym.Wrapper, abc.ABC):
     def render(self, mode="human", pause=True, **kwargs):
         self.env.render(pause=False)
         print(self._mission)
-        if pause:
-            input("Press enter to coninue.")
+        self.env.pause(pause)
 
     def change_mission(self, mission):
         raise NotImplementedError
@@ -570,17 +569,39 @@ class InvalidInstructionError(RuntimeError):
     pass
 
 
-class SequenceSynonymWrapper(MissionWrapper):
-    def __init__(self, env, test: bool):
+class SequenceParaphrasesWrapper(MissionWrapper):
+    def __init__(
+        self,
+        env,
+        test: bool,
+        train_wordings: typing.List[str],
+        test_wordings: typing.List[str],
+    ):
         super().__init__(env)
-        self.test = test
-
-    def change_mission(self, mission):
-        def after_reverse(instr1: str, instr2: str):
-            return f"After you {instr1}, {instr2}"
 
         def before(instr1: str, instr2: str):
             return f"{instr1} before you {instr2}"
+
+        def before_reverse(instr1: str, instr2: str):
+            return f"Before you {instr2}, {instr1}"
+
+        def after(instr1: str, instr2: str):
+            return f"{instr2} after you {instr1}"
+
+        def after_reverse(instr1: str, instr2: str):
+            return f"After you {instr1}, {instr2}"
+
+        def once(instr1: str, instr2: str):
+            return f"{instr2} once you {instr1}"
+
+        def once_reverse(instr1: str, instr2: str):
+            return f"Once you {instr1}, {instr2}"
+
+        def having_reverse(instr1: str, instr2: str):
+            return f"Having already {past(instr1)}, {instr2}"
+
+        def having(instr1: str, instr2: str):
+            return f"{instr2}, having already {past(instr1)}"
 
         def then(instr1: str, instr2: str):
             return f"{instr1}, then {instr2}"
@@ -588,28 +609,36 @@ class SequenceSynonymWrapper(MissionWrapper):
         def _next(instr1: str, instr2: str):
             return f"{instr1}. Next, {instr2}"
 
-        def having(instr1: str, instr2: str):
-            return f"{instr2}, having already {past(instr1)}"
+        wordings = dict(
+            before=before,
+            before_reverse=before_reverse,
+            after=after,
+            after_reverse=after_reverse,
+            once=once,
+            once_reverse=once_reverse,
+            having_reverse=having_reverse,
+            having=having,
+            then=then,
+            _next=_next,
+        )
 
-        def after(instr1: str, instr2: str):
-            return f"{instr2} after you {instr1}"
-
-        def before_reverse(instr1: str, instr2: str):
-            return f"Before you {instr2}, {instr1}"
-
-        wordings = [after, after_reverse, before_reverse, then, _next, having]
+        self.wordings = [wordings[w] for w in train_wordings]
+        self.test_wordings = [wordings[w] for w in test_wordings]
 
         def past(instr: str):
             return instr.replace(" go ", " gone ")
 
+        self.test = test
+
+    def change_mission(self, mission):
         match = re.match(r"(.*), then (.*)", mission)
         if not match:
             match = re.match(r"(.*) after you (.*)", mission)
             if not match:
                 breakpoint()
 
-        wording: Callable[[str, str], str] = (
-            before if self.test else self.np_random.choice(wordings)
+        wording: Callable[[str, str], str] = self.np_random.choice(
+            self.test_wordings if self.test else self.wordings
         )
         mission = wording(*match.group(1, 2))
         return mission
