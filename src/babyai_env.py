@@ -285,7 +285,12 @@ class GoAndFaceEnv(GoToLocEnv):
         self.connect_all()
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
-        go_to_direction, face_direction = self._rand_elem(self.directions)
+
+        idx = self._rand_int(0, len(self.directions))
+        go_to_direction, face_direction = sorted(
+            self.directions,
+            key=lambda x: (x.go_direction.value, x.face_direction.value),
+        )[idx]
         if isinstance(go_to_direction, CardinalDirection):
             go_to_instr = GoToWallInstr(WallDesc(go_to_direction), strict=self.strict)
         elif isinstance(go_to_direction, OrdinalDirection):
