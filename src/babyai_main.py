@@ -137,10 +137,15 @@ class Trainer(main.Trainer):
                 test_directions = {
                     GoAndFaceDirections(
                         room_direction=OrdinalDirection.southeast,
-                        wall_direction=CardinalDirection.south,
-                        face_direction=d,
+                        wall_direction=d1,
+                        face_direction=d2,
                     )
-                    for d in CardinalDirection
+                    for d1 in [
+                        CardinalDirection.east,
+                        OrdinalDirection.southeast,
+                        CardinalDirection.south,
+                    ]
+                    for d2 in CardinalDirection
                 }
 
                 def get_directions():
