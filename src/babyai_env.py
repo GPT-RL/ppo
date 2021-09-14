@@ -13,6 +13,7 @@ import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
+    AndInstr,
     BeforeInstr,
     GoToInstr,
     ObjDesc,
@@ -25,13 +26,22 @@ from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
-from descs import CardinalDirection, CornerDesc, LocDesc, OrdinalDirection, WallDesc
+from descs import (
+    CardinalDirection,
+    CornerDesc,
+    LocDesc,
+    OrdinalDirection,
+    RoomDesc,
+    WallDesc,
+)
 from instrs import (
     AndDoneInstr,
     FaceInstr,
     GoToCornerInstr,
     GoToLoc,
+    GoToRoomInstr,
     GoToWallInstr,
+    MultiAndInstr,
     ToggleInstr,
 )
 
@@ -264,43 +274,54 @@ class DirectionsEnv(GoToLocEnv):
 
 
 class GoAndFaceDirections(typing.NamedTuple):
-    go_direction: Union[CardinalDirection, OrdinalDirection]
+    room_direction: OrdinalDirection
+    wall_direction: Union[CardinalDirection, OrdinalDirection]
     face_direction: CardinalDirection
 
 
-class GoAndFaceEnv(GoToLocEnv):
+class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         room_size: int,
         seed: int,
-        strict: bool,
         directions: Set[GoAndFaceDirections],
     ):
         self.directions = directions
-        self.strict = strict
-        super().__init__(room_size, seed)
+        super().__init__(
+            room_size=room_size,
+            num_rows=2,
+            num_cols=2,
+            seed=seed,
+        )
 
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
 
+        def key(directions: GoAndFaceDirections):
+            return (
+                directions.room_direction.value,
+                directions.wall_direction.value,
+                directions.face_direction.value,
+            )
+
         idx = self._rand_int(0, len(self.directions))
-        go_to_direction, face_direction = sorted(
-            self.directions,
-            key=lambda x: (x.go_direction.value, x.face_direction.value),
-        )[idx]
-        if isinstance(go_to_direction, CardinalDirection):
-            go_to_instr = GoToWallInstr(WallDesc(go_to_direction), strict=self.strict)
-        elif isinstance(go_to_direction, OrdinalDirection):
-            go_to_instr = GoToCornerInstr(
-                CornerDesc(go_to_direction), strict=self.strict
+        d = sorted(self.directions, key=key)[idx]
+        if isinstance(d.wall_direction, CardinalDirection):
+            wall_instr = GoToWallInstr(WallDesc(d.wall_direction), strict=False)
+        elif isinstance(d.wall_direction, OrdinalDirection):
+            wall_instr = GoToCornerInstr(
+                CornerDesc(d.wall_direction),
+                strict=False,
             )
         else:
             raise InvalidDirectionError
-        face_instr = FaceInstr(face_direction)
-        self.instrs = AndDoneInstr(go_to_instr, face_instr)
+        self.instrs = MultiAndInstr(
+            GoToRoomInstr(RoomDesc(d.room_direction)),
+            wall_instr,
+            FaceInstr(d.face_direction),
+        )
 
 
 class ToggleEnv(RenderEnv, ReproducibleEnv):
@@ -825,8 +846,14 @@ def main(args: "Args"):
     env = GoAndFaceEnv(
         seed=args.seed,
         room_size=args.room_size,
-        strict=True,
-        directions={*itertools.product(OrdinalDirection, CardinalDirection)},
+        directions={
+            GoAndFaceDirections(*x)
+            for x in itertools.product(
+                OrdinalDirection,
+                [*CardinalDirection, *OrdinalDirection],
+                CardinalDirection,
+            )
+        },
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)

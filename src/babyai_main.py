@@ -133,20 +133,31 @@ class Trainer(main.Trainer):
                 env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to northwest corner"
             elif env_id == "go-and-face":
+                del kwargs['strict']
+
                 test_directions = {
-                    GoAndFaceDirections(OrdinalDirection.southeast, d)
-                    for d in CardinalDirection
-                }
-                directions = {
-                    GoAndFaceDirections(d1, d2)
-                    for d1, d2 in itertools.product(
-                        [*CardinalDirection, *OrdinalDirection], CardinalDirection
+                    GoAndFaceDirections(
+                        room_direction=OrdinalDirection.southeast,
+                        wall_direction=OrdinalDirection.southwest,
+                        face_direction=CardinalDirection.north,
                     )
                 }
-                kwargs.update(
-                    directions=test_directions if test else directions - test_directions
+
+                def get_directions():
+                    for d1 in OrdinalDirection:
+                        for d2 in [*OrdinalDirection, *CardinalDirection]:
+                            for d3 in CardinalDirection:
+                                yield GoAndFaceDirections(
+                                    room_direction=d1,
+                                    wall_direction=d2,
+                                    face_direction=d3,
+                                )
+
+                directions = set(get_directions())
+                directions = test_directions if test else directions - test_directions
+                env = GoAndFaceEnv(
+                    *args, seed=seed + rank, directions=directions, **kwargs
                 )
-                env = GoAndFaceEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to northwest corner and face west"
             else:
                 if env_id == "sequence-paraphrases":

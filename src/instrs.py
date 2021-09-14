@@ -1,8 +1,53 @@
+from typing import List
+
 import numpy as np
 from babyai.levels.verifier import ActionInstr, AndInstr
 from gym_minigrid.minigrid import MiniGridEnv
+from gym_minigrid.roomgrid import RoomGrid, Room
 
-from descs import CardinalDirection, CornerDesc, LocDesc, OrdinalDirection, WallDesc
+from descs import (
+    CardinalDirection,
+    CornerDesc,
+    LocDesc,
+    OrdinalDirection,
+    RoomDesc,
+    WallDesc,
+)
+
+
+class GoToRoomInstr(ActionInstr):
+    """
+    Pick up an object matching a given description
+    eg: pick up the grey ball
+    """
+
+    def __init__(self, desc: RoomDesc, strict=False):
+        super().__init__()
+        self.desc = desc
+        self.strict = strict
+        self.room_positions = {
+            OrdinalDirection.northwest: (0, 0),
+            OrdinalDirection.northeast: (1, 0),
+            OrdinalDirection.southwest: (0, 1),
+            OrdinalDirection.southeast: (1, 1),
+        }
+
+    def surface(self, env):
+        return "go to " + self.desc.surface()
+
+    def verify_action(self, action):
+        self.env: RoomGrid
+        goal_room: Room = self.env.get_room(*self.room_positions[self.desc.direction])
+        return "success" if goal_room.pos_inside(*self.env.agent_pos) else "continue"
+
+
+def get_limits(room: Room):
+    (topX, topY), (sizeX, sizeY) = room.top, room.size
+    minX = topX + 1
+    maxX = topX + sizeX - 2
+    minY = topY + 1
+    maxY = topY + sizeY - 2
+    return maxX, maxY, minX, minY
 
 
 class GoToCornerInstr(ActionInstr):
@@ -17,10 +62,13 @@ class GoToCornerInstr(ActionInstr):
         self.strict = strict
 
     def surface(self, env):
-        return "Go to " + self.desc.surface()
+        return "go to " + self.desc.surface()
 
     def verify_action(self, action):
+        self.env: RoomGrid
         x, y = self.env.agent_pos
+        room: Room = self.env.room_from_pos(x, y)
+        maxX, maxY, minX, minY = get_limits(room)
         direction = self.desc.direction
 
         def validate_direction(positional_direction: OrdinalDirection):
@@ -31,17 +79,13 @@ class GoToCornerInstr(ActionInstr):
             else:
                 return "continue"
 
-        self.env: MiniGridEnv
-        height = self.env.height
-        width = self.env.width
-
-        if (x, y) == (1, 1):
+        if (x, y) == (minX, minY):
             return validate_direction(OrdinalDirection.northwest)
-        if (x, y) == (width - 2, 1):
+        if (x, y) == (maxX, minY):
             return validate_direction(OrdinalDirection.northeast)
-        if (x, y) == (1, height - 2):
+        if (x, y) == (minX, maxY):
             return validate_direction(OrdinalDirection.southwest)
-        if (x, y) == (width - 2, height - 2):
+        if (x, y) == (maxX, minY):
             return validate_direction(OrdinalDirection.southeast)
 
         return "continue"
@@ -62,7 +106,10 @@ class GoToWallInstr(ActionInstr):
         return "Go to " + self.desc.surface()
 
     def verify_action(self, action):
+        self.env: RoomGrid
         x, y = self.env.agent_pos
+        room: Room = self.env.room_from_pos(x, y)
+        maxX, maxY, minX, minY = get_limits(room)
         direction = self.desc.direction
 
         def validate_direction(positional_direction: CardinalDirection):
@@ -73,15 +120,13 @@ class GoToWallInstr(ActionInstr):
             else:
                 return "continue"
 
-        self.env: MiniGridEnv
-
-        if y == 1:
+        if y == minY:
             return validate_direction(CardinalDirection.north)
-        if y == self.env.height - 2:
+        if y == maxY:
             return validate_direction(CardinalDirection.south)
-        if x == 1:
+        if x == minX:
             return validate_direction(CardinalDirection.west)
-        if x == self.env.width - 2:
+        if x == maxX:
             return validate_direction(CardinalDirection.east)
 
         return "continue"
@@ -99,6 +144,9 @@ class FaceInstr(ActionInstr):
 
     def surface(self, env):
         return "face " + self.direction.name
+
+    def reset_verifier(self, env):
+        super().reset_verifier(env)
 
     def verify_action(self, action):
         self.env: MiniGridEnv
@@ -179,3 +227,26 @@ class AndDoneInstr(AndInstr):
                 else "failure"
             )
         return "continue"
+
+
+class MultiAndInstr(ActionInstr):
+    def __init__(self, *instrs: ActionInstr):
+        self.instructions = *self.tail, self.head = instrs
+        super().__init__()
+
+    def surface(self, env):
+        surfaces = [i.surface(env) for i in self.tail]
+        return f"{', '.join(surfaces)}, and {self.head.surface(env)}"
+
+    def reset_verifier(self, env: MiniGridEnv):
+        for i in self.instructions:
+            i.reset_verifier(env)
+        super().reset_verifier(env)
+
+    def verify_action(self, *args, **kwargs):
+        verifications = [i.verify(*args, **kwargs) for i in self.instructions]
+        if "failure" in verifications:
+            return "failure"
+        if "continue" in verifications:
+            return "continue"
+        return "success"

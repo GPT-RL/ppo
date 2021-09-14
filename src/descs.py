@@ -35,6 +35,18 @@ class Desc:
         return [], []
 
 
+class RoomDesc(Desc):
+    """
+    Description of a set of objects in an environment
+    """
+
+    def __init__(self, direction: OrdinalDirection):
+        self.direction = direction
+
+    def __repr__(self):
+        return f"the {self.direction.name} room"
+
+
 class WallDesc(Desc):
     """
     Description of a set of objects in an environment
