@@ -133,14 +133,15 @@ class Trainer(main.Trainer):
                 env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to northwest corner"
             elif env_id == "go-and-face":
-                del kwargs['strict']
+                del kwargs["strict"]
 
                 test_directions = {
                     GoAndFaceDirections(
                         room_direction=OrdinalDirection.southeast,
-                        wall_direction=OrdinalDirection.southwest,
-                        face_direction=CardinalDirection.north,
+                        wall_direction=OrdinalDirection.northeast,
+                        face_direction=d,
                     )
+                    for d in CardinalDirection
                 }
 
                 def get_directions():
