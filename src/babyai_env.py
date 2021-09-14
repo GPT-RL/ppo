@@ -76,7 +76,7 @@ class RenderEnv(RoomGridLevel, ABC):
     def row_objs(self, y: int) -> Generator[Optional[WorldObj], None, None]:
         for x in range(self.width):
             if np.all(self.agent_pos == (x, y)):
-                yield Agent(color="blue", type="agent")
+                yield Agent(color="grey", type="agent")
             else:
                 yield self.grid.get(x, y)
 
