@@ -1,17 +1,17 @@
-from typing import List
+import abc
+from abc import ABC
 
 import numpy as np
 from babyai.levels.verifier import ActionInstr, AndInstr
 from gym_minigrid.minigrid import MiniGridEnv
-from gym_minigrid.roomgrid import RoomGrid, Room
+from gym_minigrid.roomgrid import Room, RoomGrid
 
 from descs import (
     CardinalDirection,
-    CornerDesc,
     LocDesc,
     OrdinalDirection,
+    RandomDesc,
     RoomDesc,
-    WallDesc,
 )
 
 
@@ -50,19 +50,36 @@ def get_limits(room: Room):
     return maxX, maxY, minX, minY
 
 
-class GoToCornerInstr(ActionInstr):
+class RandomInstr(ActionInstr, ABC):
+    def __init__(self, desc: RandomDesc):
+        super().__init__()
+        self.desc = desc
+        self.random_desc_surface = self.sample_desc_surface()
+
+    @abc.abstractmethod
+    def surface(self, env):
+        raise NotImplementedError
+
+    def sample_desc_surface(self):
+        return self.desc.sample_repr()
+
+    def reset_verifier(self, env):
+        super().reset_verifier(env)
+        self.random_desc_surface = self.sample_desc_surface()
+
+
+class GoToCornerInstr(RandomInstr):
     """
     Pick up an object matching a given description
     eg: pick up the grey ball
     """
 
-    def __init__(self, desc: CornerDesc, strict=False):
-        super().__init__()
-        self.desc = desc
+    def __init__(self, *args, strict=False, **kwargs):
         self.strict = strict
+        super().__init__(*args, **kwargs)
 
     def surface(self, env):
-        return "go to " + self.desc.surface()
+        return "go to " + self.random_desc_surface
 
     def verify_action(self, action):
         self.env: RoomGrid
@@ -72,6 +89,7 @@ class GoToCornerInstr(ActionInstr):
         direction = self.desc.direction
 
         def validate_direction(positional_direction: OrdinalDirection):
+            # print(direction, positional_direction)
             if direction == positional_direction:
                 return "success"
             elif self.strict:
@@ -79,31 +97,37 @@ class GoToCornerInstr(ActionInstr):
             else:
                 return "continue"
 
+        # print(direction)
+        # print("x,y", x, y)
+        # print("maxX", maxX)
+        # print("minX", minX)
+        # print("maxY", maxY)
+        # print("minY", minY)
+
         if (x, y) == (minX, minY):
             return validate_direction(OrdinalDirection.northwest)
         if (x, y) == (maxX, minY):
             return validate_direction(OrdinalDirection.northeast)
         if (x, y) == (minX, maxY):
             return validate_direction(OrdinalDirection.southwest)
-        if (x, y) == (maxX, minY):
+        if (x, y) == (maxX, maxY):
             return validate_direction(OrdinalDirection.southeast)
 
         return "continue"
 
 
-class GoToWallInstr(ActionInstr):
+class GoToWallInstr(RandomInstr):
     """
     Pick up an object matching a given description
     eg: pick up the grey ball
     """
 
-    def __init__(self, desc: WallDesc, strict=False):
-        super().__init__()
-        self.desc = desc
+    def __init__(self, *args, strict=False, **kwargs):
         self.strict = strict
+        super().__init__(*args, **kwargs)
 
     def surface(self, env):
-        return "Go to " + self.desc.surface()
+        return "go to " + self.random_desc_surface
 
     def verify_action(self, action):
         self.env: RoomGrid
@@ -113,6 +137,7 @@ class GoToWallInstr(ActionInstr):
         direction = self.desc.direction
 
         def validate_direction(positional_direction: CardinalDirection):
+            # print(direction, positional_direction)
             if direction == positional_direction:
                 return "success"
             elif self.strict:
@@ -120,39 +145,45 @@ class GoToWallInstr(ActionInstr):
             else:
                 return "continue"
 
+        # print(direction)
+        # print("x,y", x, y)
+        # print("maxX", maxX)
+        # print("minX", minX)
+        # print("maxY", maxY)
+        # print("minY", minY)
+
+        validations = []
+
         if y == minY:
-            return validate_direction(CardinalDirection.north)
+            validations.append(validate_direction(CardinalDirection.north))
         if y == maxY:
-            return validate_direction(CardinalDirection.south)
+            validations.append(validate_direction(CardinalDirection.south))
         if x == minX:
-            return validate_direction(CardinalDirection.west)
+            validations.append(validate_direction(CardinalDirection.west))
         if x == maxX:
-            return validate_direction(CardinalDirection.east)
+            validations.append(validate_direction(CardinalDirection.east))
+
+        for result in ["success", "failure"]:
+            if result in validations:
+                return result
 
         return "continue"
 
 
-class FaceInstr(ActionInstr):
+class FaceInstr(RandomInstr):
     """
     Pick up an object matching a given description
     eg: pick up the grey ball
     """
 
-    def __init__(self, direction: CardinalDirection):
-        super().__init__()
-        self.direction = direction
-
     def surface(self, env):
-        return "face " + self.direction.name
-
-    def reset_verifier(self, env):
-        super().reset_verifier(env)
+        return self.random_desc_surface
 
     def verify_action(self, action):
         self.env: MiniGridEnv
         return (
             "success"
-            if self.env.agent_dir == [*CardinalDirection].index(self.direction)
+            if self.env.agent_dir == [*CardinalDirection].index(self.desc.direction)
             else "continue"
         )
 
@@ -245,6 +276,9 @@ class MultiAndInstr(ActionInstr):
 
     def verify_action(self, *args, **kwargs):
         verifications = [i.verify(*args, **kwargs) for i in self.instructions]
+        # for i, v in zip(self.instructions, verifications):
+        # print(i, v)
+
         if "failure" in verifications:
             return "failure"
         if "continue" in verifications:

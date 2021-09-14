@@ -13,7 +13,6 @@ import gym_minigrid
 import numpy as np
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
-    AndInstr,
     BeforeInstr,
     GoToInstr,
     ObjDesc,
@@ -29,13 +28,13 @@ from transformers import GPT2Tokenizer
 from descs import (
     CardinalDirection,
     CornerDesc,
+    FaceDesc,
     LocDesc,
     OrdinalDirection,
     RoomDesc,
     WallDesc,
 )
 from instrs import (
-    AndDoneInstr,
     FaceInstr,
     GoToCornerInstr,
     GoToLoc,
@@ -266,9 +265,13 @@ class DirectionsEnv(GoToLocEnv):
         self.check_objs_reachable()
         direction = self.np_random.choice(self.directions)
         if isinstance(direction, CardinalDirection):
-            self.instrs = GoToWallInstr(WallDesc(direction), strict=self.strict)
+            self.instrs = GoToWallInstr(
+                desc=WallDesc(direction=direction), strict=self.strict
+            )
         elif isinstance(direction, OrdinalDirection):
-            self.instrs = GoToCornerInstr(CornerDesc(direction), strict=self.strict)
+            self.instrs = GoToCornerInstr(
+                desc=CornerDesc(direction=direction), strict=self.strict
+            )
         else:
             raise InvalidDirectionError
 
@@ -279,14 +282,24 @@ class GoAndFaceDirections(typing.NamedTuple):
     face_direction: CardinalDirection
 
 
+def key(directions: GoAndFaceDirections):
+    return (
+        directions.room_direction.value,
+        directions.wall_direction.value,
+        directions.face_direction.value,
+    )
+
+
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         room_size: int,
         seed: int,
         directions: Set[GoAndFaceDirections],
+        synonyms: bool,
     ):
-        self.directions = directions
+        self.synonyms = synonyms
+        self.directions = sorted(directions, key=key)
         super().__init__(
             room_size=room_size,
             num_rows=2,
@@ -299,28 +312,44 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         self.connect_all()
         self.check_objs_reachable()
 
-        def key(directions: GoAndFaceDirections):
-            return (
-                directions.room_direction.value,
-                directions.wall_direction.value,
-                directions.face_direction.value,
-            )
-
         idx = self._rand_int(0, len(self.directions))
-        d = sorted(self.directions, key=key)[idx]
+        d = self.directions[idx]
         if isinstance(d.wall_direction, CardinalDirection):
-            wall_instr = GoToWallInstr(WallDesc(d.wall_direction), strict=False)
+            wall_instr = GoToWallInstr(
+                desc=WallDesc(
+                    direction=d.wall_direction,
+                    random=self.np_random,
+                    synonyms=self.synonyms,
+                ),
+                strict=False,
+            )
         elif isinstance(d.wall_direction, OrdinalDirection):
             wall_instr = GoToCornerInstr(
-                CornerDesc(d.wall_direction),
+                desc=CornerDesc(
+                    direction=d.wall_direction,
+                    random=self.np_random,
+                    synonyms=self.synonyms,
+                ),
                 strict=False,
             )
         else:
             raise InvalidDirectionError
         self.instrs = MultiAndInstr(
-            GoToRoomInstr(RoomDesc(d.room_direction)),
+            GoToRoomInstr(
+                RoomDesc(
+                    direction=d.room_direction,
+                    random=self.np_random,
+                    synonyms=self.synonyms,
+                )
+            ),
             wall_instr,
-            FaceInstr(d.face_direction),
+            FaceInstr(
+                desc=FaceDesc(
+                    direction=d.face_direction,
+                    random=self.np_random,
+                    synonyms=self.synonyms,
+                )
+            ),
         )
 
 
@@ -572,7 +601,7 @@ class PlantAnimalWrapper(MissionWrapper):
         return mission
 
 
-class SynonymWrapper(MissionWrapper):
+class PickupSynonymWrapper(MissionWrapper):
     synonyms = {
         "pick-up": ["take", "grab", "get"],
         "red": ["crimson"],
@@ -580,10 +609,6 @@ class SynonymWrapper(MissionWrapper):
         "ball": ["sphere", "globe"],
         "phone": ["cell", "mobile"],
     }
-
-    def __init__(self, env):
-        super().__init__(env)
-        self._mission
 
     def change_mission(self, mission):
         mission = mission.replace("key", "phone")

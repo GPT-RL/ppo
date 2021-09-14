@@ -1,4 +1,3 @@
-import itertools
 from typing import Literal
 
 from stable_baselines3.common.monitor import Monitor
@@ -17,11 +16,11 @@ from babyai_env import (
     PickupEnv,
     PickupEnvRoomObjects,
     PickupRedEnv,
+    PickupSynonymWrapper,
     PlantAnimalWrapper,
     RolloutsWrapper,
     SequenceEnv,
     SequenceParaphrasesWrapper,
-    SynonymWrapper,
     ToggleEnv,
     TokenizerWrapper,
     ZeroOneRewardWrapper,
@@ -108,7 +107,7 @@ class Trainer(main.Trainer):
                     *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
                 )
                 if test:
-                    env = SynonymWrapper(env)
+                    env = PickupSynonymWrapper(env)
                 longest_mission = "pick-up the crimson phone"
             elif env_id == "plant-animal":
                 objects = {*PlantAnimalWrapper.replacements.keys()}
@@ -132,7 +131,7 @@ class Trainer(main.Trainer):
                 )
                 env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
                 longest_mission = "go to northwest corner"
-            elif env_id == "go-and-face":
+            elif env_id.startswith("go-and-face"):
                 del kwargs["strict"]
 
                 test_directions = {
@@ -157,7 +156,11 @@ class Trainer(main.Trainer):
                 directions = set(get_directions())
                 directions = test_directions if test else directions - test_directions
                 env = GoAndFaceEnv(
-                    *args, seed=seed + rank, directions=directions, **kwargs
+                    *args,
+                    seed=seed + rank,
+                    directions=directions,
+                    synonyms="synonyms" in env_id,
+                    **kwargs,
                 )
                 longest_mission = "go to northwest corner and face west"
             else:
