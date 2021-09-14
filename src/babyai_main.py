@@ -140,11 +140,8 @@ class Trainer(main.Trainer):
                         wall_direction=d1,
                         face_direction=d2,
                     )
-                    for d1 in [
-                        CardinalDirection.east,
-                        OrdinalDirection.southeast,
-                        CardinalDirection.south,
-                    ]
+                    for d1 in {*CardinalDirection, *OrdinalDirection}
+                    - {OrdinalDirection.southeast}
                     for d2 in CardinalDirection
                 }
 
