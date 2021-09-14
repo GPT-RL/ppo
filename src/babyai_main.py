@@ -137,7 +137,7 @@ class Trainer(main.Trainer):
                 test_directions = {
                     GoAndFaceDirections(
                         room_direction=OrdinalDirection.southeast,
-                        wall_direction=CardinalDirection.north,
+                        wall_direction=OrdinalDirection.northeast,
                         face_direction=d,
                     )
                     for d in CardinalDirection
