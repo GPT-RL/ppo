@@ -61,7 +61,9 @@ class InvalidEnvId(RuntimeError):
 
 
 EPISODE_RETURN = "episode return"
+EPISODE_LENGTH = "episode length"
 TEST_EPISODE_RETURN = "test episode return"
+TEST_EPISODE_LENGTH = "test episode length"
 ACTION_LOSS = "action loss"
 VALUE_LOSS = "value loss"
 FPS = "fps"
@@ -201,6 +203,7 @@ query GetParameters($id: Int!) {
         rollouts.to(device)
 
         episode_rewards = deque(maxlen=10)
+        episode_lengths = deque(maxlen=10)
 
         start = time.time()
         save_count = 0
@@ -255,6 +258,7 @@ query GetParameters($id: Int!) {
                 for info in infos:
                     if "episode" in info.keys():
                         episode_rewards.append(info["episode"]["r"])
+                        episode_lengths.append(info["episode"]["l"])
 
                 # If done then clean the history of observations.
                 masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -303,6 +307,7 @@ query GetParameters($id: Int!) {
                     fps = int(total_num_steps / (now - start))
                     log = {
                         EPISODE_RETURN: np.mean(episode_rewards),
+                        EPISODE_LENGTH: np.mean(episode_lengths),
                         ACTION_LOSS: action_loss,
                         VALUE_LOSS: value_loss,
                         FPS: fps,
@@ -335,6 +340,7 @@ query GetParameters($id: Int!) {
     ):
 
         episode_rewards = []
+        episode_lengths = []
 
         obs = envs.reset()
         recurrent_hidden_states = torch.zeros(
@@ -359,6 +365,7 @@ query GetParameters($id: Int!) {
             for info in infos:
                 if "episode" in info.keys():
                     episode_rewards.append(info["episode"]["r"])
+                    episode_lengths.append(info["episode"]["l"])
 
         envs.close()
         now = time.time()
@@ -368,7 +375,12 @@ query GetParameters($id: Int!) {
             STEP: total_num_steps,
         }
         if test:
-            log.update({TEST_EPISODE_RETURN: np.mean(episode_rewards)})
+            log.update(
+                {
+                    TEST_EPISODE_RETURN: np.mean(episode_rewards),
+                    TEST_EPISODE_LENGTH: np.mean(episode_lengths),
+                }
+            )
         logging.info(pformat(log))
         if logger.run_id is not None:
             log.update({"run ID": logger.run_id})
@@ -504,6 +516,7 @@ query GetParameters($id: Int!) {
                         for y in (
                             TEST_EPISODE_RETURN,
                             EPISODE_RETURN,
+                            EPISODE_LENGTH,
                         )
                     ],
                     *[
@@ -511,6 +524,8 @@ query GetParameters($id: Int!) {
                         for y in (
                             TEST_EPISODE_RETURN,
                             EPISODE_RETURN,
+                            TEST_EPISODE_LENGTH,
+                            EPISODE_LENGTH,
                             FPS,
                             ENTROPY,
                             GRADIENT_NORM,
