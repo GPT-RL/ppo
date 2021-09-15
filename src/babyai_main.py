@@ -164,7 +164,9 @@ class Trainer(main.Trainer):
                     synonyms="synonyms" in env_id,
                     **kwargs,
                 )
-                longest_mission = "go to northwest corner and face west"
+                longest_mission = (
+                    "go to the southeast room, go to the west wall, and face east"
+                )
             else:
                 if env_id == "sequence-paraphrases":
                     env = SequenceEnv(
