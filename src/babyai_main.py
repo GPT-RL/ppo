@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Generator, Literal, Union
 
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
@@ -39,6 +39,7 @@ class Args(main.Args):
     strict: bool = True
     train_wordings: str = None
     test_wordings: str = None
+    test_walls: str = None
 
 
 class InvalidEnvIdError(RuntimeError):
@@ -73,6 +74,7 @@ class Trainer(main.Trainer):
             test = kwargs.pop("test")
             train_wordings = kwargs.pop("train_wordings")
             test_wordings = kwargs.pop("test_wordings")
+            test_walls = kwargs.pop("test_walls")
             goal_objects = (
                 [("ball", "green")]
                 if test
@@ -136,14 +138,22 @@ class Trainer(main.Trainer):
             elif env_id.startswith("go-and-face"):
                 del kwargs["strict"]
 
+                def parse_test_walls() -> Generator[
+                    Union[CardinalDirection, OrdinalDirection], None, None
+                ]:
+                    for wall in test_walls.split(","):
+                        try:
+                            yield CardinalDirection[wall]
+                        except KeyError:
+                            yield OrdinalDirection[wall]
+
                 test_directions = {
                     GoAndFaceDirections(
                         room_direction=OrdinalDirection.southeast,
                         wall_direction=d1,
                         face_direction=d2,
                     )
-                    for d1 in {*CardinalDirection, *OrdinalDirection}
-                    - {OrdinalDirection.southeast}
+                    for d1 in parse_test_walls()
                     for d2 in CardinalDirection
                 }
 
@@ -219,6 +229,7 @@ class Trainer(main.Trainer):
             strict=args.strict,
             train_wordings=args.train_wordings,
             test_wordings=args.test_wordings,
+            test_walls=args.test_walls,
             **kwargs,
         )
 
