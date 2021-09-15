@@ -266,11 +266,11 @@ class DirectionsEnv(GoToLocEnv):
         direction = self.np_random.choice(self.directions)
         if isinstance(direction, CardinalDirection):
             self.instrs = GoToWallInstr(
-                desc=WallDesc(direction=direction), strict=self.strict
+                desc=WallDesc(direction=direction, random=None), strict=self.strict
             )
         elif isinstance(direction, OrdinalDirection):
             self.instrs = GoToCornerInstr(
-                desc=CornerDesc(direction=direction), strict=self.strict
+                desc=CornerDesc(direction=direction, random=None), strict=self.strict
             )
         else:
             raise InvalidDirectionError
@@ -314,12 +314,12 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
         idx = self._rand_int(0, len(self.directions))
         d = self.directions[idx]
+        random = self.np_random if self.synonyms else None
         if isinstance(d.wall_direction, CardinalDirection):
             wall_instr = GoToWallInstr(
                 desc=WallDesc(
                     direction=d.wall_direction,
-                    random=self.np_random,
-                    synonyms=self.synonyms,
+                    random=random,
                 ),
                 strict=False,
             )
@@ -327,8 +327,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
             wall_instr = GoToCornerInstr(
                 desc=CornerDesc(
                     direction=d.wall_direction,
-                    random=self.np_random,
-                    synonyms=self.synonyms,
+                    random=random,
                 ),
                 strict=False,
             )
@@ -338,16 +337,14 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
             GoToRoomInstr(
                 RoomDesc(
                     direction=d.room_direction,
-                    random=self.np_random,
-                    synonyms=self.synonyms,
+                    random=random,
                 )
             ),
             wall_instr,
             FaceInstr(
                 desc=FaceDesc(
                     direction=d.face_direction,
-                    random=self.np_random,
-                    synonyms=self.synonyms,
+                    random=random,
                 )
             ),
         )

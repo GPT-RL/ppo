@@ -124,12 +124,14 @@ class Trainer(main.Trainer):
                 longest_mission = "pick up the grasshopper"
             elif env_id == "directions":
                 test_directions = {CardinalDirection.north}
-                kwargs.update(
-                    directions=test_directions
+                directions = (
+                    test_directions
                     if test
                     else {*OrdinalDirection, *CardinalDirection} - test_directions
                 )
-                env = DirectionsEnv(*args, seed=seed + rank, **kwargs)
+                env = DirectionsEnv(
+                    *args, seed=seed + rank, directions=directions, **kwargs
+                )
                 longest_mission = "go to northwest corner"
             elif env_id.startswith("go-and-face"):
                 del kwargs["strict"]

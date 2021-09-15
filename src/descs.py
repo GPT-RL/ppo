@@ -59,7 +59,8 @@ class Desc:
 
 
 class RandomDesc(Desc):
-    def __init__(self, random: np.random.RandomState):
+    def __init__(self, random: typing.Optional[np.random.RandomState]):
+        self.synonyms = random is not None
         self.choices_list = list(self.choices())
         self.random = random
         self.repr = self.sample_repr()
@@ -72,6 +73,8 @@ class RandomDesc(Desc):
         return self.repr
 
     def sample_repr(self):
+        if self.random is None:
+            return self.choices_list[0]
         return self.choices_list[self.random.choice(len(self.choices_list))]
 
 
@@ -93,10 +96,13 @@ adjacencies = {
 
 
 class RoomDesc(RandomDesc):
-    def __init__(self, *args, direction: OrdinalDirection, synonyms: bool, **kwargs):
-        self.synonyms = synonyms
+    def __init__(
+        self,
+        direction: OrdinalDirection,
+        random,
+    ):
         self.direction = direction
-        super().__init__(*args, **kwargs)
+        super().__init__(random=random)
 
     def choices(self):
         yield f"the {self.direction.name} room"
@@ -113,10 +119,9 @@ class RoomDesc(RandomDesc):
 
 
 class WallDesc(RandomDesc):
-    def __init__(self, *args, direction: CardinalDirection, synonyms: bool, **kwargs):
-        self.synonyms = synonyms
+    def __init__(self, direction: CardinalDirection, random):
         self.direction = direction
-        super().__init__(*args, **kwargs)
+        super().__init__(random=random)
 
     def choices(self):
         yield f"the {self.direction.name} wall"
@@ -131,10 +136,9 @@ class WallDesc(RandomDesc):
 
 
 class CornerDesc(RandomDesc):
-    def __init__(self, *args, direction: OrdinalDirection, synonyms: bool, **kwargs):
-        self.synonyms = synonyms
+    def __init__(self, direction: OrdinalDirection, random):
         self.direction = direction
-        super().__init__(*args, **kwargs)
+        super().__init__(random)
 
     def choices(self):
         yield f"the {self.direction.name} corner"
@@ -158,10 +162,9 @@ class FaceDesc(RandomDesc):
         CardinalDirection.north: "up",
     }
 
-    def __init__(self, *args, direction: CardinalDirection, synonyms: bool, **kwargs):
-        self.synonyms = synonyms
+    def __init__(self, direction: CardinalDirection, random):
         self.direction = direction
-        super().__init__(*args, **kwargs)
+        super().__init__(random)
 
     def choices(self):
         yield f"face {self.direction.name}"
