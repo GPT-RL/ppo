@@ -87,6 +87,8 @@ class GoToCornerInstr(RandomInstr):
         room: Room = self.env.room_from_pos(x, y)
         maxX, maxY, minX, minY = get_limits(room)
         direction = self.desc.direction
+        if not action == self.env.actions.done:
+            return "continue"
 
         def validate_direction(positional_direction: OrdinalDirection):
             # print(direction, positional_direction)
@@ -135,6 +137,8 @@ class GoToWallInstr(RandomInstr):
         room: Room = self.env.room_from_pos(x, y)
         maxX, maxY, minX, minY = get_limits(room)
         direction = self.desc.direction
+        if not action == self.env.actions.done:
+            return "continue"
 
         def validate_direction(positional_direction: CardinalDirection):
             # print(direction, positional_direction)
