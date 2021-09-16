@@ -344,8 +344,9 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
         (_d,) = R.lrange(DIRECTIONS, n, n)
         _d = pickle.loads(_d)
-        print(d, _d)
-        if d != _d:
+        print(d)
+        print(_d)
+        if (idx, d) != _d:
             breakpoint()
 
         random = self.np_random if self.synonyms else None
