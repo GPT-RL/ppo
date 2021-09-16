@@ -294,6 +294,8 @@ def key(directions: GoAndFaceDirections):
 
 R = redis.Redis()
 OBSERVATIONS = "obs"
+CHECKED = "checked"
+R.set(CHECKED, 0)
 
 
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
@@ -315,16 +317,17 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
     def step(self, action):
         s, r, t, i = super().step(action)
-        n = R.llen(OBSERVATIONS)
-        (_s,) = R.lrange(OBSERVATIONS, n - 1, n)
+        n = R.incr(CHECKED) - 1
+        (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
+
         breakpoint()
         return s, r, t, i
 
     def reset(self, **kwargs):
         s = super().reset(**kwargs)
-        n = R.llen(OBSERVATIONS)
-        (_s,) = R.lrange(OBSERVATIONS, n - 1, n)
+        n = R.incr(CHECKED) - 1
+        (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
         breakpoint()
         return s
