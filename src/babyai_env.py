@@ -12,7 +12,6 @@ from typing import Set, Union
 import gym
 import gym_minigrid
 import numpy as np
-import redis
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     BeforeInstr,
@@ -45,6 +44,7 @@ from instrs import (
     MultiAndInstr,
     ToggleInstr,
 )
+from my_redis import DIRECTIONS, DIR_CHECKED, OBS_CHECKED, OBSERVATIONS, R
 
 T = TypeVar("T")  # Declare type variable
 
@@ -292,12 +292,6 @@ def key(directions: GoAndFaceDirections):
     )
 
 
-R = redis.Redis()
-OBSERVATIONS = "obs"
-CHECKED = "checked"
-R.set(CHECKED, 0)
-
-
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
@@ -317,7 +311,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
     def step(self, action):
         s, r, t, i = super().step(action)
-        n = R.incr(CHECKED) - 1
+        n = R.incr(OBS_CHECKED) - 1
         (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
 
@@ -326,7 +320,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
     def reset(self, **kwargs):
         s = super().reset(**kwargs)
-        n = R.incr(CHECKED) - 1
+        n = R.incr(OBS_CHECKED) - 1
         (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
         breakpoint()
@@ -339,6 +333,11 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
         idx = self._rand_int(0, len(self.directions))
         d = self.directions[idx]
+        n = R.incr(DIR_CHECKED) - 1
+        (_d,) = R.lrange(DIRECTIONS, n, n)
+        _d = pickle.loads(_d)
+        breakpoint()
+
         random = self.np_random if self.synonyms else None
         if isinstance(d.wall_direction, CardinalDirection):
             wall_instr = GoToWallInstr(
