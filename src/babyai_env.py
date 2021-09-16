@@ -294,7 +294,6 @@ def key(directions: GoAndFaceDirections):
 
 R = redis.Redis()
 OBSERVATIONS = "obs"
-R.delete(OBSERVATIONS)
 
 
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
