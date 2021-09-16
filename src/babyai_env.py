@@ -326,7 +326,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
         idx = self._rand_int(0, len(self.directions))
         d = self.directions[idx]
-        R.rpush(DIRECTIONS, pickle.dumps(d))
+        R.rpush(DIRECTIONS, pickle.dumps((idx, d)))
         random = self.np_random if self.synonyms else None
         if isinstance(d.wall_direction, CardinalDirection):
             wall_instr = GoToWallInstr(
