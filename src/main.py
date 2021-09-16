@@ -11,6 +11,7 @@ from typing import List, Optional
 
 import gym
 import numpy as np
+import redis
 import torch
 import yaml
 from gql import gql
@@ -138,6 +139,7 @@ class Args(Tap):
 class Trainer:
     @classmethod
     def train(cls, args: Args, logger: HasuraLogger):
+        r = redis.Redis()
         if args.load_id is not None:
             parameters = logger.execute(
                 gql(
@@ -240,6 +242,7 @@ query GetParameters($id: Int!) {
 
             for step in range(args.num_steps):
                 # Sample actions
+                r.set((j, step, "obs"), pickle.dumps(rollouts.obs[step]))
                 with torch.no_grad():
                     (
                         value,
@@ -251,6 +254,7 @@ query GetParameters($id: Int!) {
                         rnn_hxs=rollouts.recurrent_hidden_states[step],
                         masks=rollouts.masks[step],
                     )
+                    r.set((j, step, "action"), pickle.dumps(action))
 
                 # Obser reward and next obs
                 obs, reward, done, infos = envs.step(action)
