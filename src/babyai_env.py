@@ -317,12 +317,14 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         s, r, t, i = super().step(action)
         self.step_count += 1
         R.set(str(self.step_count), pickle.dumps(s))
+        print("Step count:", self.step_count)
         return s, r, t, i
 
     def reset(self, **kwargs):
         s = super().reset(**kwargs)
         R.set(str(self.step_count), pickle.dumps(s))
         self.step_count += 1
+        print("Step count:", self.step_count)
         return s
 
     def gen_mission(self):
