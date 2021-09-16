@@ -12,7 +12,6 @@ from typing import Set, Union
 import gym
 import gym_minigrid
 import numpy as np
-import redis
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     BeforeInstr,
@@ -45,6 +44,7 @@ from instrs import (
     MultiAndInstr,
     ToggleInstr,
 )
+from my_redis import OBSERVATIONS, R
 
 T = TypeVar("T")  # Declare type variable
 
@@ -290,11 +290,6 @@ def key(directions: GoAndFaceDirections):
         directions.wall_direction.value,
         directions.face_direction.value,
     )
-
-
-R = redis.Redis()
-OBSERVATIONS = "obs"
-R.delete(OBSERVATIONS)
 
 
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
