@@ -287,7 +287,10 @@ class GoAndFaceDirections(typing.NamedTuple):
 def key(directions: GoAndFaceDirections):
     return (
         directions.room_direction.value,
-        directions.wall_direction.value,
+        (
+            directions.wall_direction.value,
+            str(type(directions.wall_direction)),
+        ),
         directions.face_direction.value,
     )
 
