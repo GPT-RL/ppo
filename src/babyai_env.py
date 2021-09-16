@@ -315,6 +315,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
 
+        print(s["mission"], _s["mission"])
         if s["mission"] != _s["mission"]:
             breakpoint()
         return s, r, t, i
@@ -324,6 +325,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         n = R.incr(OBS_CHECKED) - 1
         (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
+        print(s["mission"], _s["mission"])
         if s["mission"] != _s["mission"]:
             breakpoint()
         return s
@@ -336,8 +338,10 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         idx = self._rand_int(0, len(self.directions))
         d = self.directions[idx]
         n = R.incr(DIR_CHECKED) - 1
+
         (_d,) = R.lrange(DIRECTIONS, n, n)
         _d = pickle.loads(_d)
+        print(d, _d)
         if d != _d:
             breakpoint()
 
