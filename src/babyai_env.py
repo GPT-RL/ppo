@@ -315,7 +315,8 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
 
-        breakpoint()
+        if s["mission"] != _s["mission"]:
+            breakpoint()
         return s, r, t, i
 
     def reset(self, **kwargs):
@@ -323,7 +324,8 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         n = R.incr(OBS_CHECKED) - 1
         (_s,) = R.lrange(OBSERVATIONS, n, n)
         _s = pickle.loads(_s)
-        breakpoint()
+        if s["mission"] != _s["mission"]:
+            breakpoint()
         return s
 
     def gen_mission(self):
@@ -336,7 +338,8 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         n = R.incr(DIR_CHECKED) - 1
         (_d,) = R.lrange(DIRECTIONS, n, n)
         _d = pickle.loads(_d)
-        breakpoint()
+        if d != _d:
+            breakpoint()
 
         random = self.np_random if self.synonyms else None
         if isinstance(d.wall_direction, CardinalDirection):
