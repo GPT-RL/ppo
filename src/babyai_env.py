@@ -314,8 +314,8 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         )
 
     def step(self, action):
-        self.step_count += 1
         s, r, t, i = super().step(action)
+        self.step_count += 1
         _s = pickle.loads(R.get(str(self.step_count)))
         breakpoint()
 
@@ -323,6 +323,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
     def reset(self, **kwargs):
         s = super().reset(**kwargs)
+        self.step_count += 1
         _s = pickle.loads(R.get(str(self.step_count)))
         breakpoint()
         return s
