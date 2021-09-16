@@ -242,7 +242,9 @@ query GetParameters($id: Int!) {
 
             for step in range(args.num_steps):
                 # Sample actions
-                r.set((j, step, "obs"), pickle.dumps(rollouts.obs[step]))
+                _obs = pickle.loads(r.get(str((j, step, "obs"))))
+                if not torch.equal(_obs, rollouts.obs[step]):
+                    breakpoint()
                 with torch.no_grad():
                     (
                         value,
@@ -254,7 +256,9 @@ query GetParameters($id: Int!) {
                         rnn_hxs=rollouts.recurrent_hidden_states[step],
                         masks=rollouts.masks[step],
                     )
-                    r.set((j, step, "action"), pickle.dumps(action))
+                    act = pickle.loads(r.get(str((j, step, "action"))))
+                    if not torch.equal(act, action):
+                        breakpoint()
 
                 # Obser reward and next obs
                 obs, reward, done, infos = envs.step(action)
