@@ -44,7 +44,7 @@ from instrs import (
     MultiAndInstr,
     ToggleInstr,
 )
-from my_redis import OBSERVATIONS, R
+from my_redis import DIRECTIONS, OBSERVATIONS, R
 
 T = TypeVar("T")  # Declare type variable
 
@@ -326,6 +326,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
         idx = self._rand_int(0, len(self.directions))
         d = self.directions[idx]
+        R.rpush(DIRECTIONS, pickle.dumps(d))
         random = self.np_random if self.synonyms else None
         if isinstance(d.wall_direction, CardinalDirection):
             wall_instr = GoToWallInstr(
