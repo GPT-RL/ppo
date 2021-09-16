@@ -293,6 +293,8 @@ def key(directions: GoAndFaceDirections):
 
 
 R = redis.Redis()
+OBSERVATIONS = "obs"
+R.delete(OBSERVATIONS)
 
 
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
@@ -305,7 +307,6 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     ):
         self.synonyms = synonyms
         self.directions = sorted(directions, key=key)
-        self.step_count = 0
         super().__init__(
             room_size=room_size,
             num_rows=2,
@@ -315,16 +316,12 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
 
     def step(self, action):
         s, r, t, i = super().step(action)
-        self.step_count += 1
-        R.set(str(self.step_count), pickle.dumps(s))
-        print("Step count:", self.step_count)
+        R.rpush(OBSERVATIONS, pickle.dumps(s))
         return s, r, t, i
 
     def reset(self, **kwargs):
         s = super().reset(**kwargs)
-        R.set(str(self.step_count), pickle.dumps(s))
-        self.step_count += 1
-        print("Step count:", self.step_count)
+        R.rpush(OBSERVATIONS, pickle.dumps(s))
         return s
 
     def gen_mission(self):
