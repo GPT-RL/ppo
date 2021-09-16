@@ -1,5 +1,6 @@
 import abc
 import itertools
+import pickle
 import re
 import typing
 from abc import ABC
@@ -11,6 +12,7 @@ from typing import Set, Union
 import gym
 import gym_minigrid
 import numpy as np
+import redis
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     BeforeInstr,
@@ -290,6 +292,9 @@ def key(directions: GoAndFaceDirections):
     )
 
 
+R = redis.Redis()
+
+
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
@@ -300,12 +305,24 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     ):
         self.synonyms = synonyms
         self.directions = sorted(directions, key=key)
+        self.step_count = 0
         super().__init__(
             room_size=room_size,
             num_rows=2,
             num_cols=2,
             seed=seed,
         )
+
+    def step(self, action):
+        self.step_count += 1
+        s, r, t, i = super().step(action)
+        R.set(str(self.step_count), pickle.dumps(s))
+        return s, r, t, i
+
+    def reset(self, **kwargs):
+        s = super().reset(**kwargs)
+        R.set(str(self.step_count), pickle.dumps(s))
+        return s
 
     def gen_mission(self):
         self.place_agent()
