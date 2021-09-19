@@ -7,7 +7,7 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
-from typing import List, Optional
+from typing import List, Literal, Optional, cast, get_args
 
 import gym
 import numpy as np
@@ -41,17 +41,8 @@ from rollouts import Rollouts
 from spec import spec
 
 try:
+    # noinspection PyUnresolvedReferences
     import dmc2gym
-except ImportError:
-    pass
-
-try:
-    import roboschool
-except ImportError:
-    pass
-
-try:
-    import pybullet_envs
 except ImportError:
     pass
 
@@ -75,6 +66,9 @@ STEP = "step"
 SAVE_COUNT = "save count"
 
 
+RUN_OR_SWEEP = Literal["run", "sweep"]
+
+
 class Run(Tap):
     name: str
 
@@ -86,13 +80,9 @@ class Sweep(Tap):
     sweep_id: int = None
 
 
-@dataclass
-class TimeSteps:
-    action: np.ndarray
-    observation: np.ndarray
-    reward: np.ndarray
-    done: np.ndarray
-    info: List[dict]
+def configure_logger_args(args: Tap):
+    args.add_subparser("run", Run)
+    args.add_subparser("sweep", Sweep)
 
 
 class Args(Tap):
@@ -130,9 +120,21 @@ class Args(Tap):
     config: Optional[str] = None  # If given, yaml config from which to load params
 
     def configure(self) -> None:
-        self.add_subparsers(dest="subcommand")
-        self.add_subparser("run", Run)
-        self.add_subparser("sweep", Sweep)
+        self.add_subparsers(dest="logger_args")
+        configure_logger_args(self)
+
+
+class ArgsType(Args):
+    logger_args: Optional[RUN_OR_SWEEP]
+
+
+@dataclass
+class TimeSteps:
+    action: np.ndarray
+    observation: np.ndarray
+    reward: np.ndarray
+    done: np.ndarray
+    info: List[dict]
 
 
 class Trainer:
@@ -493,14 +495,11 @@ query GetParameters($id: Int!) {
         )
 
     @classmethod
-    def main(cls, args: Args):
+    def main(cls, args: ArgsType):
         logging.getLogger().setLevel(args.log_level)
         if args.config is not None:
-            with Path(args.config).open() as f:
-                config = yaml.load(f, yaml.FullLoader)
-                args = args.from_dict(
-                    {k: v for k, v in config.items() if k not in cls.excluded()}
-                )
+            args = cls.load_config(args)
+
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
         if args.host_machine:
             metadata.update(host_machine=args.host_machine)
@@ -509,7 +508,10 @@ query GetParameters($id: Int!) {
 
         logger: HasuraLogger
         with HasuraLogger(args.graphql_endpoint) as logger:
-            if args.subcommand is not None:
+            valid = (*get_args(RUN_OR_SWEEP), None)
+            assert args.logger_args in valid, f"{args.logger_args} is not in {valid}."
+
+            if args.logger_args is not None:
                 charts = [
                     *[
                         spec(x=HOURS, y=y)
@@ -548,6 +550,15 @@ query GetParameters($id: Int!) {
             return cls.train(args=args, logger=logger)
 
     @classmethod
+    def load_config(cls, args):
+        with Path(args.config).open() as f:
+            config = yaml.load(f, yaml.FullLoader)
+            args = args.from_dict(
+                {k: v for k, v in config.items() if k not in cls.excluded()}
+            )
+        return args
+
+    @classmethod
     def update_args(cls, args, parameters, check_hasattr=True):
         for k, v in parameters.items():
             if k not in cls.excluded():
@@ -569,4 +580,4 @@ query GetParameters($id: Int!) {
 
 
 if __name__ == "__main__":
-    Trainer.main(Args().parse_args())
+    Trainer.main(cast(ArgsType, Args().parse_args()))

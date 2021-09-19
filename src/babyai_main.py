@@ -1,4 +1,4 @@
-from typing import Generator, Literal, Union
+from typing import Generator, Literal, Union, cast
 
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
@@ -41,14 +41,20 @@ class Args(main.Args):
     test_wordings: str = None
     test_walls: str = None
 
+    def configure(self) -> None:
+        self.add_subparsers(dest="logger_args")
+        main.configure_logger_args(self)
 
-class InvalidEnvIdError(RuntimeError):
+
+class ArgsType(main.ArgsType, Args):
     pass
+
+
 
 
 class Trainer(main.Trainer):
     @classmethod
-    def make_agent(cls, envs: VecPyTorch, args: Args) -> Agent:
+    def make_agent(cls, envs: VecPyTorch, args: ArgsType) -> Agent:
         action_space = envs.action_space
         observation_space, *_ = envs.get_attr("original_observation_space")
         return Agent(
@@ -197,7 +203,7 @@ class Trainer(main.Trainer):
                     )
                     longest_mission = "go to (0, 0), then go to (0, 0)"
                 else:
-                    raise InvalidEnvIdError()
+                    raise RuntimeError(f"{env_id} is not a valid env_id")
 
             env = FullyObsWrapper(env)
             env = ActionInObsWrapper(env)
@@ -235,4 +241,4 @@ class Trainer(main.Trainer):
 
 
 if __name__ == "__main__":
-    Trainer.main(Args().parse_args())
+    Trainer.main(cast(ArgsType, Args().parse_args()))
