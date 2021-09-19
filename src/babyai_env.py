@@ -322,7 +322,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
             def get_kwargs_starting_with(s: str):
                 for k, v in kwargs.items():
                     if k.startswith(s):
-                        yield k.lstrip(s), v
+                        yield k[len(s) :], v
 
             if isinstance(d.wall_direction, CardinalDirection):
                 wall_instr = GoToWallInstr(
