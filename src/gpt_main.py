@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Optional, cast
+from typing import Literal, Optional, cast, get_args
 
 import torch
 from tap import Tap
@@ -86,9 +86,20 @@ class Trainer(babyai_main.Trainer):
 
 def main():
     args = Args().parse_args()
-    if args.config:
-        args = babyai_main.Trainer.load_config(args)
     args = cast(ArgsType, args)
+    if args.config:
+        first_args = args.first_args  # save original first args
+        args = babyai_main.Trainer.load_config(args)
+
+        if None not in (first_args, args.first_args):
+            # This happens when original args were using run/sweep but not gpt
+            # and config specifies gpt as first_args
+            args.second_args = first_args
+
+        # This last logic allows the architecture to be specified from config.yml
+        # without having to change the command line command.
+        # Helpful for running using execute_sweep.py
+
     logging.getLogger().setLevel(args.log_level)
     if args.first_args == "gpt":
         logging.info(f"Using {args.embedding_size} GPT architecture.")

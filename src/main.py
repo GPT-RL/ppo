@@ -576,6 +576,7 @@ query GetParameters($id: Int!) {
             "subcommand",
             "sweep_id",
             "load_id",
+            "logger_args",
         }
 
 
