@@ -140,20 +140,6 @@ class TimeSteps:
 class Trainer:
     @classmethod
     def train(cls, args: Args, logger: HasuraLogger):
-        if args.load_id is not None:
-            parameters = logger.execute(
-                gql(
-                    """
-query GetParameters($id: Int!) {
-  run_by_pk(id: $id) {
-    metadata(path: "parameters")
-  }
-}"""
-                ),
-                variable_values=dict(id=args.load_id),
-            )["run_by_pk"]["metadata"]
-            cls.update_args(args, parameters, check_hasattr=False)
-
         logging.info(pformat(args.as_dict()))
 
         render = args.render or args.render_test
@@ -498,7 +484,11 @@ query GetParameters($id: Int!) {
     def main(cls, args: ArgsType):
         logging.getLogger().setLevel(args.log_level)
         if args.config is not None:
-            args = cls.load_config(args)
+            with Path(args.config).open() as f:
+                config = yaml.load(f, yaml.FullLoader)
+                args = args.from_dict(
+                    {k: v for k, v in config.items() if k not in cls.excluded()}
+                )
 
         metadata = dict(reproducibility_info=args.get_reproducibility_info())
         if args.host_machine:
@@ -547,16 +537,21 @@ query GetParameters($id: Int!) {
                 logger.update_metadata(
                     dict(parameters=args.as_dict(), run_id=logger.run_id)
                 )
-            return cls.train(args=args, logger=logger)
 
-    @classmethod
-    def load_config(cls, args):
-        with Path(args.config).open() as f:
-            config = yaml.load(f, yaml.FullLoader)
-            args = args.from_dict(
-                {k: v for k, v in config.items() if k not in cls.excluded()}
-            )
-        return args
+            if args.load_id is not None:
+                parameters = logger.execute(
+                    gql(
+                        """
+    query GetParameters($id: Int!) {
+      run_by_pk(id: $id) {
+        metadata(path: "parameters")
+      }
+    }"""
+                    ),
+                    variable_values=dict(id=args.load_id),
+                )["run_by_pk"]["metadata"]
+                cls.update_args(args, parameters, check_hasattr=False)
+            return cls.train(args=args, logger=logger)
 
     @classmethod
     def update_args(cls, args, parameters, check_hasattr=True):

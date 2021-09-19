@@ -1,5 +1,6 @@
 import abc
 import typing
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List
 
@@ -22,7 +23,7 @@ class OrdinalDirection(Enum):
     southwest = auto()
 
 
-direction_synonym = {
+DIRECTION_SYNONYM = {
     OrdinalDirection.northeast: ["upper right", "top right"],
     OrdinalDirection.northwest: ["upper left", "top left"],
     OrdinalDirection.southeast: ["lower right", "bottom right"],
@@ -33,7 +34,7 @@ direction_synonym = {
     CardinalDirection.north: ["upper", "top"],
 }
 
-opposites = {
+OPPOSITES = {
     OrdinalDirection.northeast: OrdinalDirection.southwest,
     OrdinalDirection.northwest: OrdinalDirection.southeast,
     CardinalDirection.east: CardinalDirection.west,
@@ -41,7 +42,7 @@ opposites = {
 }
 
 
-opposites.update({v: k for k, v in opposites.items()})
+OPPOSITES.update({v: k for k, v in OPPOSITES.items()})
 
 
 class Desc:
@@ -58,11 +59,13 @@ class Desc:
         return [], []
 
 
+@dataclass
 class RandomDesc(Desc):
-    def __init__(self, random: typing.Optional[np.random.RandomState]):
-        self.synonyms = random is not None
+    direction: typing.Union[OrdinalDirection, CardinalDirection]
+    random: typing.Optional[np.random.RandomState]
+
+    def __post_init__(self):
         self.choices_list = list(self.choices())
-        self.random = random
         self.repr = self.sample_repr()
 
     @abc.abstractmethod
@@ -78,7 +81,7 @@ class RandomDesc(Desc):
         return self.choices_list[self.random.choice(len(self.choices_list))]
 
 
-adjacencies = {
+ADJACENCIES = {
     OrdinalDirection.northeast: [
         "to the right of the northwest",
         "above the southeast",
@@ -95,83 +98,100 @@ adjacencies = {
 }
 
 
+@dataclass
 class RoomDesc(RandomDesc):
-    def __init__(
-        self,
-        direction: OrdinalDirection,
-        random,
-    ):
-        self.direction = direction
-        super().__init__(random=random)
+    direction: OrdinalDirection
+    opposite_synonyms: bool = False
+    opposites: bool = False
+    adjacencies: bool = False
+    synonyms: bool = False
+
+    # For some reason this is necessary...
+    def __repr__(self):
+        return super().__repr__()
 
     def choices(self):
         yield f"the {self.direction.name} room"
-        if self.synonyms:
-            for adjacent_to in adjacencies[self.direction]:
+        if self.adjacencies:
+            for adjacent_to in ADJACENCIES[self.direction]:
                 yield f"the room {adjacent_to} room"
-            for synonym in direction_synonym[self.direction]:
+        if self.synonyms:
+            for synonym in DIRECTION_SYNONYM[self.direction]:
                 yield f"the room in the {synonym}"
-            opposite = opposites[self.direction]
+        opposite = OPPOSITES[self.direction]
+        if self.opposites:
             yield f"the room opposite from the {opposite.name}"
-            for synonym in direction_synonym[opposite]:
+        if self.opposite_synonyms:
+            for synonym in DIRECTION_SYNONYM[opposite]:
                 yield f"the room opposite from the {synonym}"
                 yield f"the room furthest from the {synonym}"
 
 
+@dataclass
 class WallDesc(RandomDesc):
-    def __init__(self, direction: CardinalDirection, random):
-        self.direction = direction
-        super().__init__(random=random)
+    direction: CardinalDirection
+    opposite_synonyms: bool = False
+    opposites: bool = False
+    synonyms: bool = False
 
     def choices(self):
         yield f"the {self.direction.name} wall"
         if self.synonyms:
-            for synonym in direction_synonym[self.direction]:
+            for synonym in DIRECTION_SYNONYM[self.direction]:
                 yield f"the {synonym} wall"
-            opposite = opposites[self.direction]
+        opposite = OPPOSITES[self.direction]
+        if self.opposites:
             yield f"the wall opposite from the {opposite.name}"
-            for synonym in direction_synonym[opposite]:
+        if self.opposite_synonyms:
+            for synonym in DIRECTION_SYNONYM[opposite]:
                 yield f"the wall opposite from the {synonym} wall"
-                yield f"the wall furthest from the {synonym} wall"
+                # yield f"the wall furthest from the {synonym} wall"
 
 
+@dataclass
 class CornerDesc(RandomDesc):
-    def __init__(self, direction: OrdinalDirection, random):
-        self.direction = direction
-        super().__init__(random)
+    direction: OrdinalDirection
+    opposite_synonyms: bool = False
+    opposites: bool = False
+    adjacencies: bool = False
+    synonyms: bool = False
 
     def choices(self):
         yield f"the {self.direction.name} corner"
         if self.synonyms:
-            for synonym in direction_synonym[self.direction]:
+            for synonym in DIRECTION_SYNONYM[self.direction]:
                 yield f"the {synonym} corner"
-            for adjacent_to in adjacencies[self.direction]:
+        if self.adjacencies:
+            for adjacent_to in ADJACENCIES[self.direction]:
                 yield f"the corner {adjacent_to} corner"
-            opposite = opposites[self.direction]
+        opposite = OPPOSITES[self.direction]
+        if self.opposites:
             yield f"the corner opposite from the {opposite.name}"
-            for synonym in direction_synonym[opposite]:
+        if self.opposite_synonyms:
+            for synonym in DIRECTION_SYNONYM[opposite]:
                 yield f"the corner opposite from the {synonym}"
-                yield f"the corner furthest from the {synonym}"
+                # yield f"the corner furthest from the {synonym}"
 
 
+@dataclass
 class FaceDesc(RandomDesc):
-    direction_synonym = {
+    direction_synonyms = {
         CardinalDirection.east: "right",
         CardinalDirection.south: "down",
         CardinalDirection.west: "left",
         CardinalDirection.north: "up",
     }
-
-    def __init__(self, direction: CardinalDirection, random):
-        self.direction = direction
-        super().__init__(random)
+    direction: CardinalDirection
+    opposites: bool = False
+    synonyms: bool = False
 
     def choices(self):
         yield f"face {self.direction.name}"
-        if self.synonyms:
-            opposite = opposites[self.direction]
+        if self.opposites:
+            opposite = OPPOSITES[self.direction]
             yield f"face away from the {opposite.name}"
-            yield f"look {self.direction_synonym[self.direction]}"
+        if self.synonyms:
+            yield f"look {self.direction_synonyms[self.direction]}"
 
 
 class LocDesc(Desc):

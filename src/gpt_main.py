@@ -1,35 +1,23 @@
 import logging
-from typing import Literal, Optional, cast, get_args
+from typing import Literal, Optional, cast
 
 import torch
-from tap import Tap
+from sweep_logger import HasuraLogger
 
 import babyai_main
 from envs import VecPyTorch
 from gpt_agent import Agent
-from main import RUN_OR_SWEEP, configure_logger_args
-
-
-class GptArgs(Tap):
-    randomize_parameters: bool = False
-    train_ln: bool = True
-    train_wpe: bool = False
-
-    def configure(self) -> None:
-        self.add_subparsers(dest="second_args")
-        configure_logger_args(self)
 
 
 class Args(babyai_main.Args):
-    def configure(self) -> None:
-        self.add_subparsers(dest="first_args")
-        self.add_subparser("gpt", GptArgs)
-        configure_logger_args(self)
+    randomize_parameters: bool = False
+    train_ln: bool = True
+    train_wpe: bool = False
+    gpt: bool = True
 
 
-class ArgsType(babyai_main.Args, GptArgs):
-    first_args: Optional[Literal[RUN_OR_SWEEP, "gpt"]]
-    second_args: Optional[RUN_OR_SWEEP]
+class ArgsType(Args, babyai_main.ArgsType):
+    pass
 
 
 class Trainer(babyai_main.Trainer):
@@ -80,36 +68,13 @@ class Trainer(babyai_main.Trainer):
                     pass
 
     @classmethod
-    def load_config(cls, args):
-        return args
-
-
-def main():
-    args = Args().parse_args()
-    args = cast(ArgsType, args)
-    if args.config:
-        first_args = args.first_args  # save original first args
-        args = babyai_main.Trainer.load_config(args)
-
-        if None not in (first_args, args.first_args):
-            # This happens when original args were using run/sweep but not gpt
-            # and config specifies gpt as first_args
-            args.second_args = first_args
-
-        # This last logic allows the architecture to be specified from config.yml
-        # without having to change the command line command.
-        # Helpful for running using execute_sweep.py
-
-    logging.getLogger().setLevel(args.log_level)
-    if args.first_args == "gpt":
-        logging.info(f"Using {args.embedding_size} GPT architecture.")
-        args.logger_args = args.second_args
-        Trainer().main(args)
-    else:
-        logging.info(f"Using baseline architecture.")
-        args.logger_args = args.first_args
-        babyai_main.Trainer().main(args)
+    def train(cls, args: Args, **kwargs):
+        return (
+            super().train(args, **kwargs)
+            if args.gpt
+            else babyai_main.Trainer().train(args, **kwargs)
+        )
 
 
 if __name__ == "__main__":
-    main()
+    Trainer.main(cast(ArgsType, Args().parse_args()))

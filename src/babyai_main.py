@@ -39,7 +39,8 @@ class Args(main.Args):
     strict: bool = True
     train_wordings: str = None
     test_wordings: str = None
-    test_walls: str = None
+    test_walls: str = "south,southeast"
+    go_and_face_synonyms: str = ""
 
     def configure(self) -> None:
         self.add_subparsers(dest="logger_args")
@@ -48,8 +49,6 @@ class Args(main.Args):
 
 class ArgsType(main.ArgsType, Args):
     pass
-
-
 
 
 class Trainer(main.Trainer):
@@ -81,6 +80,7 @@ class Trainer(main.Trainer):
             train_wordings = kwargs.pop("train_wordings")
             test_wordings = kwargs.pop("test_wordings")
             test_walls = kwargs.pop("test_walls")
+            go_and_face_synonyms = kwargs.pop("go_and_face_synonyms")
             goal_objects = (
                 [("ball", "green")]
                 if test
@@ -141,7 +141,7 @@ class Trainer(main.Trainer):
                     *args, seed=seed + rank, directions=directions, **kwargs
                 )
                 longest_mission = "go to northwest corner"
-            elif env_id.startswith("go-and-face"):
+            elif env_id == "go-and-face":
                 del kwargs["strict"]
 
                 def parse_test_walls() -> Generator[
@@ -175,11 +175,11 @@ class Trainer(main.Trainer):
 
                 directions = set(get_directions())
                 directions = test_directions if test else directions - test_directions
+                kwargs.update({k: True for k in go_and_face_synonyms.split(",")})
                 env = GoAndFaceEnv(
                     *args,
                     seed=seed + rank,
                     directions=directions,
-                    synonyms="synonyms" in env_id,
                     **kwargs,
                 )
                 longest_mission = (
@@ -224,7 +224,7 @@ class Trainer(main.Trainer):
         return _thunk
 
     @classmethod
-    def make_vec_envs(cls, args, device, **kwargs):
+    def make_vec_envs(cls, args: ArgsType, device, **kwargs):
         # assert len(test_objects) >= 3
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
         return super().make_vec_envs(
@@ -236,6 +236,7 @@ class Trainer(main.Trainer):
             train_wordings=args.train_wordings,
             test_wordings=args.test_wordings,
             test_walls=args.test_walls,
+            go_and_face_synonyms=args.go_and_face_synonyms,
             **kwargs,
         )
 

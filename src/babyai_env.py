@@ -253,9 +253,33 @@ class DirectionsEnv(GoToLocEnv):
         seed: int,
         strict: bool,
         directions: Set[Union[CardinalDirection, OrdinalDirection]],
+        adjacencies: bool,
+        **kwargs,
     ):
-        self.directions = list(directions)
-        self.strict = strict
+        directions = sorted(directions, key=directions_key)
+
+        def get_instr():
+            direction = self._rand_elem(directions)
+            if isinstance(direction, CardinalDirection):
+                return GoToWallInstr(
+                    desc=WallDesc(direction=direction, random=None, **kwargs),
+                    strict=strict,
+                )
+            elif isinstance(direction, OrdinalDirection):
+                return GoToCornerInstr(
+                    desc=CornerDesc(
+                        direction=direction,
+                        random=None,
+                        adjacencies=adjacencies,
+                        **kwargs,
+                    ),
+                    strict=strict,
+                )
+            else:
+                raise InvalidDirectionError
+
+        self.get_instr = get_instr
+
         super().__init__(room_size, seed)
 
     def gen_mission(self):
@@ -263,17 +287,7 @@ class DirectionsEnv(GoToLocEnv):
         self.connect_all()
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
-        direction = self.np_random.choice(self.directions)
-        if isinstance(direction, CardinalDirection):
-            self.instrs = GoToWallInstr(
-                desc=WallDesc(direction=direction, random=None), strict=self.strict
-            )
-        elif isinstance(direction, OrdinalDirection):
-            self.instrs = GoToCornerInstr(
-                desc=CornerDesc(direction=direction, random=None), strict=self.strict
-            )
-        else:
-            raise InvalidDirectionError
+        self.instrs = self.get_instr()
 
 
 class GoAndFaceDirections(typing.NamedTuple):
@@ -282,27 +296,71 @@ class GoAndFaceDirections(typing.NamedTuple):
     face_direction: CardinalDirection
 
 
-def key(directions: GoAndFaceDirections):
+def directions_key(directions: Union[CardinalDirection, OrdinalDirection]):
+    return directions.value, str(type(directions))
+
+
+def go_and_face_directions_key(directions: GoAndFaceDirections):
     return (
         directions.room_direction.value,
-        (
-            directions.wall_direction.value,
-            str(type(directions.wall_direction)),
-        ),
+        directions_key(directions.wall_direction),
         directions.face_direction.value,
     )
 
 
 class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
     def __init__(
-        self,
-        room_size: int,
-        seed: int,
-        directions: Set[GoAndFaceDirections],
-        synonyms: bool,
+        self, room_size: int, seed: int, directions: Set[GoAndFaceDirections], **kwargs
     ):
-        self.synonyms = synonyms
-        self.directions = sorted(directions, key=key)
+        directions = sorted(directions, key=go_and_face_directions_key)
+
+        def get_instr():
+            idx = self._rand_int(0, len(directions))
+            d = directions[idx]
+            random = self.np_random
+
+            def get_kwargs_starting_with(s: str):
+                for k, v in kwargs.items():
+                    if k.startswith(s):
+                        yield k.lstrip(s), v
+
+            if isinstance(d.wall_direction, CardinalDirection):
+                wall_instr = GoToWallInstr(
+                    desc=WallDesc(
+                        direction=d.wall_direction,
+                        random=random,
+                        **dict(get_kwargs_starting_with("wall_")),
+                    ),
+                    strict=False,
+                )
+            elif isinstance(d.wall_direction, OrdinalDirection):
+                wall_instr = GoToCornerInstr(
+                    desc=CornerDesc(
+                        direction=d.wall_direction,
+                        random=random,
+                        **dict(get_kwargs_starting_with("corner_")),
+                    ),
+                    strict=False,
+                )
+            else:
+                raise InvalidDirectionError
+            room_desc = RoomDesc(
+                direction=d.room_direction,
+                random=random,
+                **dict(get_kwargs_starting_with("room_")),
+            )
+            go_to_room_instr = GoToRoomInstr(room_desc)
+            face_desc = FaceDesc(
+                direction=d.face_direction,
+                random=random,
+                **dict(get_kwargs_starting_with("face_")),
+            )
+            face_instr = FaceInstr(desc=face_desc)
+            instr = MultiAndInstr(go_to_room_instr, wall_instr, face_instr)
+            return instr
+
+        self.get_instr = get_instr
+
         super().__init__(
             room_size=room_size,
             num_rows=2,
@@ -314,43 +372,7 @@ class GoAndFaceEnv(RenderEnv, ReproducibleEnv):
         self.place_agent()
         self.connect_all()
         self.check_objs_reachable()
-
-        idx = self._rand_int(0, len(self.directions))
-        d = self.directions[idx]
-        random = self.np_random if self.synonyms else None
-        if isinstance(d.wall_direction, CardinalDirection):
-            wall_instr = GoToWallInstr(
-                desc=WallDesc(
-                    direction=d.wall_direction,
-                    random=random,
-                ),
-                strict=False,
-            )
-        elif isinstance(d.wall_direction, OrdinalDirection):
-            wall_instr = GoToCornerInstr(
-                desc=CornerDesc(
-                    direction=d.wall_direction,
-                    random=random,
-                ),
-                strict=False,
-            )
-        else:
-            raise InvalidDirectionError
-        self.instrs = MultiAndInstr(
-            GoToRoomInstr(
-                RoomDesc(
-                    direction=d.room_direction,
-                    random=random,
-                )
-            ),
-            wall_instr,
-            FaceInstr(
-                desc=FaceDesc(
-                    direction=d.face_direction,
-                    random=random,
-                )
-            ),
-        )
+        self.instrs = self.get_instr()
 
 
 class ToggleEnv(RenderEnv, ReproducibleEnv):
@@ -879,6 +901,19 @@ def main(args: "Args"):
                 CardinalDirection,
             )
         },
+        corner_synonyms=True,
+        corner_opposite_synonyms=True,
+        corner_opposites=True,
+        corner_adjacencies=True,
+        face_synonyms=True,
+        face_opposites=True,
+        room_synonyms=True,
+        room_opposite_synonyms=True,
+        room_opposites=True,
+        room_adjacencies=True,
+        wall_synonyms=True,
+        wall_opposite_synonyms=True,
+        wall_opposites=True,
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
