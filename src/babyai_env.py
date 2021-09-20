@@ -499,7 +499,7 @@ class MissionWrapper(gym.Wrapper, abc.ABC):
         print(self._mission)
         self.env.pause(pause)
 
-    def change_mission(self, mission):
+    def change_mission(self, mission: str) -> str:
         raise NotImplementedError
 
 
@@ -614,7 +614,7 @@ class PlantAnimalWrapper(MissionWrapper):
         ],
     }
 
-    def change_mission(self, mission):
+    def change_mission(self, mission: str) -> str:
         for k, v in self.replacements.items():
             if k in mission:
                 replacement = self.np_random.choice(v)

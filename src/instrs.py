@@ -57,13 +57,16 @@ class RandomInstr(ActionInstr, ABC):
         self.random_desc_surface = self.sample_desc_surface()
 
     @abc.abstractmethod
-    def surface(self, env):
+    def surface(self, env) -> str:
         raise NotImplementedError
 
     def sample_desc_surface(self):
         return self.desc.sample_repr()
 
     def reset_verifier(self, env):
+        """
+        This gets called at the beginning of each episode.
+        """
         super().reset_verifier(env)
         self.random_desc_surface = self.sample_desc_surface()
 
@@ -82,6 +85,9 @@ class GoToCornerInstr(RandomInstr):
         return "go to " + self.random_desc_surface
 
     def verify_action(self, action):
+        """
+        This gets called each timestep.
+        """
         self.env: RoomGrid
         x, y = self.env.agent_pos
         room: Room = self.env.room_from_pos(x, y)
