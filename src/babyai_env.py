@@ -20,9 +20,13 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import MiniGridEnv, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
-from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
+from gym_minigrid.wrappers import (
+    ImgObsWrapper,
+    RGBImgObsWrapper,
+    RGBImgPartialObsWrapper,
+)
 from transformers import GPT2Tokenizer
 
 from descs import (
@@ -438,7 +442,7 @@ class NegationEnv(PickupEnvRoomObjects):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        *goal_object, positive = self._rand_elem(self.room_objects)
+        positive, *goal_object = self._rand_elem(self.room_objects)
         self.add_object(0, 0, *goal_object)
         objects = self.add_distractors(0, 0, self.num_dists)
         self.check_objs_reachable()
@@ -839,6 +843,20 @@ class FullyObsWrapper(gym_minigrid.wrappers.FullyObsWrapper):
         return obs
 
 
+class RGBImgObsWithDirectionWrapper(RGBImgObsWrapper):
+    """
+    Wrapper to use fully observable RGB image as the only observation output,
+    no language/mission. This can be used to have the agent to solve the
+    gridworld in pixel space.
+    """
+
+    def observation(self, obs):
+        direction = obs["direction"]
+        obs = super().observation(obs)
+        obs["direction"] = direction
+        return obs
+
+
 def main(args: "Args"):
     def redraw(img):
         if not args.agent_view:
@@ -900,13 +918,9 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = NegationEnv(
-        room_objects=[
-            (ty, col, pos)
-            for ty in TYPES
-            for col in ["red", "green", "blue"]
-            for pos in (True, False)
-        ],
+    room_objects = [(ty, col) for ty in TYPES for col in COLOR_NAMES]
+    env = PickupEnvRoomObjects(
+        room_objects=room_objects,
         room_size=args.room_size,
         seed=args.seed,
         strict=not args.not_strict,

@@ -1,5 +1,7 @@
+import functools
 from typing import Generator, Literal, NamedTuple, Union, cast
 
+from gym_minigrid.minigrid import COLOR_NAMES
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
 
@@ -13,11 +15,13 @@ from babyai_env import (
     GoAndFaceEnv,
     GoToLocEnv,
     GoToObjEnv,
+    NegationEnv,
     PickupEnv,
     PickupEnvRoomObjects,
     PickupRedEnv,
     PickupSynonymWrapper,
     PlantAnimalWrapper,
+    RGBImgObsWithDirectionWrapper,
     RolloutsWrapper,
     SequenceEnv,
     SequenceParaphrasesWrapper,
@@ -36,8 +40,10 @@ class Args(main.Args):
     ] = "medium"  # what size of pretrained GPT to use
     env: str = "GoToLocal"  # env ID for gym
     go_and_face_synonyms: str = ""
+    num_dists: int = 1
     room_size: int = 5
     strict: bool = True
+    test_colors: str = None
     test_descriptors: str = None
     test_wordings: str = None
     test_walls: str = "south,southeast"
@@ -72,17 +78,23 @@ class Trainer(main.Trainer):
         return args.recurrent
 
     @staticmethod
-    def make_env(
-        env_id, seed, rank, allow_early_resets, render: bool = False, *args, **kwargs
-    ):
-        def _thunk():
-            tokenizer = kwargs.pop("tokenizer")
-            test = kwargs.pop("test")
-            train_wordings = kwargs.pop("train_wordings")
-            test_wordings = kwargs.pop("test_wordings")
-            test_walls = kwargs.pop("test_walls")
-            test_descriptors = kwargs.pop("test_descriptors")
-            go_and_face_synonyms = kwargs.pop("go_and_face_synonyms")
+    def make_env(env, allow_early_resets, render: bool = False, *args, **kwargs):
+        def _thunk(
+            env_id,
+            tokenizer,
+            test,
+            train_wordings,
+            test_wordings,
+            test_walls,
+            test_descriptors,
+            test_colors,
+            go_and_face_synonyms,
+            room_size,
+            seed,
+            strict,
+            num_dists,
+            **_,
+        ):
             goal_objects = (
                 [("ball", "green")]
                 if test
@@ -92,32 +104,31 @@ class Trainer(main.Trainer):
                     ("ball", "yellow"),
                 ]
             )
+            _kwargs = dict(
+                room_size=room_size, strict=strict, num_dists=num_dists, seed=seed
+            )
+
             if env_id == "go-to-obj":
-                env = GoToObjEnv(
-                    *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
-                )
+                _env = GoToObjEnv(*args, goal_objects=goal_objects, **_kwargs)
                 longest_mission = "go to the red ball"
             elif env_id == "go-to-loc":
-                env = GoToLocEnv(*args, seed=seed + rank, **kwargs)
+                _env = GoToLocEnv(*args, **_kwargs)
                 longest_mission = "go to (0, 0)"
             elif env_id == "toggle":
-                env = ToggleEnv(*args, seed=seed + rank, **kwargs)
+                _env = ToggleEnv(*args, **_kwargs)
                 longest_mission = "toggle the red ball"
             elif env_id == "pickup":
-                env = PickupEnv(
+                _env = PickupEnv(
                     *args,
-                    seed=seed + rank,
                     num_dists=1,
                     goal_objects=goal_objects,
-                    **kwargs,
+                    **_kwargs,
                 )
                 longest_mission = "pick up the red ball"
             elif env_id == "pickup-synonyms":
-                env = PickupRedEnv(
-                    *args, seed=seed + rank, goal_objects=goal_objects, **kwargs
-                )
+                _env = PickupRedEnv(*args, goal_objects=goal_objects, **_kwargs)
                 if test:
-                    env = PickupSynonymWrapper(env)
+                    _env = PickupSynonymWrapper(_env)
                 longest_mission = "pick-up the crimson phone"
             elif env_id == "plant-animal":
                 objects = {*PlantAnimalWrapper.replacements.keys()}
@@ -128,9 +139,9 @@ class Trainer(main.Trainer):
                 room_objects = test_objects if test else objects - test_objects
                 room_objects = [o.split() for o in room_objects]
                 room_objects = [(t, c) for (c, t) in room_objects]
-                kwargs.update(room_objects=sorted(room_objects))
-                env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
-                env = PlantAnimalWrapper(env)
+                _kwargs.update(room_objects=sorted(room_objects))
+                _env = PickupEnvRoomObjects(*args, **_kwargs)
+                _env = PlantAnimalWrapper(_env)
                 longest_mission = "pick up the grasshopper"
             elif env_id == "directions":
                 test_directions = {CardinalDirection.north}
@@ -139,12 +150,10 @@ class Trainer(main.Trainer):
                     if test
                     else {*OrdinalDirection, *CardinalDirection} - test_directions
                 )
-                env = DirectionsEnv(
-                    *args, seed=seed + rank, directions=directions, **kwargs
-                )
+                _env = DirectionsEnv(*args, directions=directions, **_kwargs)
                 longest_mission = "go to northwest corner"
             elif env_id == "go-and-face":
-                del kwargs["strict"]
+                del _kwargs["strict"]
 
                 def parse_test_walls() -> Generator[
                     Union[CardinalDirection, OrdinalDirection], None, None
@@ -177,31 +186,26 @@ class Trainer(main.Trainer):
 
                 directions = set(get_directions())
                 directions = test_directions if test else directions - test_directions
-                kwargs.update({k: True for k in go_and_face_synonyms.split(",")})
-                env = GoAndFaceEnv(
+                _kwargs.update({k: True for k in go_and_face_synonyms.split(",")})
+                _env = GoAndFaceEnv(
                     *args,
-                    seed=seed + rank,
                     directions=directions,
-                    **kwargs,
+                    **_kwargs,
                 )
                 longest_mission = (
                     "go to the southeast room, go to the west wall, and face east"
                 )
             elif env_id == "sequence-paraphrases":
-                env = SequenceEnv(
-                    *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
-                )
-                env = SequenceParaphrasesWrapper(
-                    env,
+                _env = SequenceEnv(*args, num_rows=1, num_cols=1, **_kwargs)
+                _env = SequenceParaphrasesWrapper(
+                    _env,
                     test=test,
                     train_wordings=train_wordings.split(","),
                     test_wordings=test_wordings.split(","),
                 )
                 longest_mission = "go to (0, 0), having already gone to (0, 0)"
             elif env_id == "sequence":
-                env = SequenceEnv(
-                    *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
-                )
+                _env = SequenceEnv(*args, num_rows=1, num_cols=1, **_kwargs)
                 longest_mission = "go to (0, 0), then go to (0, 0)"
             elif env_id == "negation":
 
@@ -210,7 +214,7 @@ class Trainer(main.Trainer):
                     type: str = None
                     color: str = None
 
-                COLORS = ["red", "green", "blue"]
+                COLORS = ["red", "green", "blue", "yellow"]
 
                 objects = {
                     NegationObject(type=ty, color=col, positive=pos)
@@ -221,7 +225,7 @@ class Trainer(main.Trainer):
 
                 def get_test_objects():
                     assert isinstance(test_descriptors, str)
-                    for s in test_descriptors.split():
+                    for s in test_descriptors.split(","):
                         if s in TYPES:
                             yield NegationObject(type=s, positive=False)
                         elif s in COLORS:
@@ -231,47 +235,46 @@ class Trainer(main.Trainer):
 
                 test_objects = set(get_test_objects())
                 room_objects = test_objects if test else objects - test_objects
-                kwargs.update(room_objects=sorted(room_objects))
-                env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
+                _env = NegationEnv(*args, room_objects=sorted(room_objects), **_kwargs)
                 longest_mission = "pick up an object that is not a ball."
-
+            elif env_id == "colors":
+                objects = {(ty, col) for ty in TYPES for col in COLOR_NAMES}
+                test_objects = {
+                    (ty, col) for ty in TYPES for col in test_colors.split(",")
+                }
+                room_objects = test_objects if test else objects - test_objects
+                _env = PickupEnvRoomObjects(
+                    *args, room_objects=sorted(room_objects), **_kwargs
+                )
+                _env = RGBImgObsWithDirectionWrapper(_env)
+                longest_mission = "pick up the forest green ball."
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
 
-            env = FullyObsWrapper(env)
-            env = ActionInObsWrapper(env)
-            env = ZeroOneRewardWrapper(env)
-            env = TokenizerWrapper(
-                env,
+            _env = FullyObsWrapper(_env)
+            _env = ActionInObsWrapper(_env)
+            _env = ZeroOneRewardWrapper(_env)
+            _env = TokenizerWrapper(
+                _env,
                 tokenizer=tokenizer,
                 longest_mission=longest_mission,
             )
-            env = RolloutsWrapper(env)
+            _env = RolloutsWrapper(_env)
 
-            env = Monitor(env, allow_early_resets=allow_early_resets)
+            _env = Monitor(_env, allow_early_resets=allow_early_resets)
             if render:
-                env = RenderWrapper(env)
+                _env = RenderWrapper(_env)
 
-            return env
+            return _env
 
-        return _thunk
+        return functools.partial(_thunk, env_id=env, **kwargs)
 
     @classmethod
-    def make_vec_envs(cls, args: ArgsType, device, **kwargs):
-        # assert len(test_objects) >= 3
-        tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
-        return super().make_vec_envs(
-            args,
-            device,
-            room_size=args.room_size,
-            tokenizer=tokenizer,
-            strict=args.strict,
-            train_wordings=args.train_wordings,
-            test_wordings=args.test_wordings,
-            test_walls=args.test_walls,
-            go_and_face_synonyms=args.go_and_face_synonyms,
-            **kwargs,
+    def make_vec_envs(cls, num_frame_stack=None, **kwargs):
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            get_gpt_size(kwargs["embedding_size"])
         )
+        return super().make_vec_envs(tokenizer=tokenizer, **kwargs)
 
 
 if __name__ == "__main__":
