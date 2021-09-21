@@ -1,4 +1,4 @@
-from typing import Generator, Literal, Union, cast
+from typing import Generator, Literal, NamedTuple, Union, cast
 
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
@@ -25,7 +25,7 @@ from babyai_env import (
     TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
-from descs import CardinalDirection, OrdinalDirection
+from descs import COLORS, CardinalDirection, OrdinalDirection, TYPES
 from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
 
@@ -35,12 +35,13 @@ class Args(main.Args):
         "small", "medium", "large", "xl"
     ] = "medium"  # what size of pretrained GPT to use
     env: str = "GoToLocal"  # env ID for gym
+    go_and_face_synonyms: str = ""
     room_size: int = 5
     strict: bool = True
-    train_wordings: str = None
+    test_descriptors: str = None
     test_wordings: str = None
     test_walls: str = "south,southeast"
-    go_and_face_synonyms: str = ""
+    train_wordings: str = None
 
     def configure(self) -> None:
         self.add_subparsers(dest="logger_args")
@@ -80,6 +81,7 @@ class Trainer(main.Trainer):
             train_wordings = kwargs.pop("train_wordings")
             test_wordings = kwargs.pop("test_wordings")
             test_walls = kwargs.pop("test_walls")
+            test_descriptors = kwargs.pop("test_descriptors")
             go_and_face_synonyms = kwargs.pop("go_and_face_synonyms")
             goal_objects = (
                 [("ball", "green")]
@@ -185,25 +187,54 @@ class Trainer(main.Trainer):
                 longest_mission = (
                     "go to the southeast room, go to the west wall, and face east"
                 )
+            elif env_id == "sequence-paraphrases":
+                env = SequenceEnv(
+                    *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
+                )
+                env = SequenceParaphrasesWrapper(
+                    env,
+                    test=test,
+                    train_wordings=train_wordings.split(","),
+                    test_wordings=test_wordings.split(","),
+                )
+                longest_mission = "go to (0, 0), having already gone to (0, 0)"
+            elif env_id == "sequence":
+                env = SequenceEnv(
+                    *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
+                )
+                longest_mission = "go to (0, 0), then go to (0, 0)"
+            elif env_id == "negation":
+
+                class NegationObject(NamedTuple):
+                    positive: bool
+                    type: str = None
+                    color: str = None
+
+                objects = {
+                    NegationObject(type=ty, color=col, positive=pos)
+                    for ty in TYPES
+                    for col in COLORS
+                    for pos in (True, False)
+                }
+
+                def get_test_objects():
+                    assert isinstance(test_descriptors, str)
+                    for s in test_descriptors.split():
+                        if s in TYPES:
+                            yield NegationObject(type=s, positive=False)
+                        elif s in COLORS:
+                            yield NegationObject(color=s, positive=False)
+                        else:
+                            raise RuntimeError(f"{s} is not a valid test_descriptor.")
+
+                test_objects = set(get_test_objects())
+                room_objects = test_objects if test else objects - test_objects
+                kwargs.update(room_objects=sorted(room_objects))
+                env = PickupEnvRoomObjects(*args, seed=seed + rank, **kwargs)
+                longest_mission = "pick up an object that is not a ball."
+
             else:
-                if env_id == "sequence-paraphrases":
-                    env = SequenceEnv(
-                        *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
-                    )
-                    env = SequenceParaphrasesWrapper(
-                        env,
-                        test=test,
-                        train_wordings=train_wordings.split(","),
-                        test_wordings=test_wordings.split(","),
-                    )
-                    longest_mission = "go to (0, 0), having already gone to (0, 0)"
-                elif env_id == "sequence":
-                    env = SequenceEnv(
-                        *args, seed=seed + rank, num_rows=1, num_cols=1, **kwargs
-                    )
-                    longest_mission = "go to (0, 0), then go to (0, 0)"
-                else:
-                    raise RuntimeError(f"{env_id} is not a valid env_id")
+                raise RuntimeError(f"{env_id} is not a valid env_id")
 
             env = FullyObsWrapper(env)
             env = ActionInObsWrapper(env)

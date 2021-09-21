@@ -1,12 +1,17 @@
 import abc
+import re
 import typing
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List
 
 import numpy as np
-from gym_minigrid.minigrid import WorldObj
+from babyai.levels.verifier import ObjDesc
+from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
 from gym_minigrid.roomgrid import RoomGrid
+
+COLORS = [*COLOR_NAMES][:3]
+TYPES = ["key", "ball", "box"]
 
 
 class CardinalDirection(Enum):
@@ -96,6 +101,69 @@ ADJACENCIES = {
         "below the northwest",
     ],
 }
+
+
+class NegativeObjDesc(ObjDesc):
+    def surface(self, env):
+        """
+        Generate a natural language representation of the object description
+        """
+
+        self.find_matching_objs(env)
+        assert len(self.obj_set) > 0, "no object matching description"
+
+        def indefinite_article(noun: str):
+            article = "an" if re.match(r"[aeiou].*", noun) else "a"
+            return article + " " + noun
+
+        s = "object"
+        if self.type is not None and (self.color, self.loc) == (None, None):
+            what_it_is_not = indefinite_article(self.type)
+        elif self.color and (self.type, self.loc) == (None, None):
+            what_it_is_not = self.color
+        elif self.loc and (self.color, self.type) == (None, None):
+            if self.loc == "front":
+                what_it_is_not = " in front of you"
+            elif self.loc == "behind":
+                what_it_is_not = " behind you"
+            else:
+                what_it_is_not = " on your " + self.loc
+        elif self.type and self.color and not self.loc:
+            what_it_is_not = indefinite_article(self.color + " " + s)
+        else:
+            raise RuntimeError(
+                f"Invalid specification: {self.type}, {self.color}, {self.loc}"
+            )
+
+        # Singular vs plural
+        if len(self.obj_set) > 1:
+            s = indefinite_article(s) + " that is not " + what_it_is_not
+        else:
+            s = "the " + s + " that is not " + what_it_is_not
+
+        return s
+
+    def find_matching_objs(self, env, use_location=True):
+        """
+        Find the set of objects matching the description and their positions.
+        When use_location is False, we only update the positions of already tracked objects, without taking into account
+        the location of the object. e.g. A ball that was on "your right" initially will still be tracked as being "on
+        your right" when you move.
+        """
+        _, negative_poss = super().find_matching_objs(env, use_location=use_location)
+        negative_poss = set(negative_poss)
+        self.obj_set = []
+        self.obj_poss = []
+
+        for i in range(env.grid.width):
+            for j in range(env.grid.height):
+                if (i, j) not in negative_poss:
+                    cell = env.grid.get(i, j)
+                    if cell and cell.type in TYPES:
+                        self.obj_set.append(cell)
+                        self.obj_poss.append((i, j))
+
+        return self.obj_set, self.obj_poss
 
 
 @dataclass

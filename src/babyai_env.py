@@ -20,18 +20,21 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import MiniGridEnv, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
 from descs import (
+    COLORS,
     CardinalDirection,
     CornerDesc,
     FaceDesc,
     LocDesc,
+    NegativeObjDesc,
     OrdinalDirection,
     RoomDesc,
+    TYPES,
     WallDesc,
 )
 from instrs import (
@@ -59,10 +62,6 @@ class Spaces:
 class TrainTest:
     train: list
     test: list
-
-
-COLORS = [*COLOR_NAMES][:3]
-TYPES = ["key", "ball", "box"]
 
 
 class Agent(WorldObj):
@@ -196,7 +195,7 @@ class PickupEnv(RenderEnv, ReproducibleEnv):
         num_dists: int = 1,
     ):
         self.strict = strict
-        self.goal_object, *_ = self.goal_objects = list(goal_objects)
+        self.goal_objects = sorted(goal_objects)
         self.num_dists = num_dists
         super().__init__(
             room_size=room_size,
@@ -407,7 +406,7 @@ class ToggleEnv(RenderEnv, ReproducibleEnv):
 class PickupEnvRoomObjects(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
-        room_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_objects: typing.Iterable,
         room_size: int,
         seed: int,
         strict: bool,
@@ -434,6 +433,34 @@ class PickupEnvRoomObjects(RenderEnv, ReproducibleEnv):
             self.add_object(0, 0, *obj)
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
+
+
+class NegationEnv(PickupEnvRoomObjects):
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        *goal_object, positive = self._rand_elem(self.room_objects)
+        self.add_object(0, 0, *goal_object)
+        objects = self.add_distractors(0, 0, self.num_dists)
+        self.check_objs_reachable()
+        if positive:
+            desc = ObjDesc(*goal_object)
+        else:
+            colors_in_world = {o.color for o in objects}
+            types_in_world = {o.type for o in objects}
+            descriptors = []
+            if len(colors_in_world) > 1:
+                descriptors.extend(list(colors_in_world))
+            if len(types_in_world) > 1:
+                descriptors.extend(list(types_in_world))
+            descriptor = self._rand_elem(descriptors)
+            if descriptor in colors_in_world:
+                desc = NegativeObjDesc(type=None, color=descriptor)
+            elif descriptor in types_in_world:
+                desc = NegativeObjDesc(type=descriptor, color=None)
+            else:
+                raise RuntimeError()
+        self.instrs = PickupInstr(desc, strict=self.strict)
 
 
 COLOR = "red"
@@ -890,30 +917,14 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    env = GoAndFaceEnv(
-        seed=args.seed,
+    env = NegationEnv(
+        room_objects=[
+            (ty, col, pos) for ty in TYPES for col in COLORS for pos in (True, False)
+        ],
         room_size=args.room_size,
-        directions={
-            GoAndFaceDirections(*x)
-            for x in itertools.product(
-                OrdinalDirection,
-                [*CardinalDirection, *OrdinalDirection],
-                CardinalDirection,
-            )
-        },
-        corner_synonyms=True,
-        corner_opposite_synonyms=True,
-        corner_opposites=True,
-        corner_adjacencies=True,
-        face_synonyms=True,
-        face_opposites=True,
-        room_synonyms=True,
-        room_opposite_synonyms=True,
-        room_opposites=True,
-        room_adjacencies=True,
-        wall_synonyms=True,
-        wall_opposite_synonyms=True,
-        wall_opposites=True,
+        seed=args.seed,
+        strict=not args.not_strict,
+        num_dists=args.num_dists,
     )
     if args.agent_view:
         env = RGBImgPartialObsWrapper(env)
@@ -932,5 +943,7 @@ if __name__ == "__main__":
         tile_size: int = 32
         agent_view: bool = False
         test: bool = False
+        not_strict: bool = False
+        num_dists: int = 1
 
     main(Args().parse_args())
