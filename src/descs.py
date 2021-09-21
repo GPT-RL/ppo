@@ -7,10 +7,9 @@ from typing import List
 
 import numpy as np
 from babyai.levels.verifier import ObjDesc
-from gym_minigrid.minigrid import COLOR_NAMES, WorldObj
+from gym_minigrid.minigrid import WorldObj
 from gym_minigrid.roomgrid import RoomGrid
 
-COLORS = [*COLOR_NAMES][:3]
 TYPES = ["key", "ball", "box"]
 
 

@@ -25,7 +25,7 @@ from babyai_env import (
     TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
-from descs import COLORS, CardinalDirection, OrdinalDirection, TYPES
+from descs import CardinalDirection, OrdinalDirection, TYPES
 from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
 
@@ -209,6 +209,8 @@ class Trainer(main.Trainer):
                     positive: bool
                     type: str = None
                     color: str = None
+
+                COLORS = ["red", "green", "blue"]
 
                 objects = {
                     NegationObject(type=ty, color=col, positive=pos)

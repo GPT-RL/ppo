@@ -26,7 +26,6 @@ from gym_minigrid.wrappers import ImgObsWrapper, RGBImgPartialObsWrapper
 from transformers import GPT2Tokenizer
 
 from descs import (
-    COLORS,
     CardinalDirection,
     CornerDesc,
     FaceDesc,
@@ -751,22 +750,6 @@ class SequenceParaphrasesWrapper(MissionWrapper):
         return mission
 
 
-def get_train_and_test_objects():
-    all_objects = set(itertools.product(TYPES, COLORS))
-
-    def pairs():
-
-        remaining = set(all_objects)
-
-        for _type, color in zip(TYPES, itertools.cycle(COLORS)):
-            remaining.remove((_type, color))
-            yield _type, color
-        # yield from remaining
-
-    train_objects = sorted(pairs())
-    return TrainTest(train=train_objects, test=sorted(all_objects))
-
-
 class ActionInObsWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
@@ -919,7 +902,10 @@ def main(args: "Args"):
 
     env = NegationEnv(
         room_objects=[
-            (ty, col, pos) for ty in TYPES for col in COLORS for pos in (True, False)
+            (ty, col, pos)
+            for ty in TYPES
+            for col in ["red", "green", "blue"]
+            for pos in (True, False)
         ],
         room_size=args.room_size,
         seed=args.seed,
