@@ -198,11 +198,15 @@ class PickupEnv(RenderEnv, ReproducibleEnv):
     def __init__(
         self,
         goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_objects: typing.Iterable[typing.Tuple[str, str]],
         room_size: int,
         seed: int,
+        test: bool,
         strict: bool,
         num_dists: int = 1,
     ):
+        self.test = test
+        self.room_objects = room_objects
         self.strict = strict
         self.goal_objects = sorted(goal_objects)
         self.num_dists = num_dists
@@ -216,9 +220,14 @@ class PickupEnv(RenderEnv, ReproducibleEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+
         goal_object = self._rand_elem(self.goal_objects)
         self.add_object(0, 0, *goal_object)
+        objects = {*self.room_objects} - {goal_object}
+        for _ in range(self.num_dists):
+            obj = self._rand_elem(objects)
+            self.add_object(0, 0, *obj)
+
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
@@ -864,7 +873,7 @@ class TokenizerWrapper(gym.ObservationWrapper):
         return observation
 
 
-class FullyObsWrapper(gym_minigrid.wrappers.FullyObsWrapper):
+class DirectionWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.observation_space = Dict(
@@ -874,6 +883,8 @@ class FullyObsWrapper(gym_minigrid.wrappers.FullyObsWrapper):
             )
         )
 
+
+class FullyObsWrapper(gym_minigrid.wrappers.FullyObsWrapper):
     def observation(self, obs):
         direction = obs["direction"]
         obs = super().observation(obs)

@@ -440,8 +440,23 @@ class Trainer:
         return functools.partial(_thunk, env_id=env)
 
     @classmethod
-    def make_vec_envs(cls, device, num_processes, seed, num_frame_stack=None, **kwargs):
-        envs = [cls.make_env(seed=seed + i, **kwargs) for i in range(num_processes)]
+    def make_vec_envs(
+        cls,
+        device,
+        num_processes,
+        render,
+        render_test,
+        seed,
+        test,
+        num_frame_stack=None,
+        **kwargs,
+    ):
+        if test:
+            render = render_test
+        envs = [
+            cls.make_env(seed=seed + i, render=render, test=test, **kwargs)
+            for i in range(num_processes)
+        ]
 
         if len(envs) > 1:
             envs = SubprocVecEnv(envs)

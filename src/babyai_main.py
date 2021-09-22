@@ -9,6 +9,7 @@ import main
 from babyai_agent import Agent
 from babyai_env import (
     ActionInObsWrapper,
+    DirectionWrapper,
     DirectionsEnv,
     FullyObsWrapper,
     GoAndFaceDirections,
@@ -137,10 +138,10 @@ class Trainer(main.Trainer):
                     PlantAnimalWrapper.purple_animal,
                     PlantAnimalWrapper.black_plant,
                 }
-                room_objects = test_objects if test else objects - test_objects
-                room_objects = [o.split() for o in room_objects]
-                room_objects = [(t, c) for (c, t) in room_objects]
-                _kwargs.update(room_objects=sorted(room_objects))
+                train_objects = test_objects if test else objects - test_objects
+                train_objects = [o.split() for o in train_objects]
+                train_objects = [(t, c) for (c, t) in train_objects]
+                _kwargs.update(room_objects=sorted(train_objects))
                 _env = PickupEnvRoomObjects(*args, **_kwargs)
                 _env = PlantAnimalWrapper(_env)
                 longest_mission = "pick up the grasshopper"
@@ -234,20 +235,36 @@ class Trainer(main.Trainer):
                 _env = NegationEnv(*args, goal_objects=goal_objects, **_kwargs)
                 longest_mission = "pick up an object that is not a ball."
             elif env_id == "colors":
-                objects = {(ty, col) for ty in TYPES for col in COLOR_NAMES}
-                test_objects = {
-                    (ty, col) for ty in TYPES for col in test_colors.split(",")
-                }
-                room_objects = test_objects if test else objects - test_objects
-                _env = PickupEnvRoomObjects(
-                    *args, room_objects=sorted(room_objects), **_kwargs
+                test_colors = test_colors.split(",")
+                train_colors = set(COLOR_NAMES) - set(test_colors)
+                train_objects = sorted(
+                    {(ty, col) for ty in TYPES for col in train_colors}
                 )
-                _env = RGBImgObsWithDirectionWrapper(_env)
+                test_type = "ball"
+                test_objects = sorted({(test_type, col) for col in test_colors})
+                goal_objects = test_objects if test else train_objects
+                room_objects = (
+                    [(test_type, col) for col in train_colors]
+                    if test
+                    else train_objects
+                )
+                _env = PickupEnv(
+                    *args,
+                    room_objects=room_objects,
+                    goal_objects=goal_objects,
+                    test=test,
+                    **_kwargs,
+                )
                 longest_mission = "pick up the forest green ball."
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
 
-            _env = FullyObsWrapper(_env)
+            _env = DirectionWrapper(_env)
+            if env_id == "colors":
+                _env = RGBImgObsWithDirectionWrapper(_env)
+            else:
+                _env = FullyObsWrapper(_env)
+
             _env = ActionInObsWrapper(_env)
             _env = ZeroOneRewardWrapper(_env)
             _env = TokenizerWrapper(

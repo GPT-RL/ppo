@@ -68,16 +68,28 @@ class Base(NNBase):
         h, w, d = self.observation_spaces.image.shape
 
         self.conv = nn.Sequential(
-            init_(nn.Conv2d(d, 32, 3, 2)),
+            init_(nn.Conv2d(d, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
         )
-        conv_output_size = self.conv(torch.zeros(1, d, h, w)).size(-1)
+        try:
+            output = self.conv(torch.zeros(1, d, h, w))
+        except RuntimeError:
+            self.conv = nn.Sequential(
+                init_(nn.Conv2d(d, 32, 3, 2)),
+                nn.ReLU(),
+                nn.Flatten(),
+            )
+            output = self.conv(torch.zeros(1, d, h, w))
 
         self.merge = nn.Sequential(
             init_(
                 nn.Linear(
-                    conv_output_size
+                    output.size(-1)
                     + self.num_directions
                     + self.num_actions
                     + self.embedding_size,
