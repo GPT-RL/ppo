@@ -201,12 +201,10 @@ class PickupEnv(RenderEnv, ReproducibleEnv):
         room_objects: typing.Iterable[typing.Tuple[str, str]],
         room_size: int,
         seed: int,
-        test: bool,
         strict: bool,
         num_dists: int = 1,
     ):
-        self.test = test
-        self.room_objects = room_objects
+        self.room_objects = sorted(room_objects)
         self.strict = strict
         self.goal_objects = sorted(goal_objects)
         self.num_dists = num_dists
@@ -462,12 +460,14 @@ class NegationObject(typing.NamedTuple):
 class NegationEnv(RenderEnv):
     def __init__(
         self,
-        goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        goal_objects: typing.Iterable[NegationObject],
+        room_objects: typing.Iterable[typing.Tuple[str, str]],
         room_size: int,
         seed: int,
         strict: bool,
         num_dists: int = 1,
     ):
+        self.room_objects = sorted(room_objects)
         self.strict = strict
         self.goal_objects = sorted(goal_objects, key=lambda x: tuple(map(str, x)))
         self.num_dists = num_dists
@@ -481,35 +481,62 @@ class NegationEnv(RenderEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        positive, *goal_object = self._rand_elem(self.goal_objects)
-        goal_obj, _ = self.add_object(0, 0, *goal_object)
-        objects = {(ty, col) for ty in TYPES for col in COLORS}
-        distractors = sorted(objects - {tuple(goal_object)})
-
-        def get_objects():
-            for _ in range(self.num_dists):
-                distractor, _ = self.add_object(0, 0, *self._rand_elem(distractors))
-                yield distractor
-
-        objects = [goal_obj, *get_objects()]
-        self.check_objs_reachable()
-        if positive:
-            desc = ObjDesc(*goal_object)
+        positive, goal_type, goal_color = _, *goal_object = self._rand_elem(
+            self.goal_objects
+        )
+        # print(positive, goal_type, goal_color)
+        if goal_type is not None and goal_color is not None:
+            goals = [goal_object]
+            distractors = [
+                (t, c)
+                for (t, c) in self.room_objects
+                if t != goal_type or c != goal_color
+            ]
         else:
-            colors_in_world = {o.color for o in objects}
-            types_in_world = {o.type for o in objects}
-            descriptors = []
-            if len(colors_in_world) > 1:
-                descriptors.extend(sorted(colors_in_world))
-            if len(types_in_world) > 1:
-                descriptors.extend(sorted(types_in_world))
-            descriptor = self._rand_elem(descriptors)
-            if descriptor in colors_in_world:
-                desc = NegativeObjDesc(type=None, color=descriptor)
-            elif descriptor in types_in_world:
-                desc = NegativeObjDesc(type=descriptor, color=None)
+            goals = [
+                (t, c)
+                for (t, c) in self.room_objects
+                if t == goal_type or c == goal_color
+            ]
+            if goal_type is None and goal_color is not None:
+                distractors = [
+                    (t, c) for (t, c) in self.room_objects if (c != goal_color)
+                ]
+            elif goal_color is None and goal_type is not None:
+                distractors = [
+                    (t, c) for (t, c) in self.room_objects if (t != goal_type)
+                ]
             else:
-                raise RuntimeError()
+                raise RuntimeError(
+                    f"Invalid goal_type ({goal_type}), goal_color({goal_color}) specification."
+                )
+
+        if not positive:
+            goals, distractors = distractors, goals
+        # print("goals")
+        # print(goals, sep="\n")
+        # print("distractors")
+        # print(distractors, sep="\n")
+        # print("positive", positive)
+
+        goal = self._rand_elem(goals)
+        distractor = self._rand_elem(distractors)
+        if positive:
+            desc = ObjDesc(*goal)
+        else:
+            desc = NegativeObjDesc(type=goal_type, color=goal_color)
+
+        # print("goal")
+        # print(goal)
+        # print("chosen distractor")
+        # print(distractor)
+        self.add_object(0, 0, *goal)
+        self.add_object(0, 0, *distractor)
+        for _ in range(self.num_dists):
+            obj = self._rand_elem(goals if self.np_random.choice(2) else distractors)
+            self.add_object(0, 0, *obj)
+
+        self.check_objs_reachable()
         self.instrs = PickupInstr(desc, strict=self.strict)
 
 

@@ -211,16 +211,19 @@ class Trainer(main.Trainer):
                 longest_mission = "go to (0, 0), then go to (0, 0)"
             elif env_id == "negation":
 
-                COLORS = ["red", "green", "blue", "yellow"]
+                COLORS = ["red", "green", "blue"]
 
-                objects = {
-                    NegationObject(type=ty, color=col, positive=pos)
-                    for ty in TYPES
-                    for col in COLORS
-                    for pos in (True, False)
-                }
+                objects = {(ty, col) for ty in TYPES for col in COLORS}
+                goal_objects = (
+                    {
+                        NegationObject(positive=True, type=ty, color=col)
+                        for (ty, col) in objects
+                    }
+                    | {NegationObject(positive=False, type=ty) for ty in TYPES}
+                    | {NegationObject(positive=False, color=col) for col in COLORS}
+                )
 
-                def get_test_objects():
+                def get_test_goals():
                     assert isinstance(test_descriptors, str)
                     for s in test_descriptors.split(","):
                         if s in TYPES:
@@ -230,9 +233,11 @@ class Trainer(main.Trainer):
                         else:
                             raise RuntimeError(f"{s} is not a valid test_descriptor.")
 
-                test_objects = set(get_test_objects())
-                goal_objects = test_objects if test else objects - test_objects
-                _env = NegationEnv(*args, goal_objects=goal_objects, **_kwargs)
+                test_goals = set(get_test_goals())
+                goal_objects = test_goals if test else goal_objects - test_goals
+                _env = NegationEnv(
+                    *args, goal_objects=goal_objects, room_objects=objects, **_kwargs
+                )
                 longest_mission = "pick up an object that is not a ball."
             elif env_id == "colors":
                 test_colors = test_colors.split(",")
@@ -252,7 +257,6 @@ class Trainer(main.Trainer):
                     *args,
                     room_objects=room_objects,
                     goal_objects=goal_objects,
-                    test=test,
                     **_kwargs,
                 )
                 longest_mission = "pick up the forest green ball."
