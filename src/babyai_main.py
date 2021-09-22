@@ -82,19 +82,19 @@ class Trainer(main.Trainer):
     @staticmethod
     def make_env(env, allow_early_resets, render: bool = False, *args, **kwargs):
         def _thunk(
-            env_id,
-            tokenizer,
-            test,
-            train_wordings,
-            test_wordings,
-            test_walls,
-            test_descriptors,
-            test_colors,
-            go_and_face_synonyms,
-            room_size,
-            seed,
-            strict,
-            num_dists,
+            env_id: str,
+            go_and_face_synonyms: str,
+            num_dists: int,
+            room_size: int,
+            seed: int,
+            strict: bool,
+            test: bool,
+            test_colors: str,
+            test_descriptors: str,
+            test_walls: str,
+            test_wordings: str,
+            tokenizer: GPT2Tokenizer,
+            train_wordings: str,
             **_,
         ):
             goal_objects = (
