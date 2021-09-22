@@ -44,6 +44,7 @@ class Args(main.Args):
     go_and_face_synonyms: str = ""
     num_dists: int = 1
     room_size: int = 5
+    second_layer: bool = False
     strict: bool = True
     test_colors: str = None
     test_descriptors: str = None
@@ -71,6 +72,7 @@ class Trainer(main.Trainer):
             hidden_size=args.hidden_size,
             observation_space=observation_space,
             recurrent=cls.recurrent(args),
+            second_layer=args.second_layer,
         )
 
     @staticmethod

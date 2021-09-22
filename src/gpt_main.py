@@ -1,8 +1,7 @@
 import logging
-from typing import Literal, Optional, cast
+from typing import cast
 
 import torch
-from sweep_logger import HasuraLogger
 
 import babyai_main
 from envs import VecPyTorch
@@ -31,9 +30,10 @@ class Trainer(babyai_main.Trainer):
             hidden_size=args.hidden_size,
             observation_space=observation_space,
             randomize_parameters=args.randomize_parameters,
+            recurrent=cls.recurrent(args),
+            second_layer=args.second_layer,
             train_ln=args.train_ln,
             train_wpe=args.train_wpe,
-            recurrent=cls.recurrent(args),
         )
 
     @staticmethod
