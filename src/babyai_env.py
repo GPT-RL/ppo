@@ -20,7 +20,13 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLOR_NAMES, MiniGridEnv, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import (
+    COLOR_NAMES,
+    MiniGridEnv,
+    OBJECT_TO_IDX,
+    WorldObj,
+    COLORS,
+)
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import (
     ImgObsWrapper,
@@ -112,7 +118,7 @@ class RenderEnv(RoomGridLevel, ABC):
 
             string = f"{string:<{self.max_string_length}}"
             if obj is not None:
-                string = ansi_color(string, obj.color)
+                string = ansi_color(string, tuple(COLORS[obj.color]))
             yield string + "\033[0m"
 
     @property
@@ -438,13 +444,45 @@ class PickupEnvRoomObjects(RenderEnv, ReproducibleEnv):
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class NegationEnv(PickupEnvRoomObjects):
+class NegationObject(typing.NamedTuple):
+    positive: bool
+    type: str = None
+    color: str = None
+
+
+class NegationEnv(RenderEnv):
+    def __init__(
+        self,
+        goal_objects: typing.Iterable[typing.Tuple[str, str]],
+        room_size: int,
+        seed: int,
+        strict: bool,
+        num_dists: int = 1,
+    ):
+        self.strict = strict
+        self.goal_objects = sorted(goal_objects, key=lambda x: tuple(map(str, x)))
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        positive, *goal_object = self._rand_elem(self.room_objects)
-        self.add_object(0, 0, *goal_object)
-        objects = self.add_distractors(0, 0, self.num_dists)
+        positive, *goal_object = self._rand_elem(self.goal_objects)
+        goal_obj, _ = self.add_object(0, 0, *goal_object)
+        objects = {(ty, col) for ty in TYPES for col in COLORS}
+        distractors = sorted(objects - {tuple(goal_object)})
+
+        def get_objects():
+            for _ in range(self.num_dists):
+                distractor, _ = self.add_object(0, 0, *self._rand_elem(distractors))
+                yield distractor
+
+        objects = [goal_obj, *get_objects()]
         self.check_objs_reachable()
         if positive:
             desc = ObjDesc(*goal_object)
@@ -453,9 +491,9 @@ class NegationEnv(PickupEnvRoomObjects):
             types_in_world = {o.type for o in objects}
             descriptors = []
             if len(colors_in_world) > 1:
-                descriptors.extend(list(colors_in_world))
+                descriptors.extend(sorted(colors_in_world))
             if len(types_in_world) > 1:
-                descriptors.extend(list(types_in_world))
+                descriptors.extend(sorted(types_in_world))
             descriptor = self._rand_elem(descriptors)
             if descriptor in colors_in_world:
                 desc = NegativeObjDesc(type=None, color=descriptor)

@@ -1,5 +1,5 @@
 import functools
-from typing import Generator, Literal, NamedTuple, Union, cast
+from typing import Generator, Literal, Union, cast
 
 from gym_minigrid.minigrid import COLOR_NAMES
 from stable_baselines3.common.monitor import Monitor
@@ -16,6 +16,7 @@ from babyai_env import (
     GoToLocEnv,
     GoToObjEnv,
     NegationEnv,
+    NegationObject,
     PickupEnv,
     PickupEnvRoomObjects,
     PickupRedEnv,
@@ -209,11 +210,6 @@ class Trainer(main.Trainer):
                 longest_mission = "go to (0, 0), then go to (0, 0)"
             elif env_id == "negation":
 
-                class NegationObject(NamedTuple):
-                    positive: bool
-                    type: str = None
-                    color: str = None
-
                 COLORS = ["red", "green", "blue", "yellow"]
 
                 objects = {
@@ -234,8 +230,8 @@ class Trainer(main.Trainer):
                             raise RuntimeError(f"{s} is not a valid test_descriptor.")
 
                 test_objects = set(get_test_objects())
-                room_objects = test_objects if test else objects - test_objects
-                _env = NegationEnv(*args, room_objects=sorted(room_objects), **_kwargs)
+                goal_objects = test_objects if test else objects - test_objects
+                _env = NegationEnv(*args, goal_objects=goal_objects, **_kwargs)
                 longest_mission = "pick up an object that is not a ball."
             elif env_id == "colors":
                 objects = {(ty, col) for ty in TYPES for col in COLOR_NAMES}

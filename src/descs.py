@@ -149,6 +149,8 @@ class NegativeObjDesc(ObjDesc):
         the location of the object. e.g. A ball that was on "your right" initially will still be tracked as being "on
         your right" when you move.
         """
+        if self.obj_set and self.obj_poss:
+            return self.obj_set, self.obj_poss
         _, negative_poss = super().find_matching_objs(env, use_location=use_location)
         negative_poss = set(negative_poss)
         self.obj_set = []
