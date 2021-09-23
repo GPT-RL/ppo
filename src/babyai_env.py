@@ -994,7 +994,7 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    room_objects = [(ty, col) for ty in TYPES for col in COLOR_NAMES]
+    room_objects = [(ty, col) for ty in TYPES for col in ("black", "white")]
     env = PickupEnvRoomObjects(
         room_objects=room_objects,
         room_size=args.room_size,
@@ -1003,7 +1003,7 @@ def main(args: "Args"):
         num_dists=args.num_dists,
     )
     if args.agent_view:
-        env = RGBImgPartialObsWrapper(env)
+        env = RGBImgObsWithDirectionWrapper(env)
         env = ImgObsWrapper(env)
     window = Window("gym_minigrid")
     window.reg_key_handler(key_handler)

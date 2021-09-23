@@ -252,7 +252,7 @@ class Trainer(main.Trainer):
                 test_colors = test_colors.split(",")
                 train_colors = train_colors.split(",")
                 train_objects = sorted(
-                    {(ty, col) for ty in TYPES for col in train_colors}
+                    {(ty, col) for ty in ["ball"] for col in train_colors}
                 )
                 test_type = "ball"
                 test_objects = sorted({(test_type, col) for col in test_colors})
