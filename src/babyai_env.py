@@ -469,7 +469,15 @@ class NegationEnv(RenderEnv):
     ):
         self.room_objects = sorted(room_objects)
         self.strict = strict
-        self.goal_objects = sorted(goal_objects, key=lambda x: tuple(map(str, x)))
+
+        def get_goals(predicate):
+            return sorted(
+                [(g.type, g.color) for g in goal_objects if predicate(g)],
+                key=lambda g: tuple(map(str, g)),
+            )
+
+        self.negative_goals = get_goals(lambda g: not g.positive)
+        self.positive_goals = get_goals(lambda g: g.positive)
         self.num_dists = num_dists
         super().__init__(
             room_size=room_size,
@@ -481,8 +489,16 @@ class NegationEnv(RenderEnv):
     def gen_mission(self):
         self.place_agent()
         self.connect_all()
-        positive, goal_type, goal_color = _, *goal_object = self._rand_elem(
-            self.goal_objects
+        if self.negative_goals and self.positive_goals:
+            positive = self.np_random.choice(2)
+        elif self.negative_goals and not self.positive_goals:
+            positive = False
+        elif not self.negative_goals and self.positive_goals:
+            positive = True
+        else:
+            raise RuntimeError("No goals")
+        goal_type, goal_color = goal_object = self._rand_elem(
+            self.positive_goals if positive else self.negative_goals
         )
         # print(positive, goal_type, goal_color)
         if goal_type is not None and goal_color is not None:
