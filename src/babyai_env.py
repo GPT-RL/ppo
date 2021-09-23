@@ -978,7 +978,7 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    room_objects = [(ty, col) for ty in TYPES for col in ("black", "white")]
+    room_objects = [("ball", col) for col in ("black", "white")]
     env = PickupEnv(
         room_objects=room_objects,
         goal_objects=room_objects,

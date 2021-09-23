@@ -1,7 +1,6 @@
 import functools
 from typing import Generator, Literal, Union, cast
 
-from gym_minigrid.minigrid import COLOR_NAMES
 from stable_baselines3.common.monitor import Monitor
 from transformers import GPT2Tokenizer
 
@@ -30,7 +29,7 @@ from babyai_env import (
     TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
-from descs import CardinalDirection, OrdinalDirection, TYPES
+from descs import CardinalDirection, OrdinalDirection
 from envs import RenderWrapper, VecPyTorch
 from utils import get_gpt_size
 
@@ -252,21 +251,14 @@ class Trainer(main.Trainer):
             elif env_id == "colors":
                 test_colors = test_colors.split(",")
                 train_colors = train_colors.split(",")
-                train_objects = sorted(
-                    {(ty, col) for ty in ["ball"] for col in train_colors}
-                )
-                test_type = "ball"
-                test_objects = sorted({(test_type, col) for col in test_colors})
-                goal_objects = test_objects if test else train_objects
-                room_objects = (
-                    [(test_type, col) for col in train_colors]
-                    if test
-                    else train_objects
-                )
+                ball = "ball"
+                train_objects = sorted({(ball, col) for col in train_colors})
+                test_objects = sorted({(ball, col) for col in test_colors})
+                objects = test_objects if test else train_objects
                 _env = PickupEnv(
                     *args,
-                    room_objects=room_objects,
-                    goal_objects=goal_objects,
+                    room_objects=objects,
+                    goal_objects=objects,
                     **_kwargs,
                 )
                 longest_mission = "pick up the forest green ball."
