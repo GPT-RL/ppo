@@ -41,12 +41,15 @@ class Args(main.Args):
         "small", "medium", "large", "xl"
     ] = "medium"  # what size of pretrained GPT to use
     env: str = "GoToLocal"  # env ID for gym
-    go_and_face_synonyms: str = ""
+    go_and_face_synonyms: str = None
+    negation_types: str = None
+    negation_colors: str = None
     num_dists: int = 1
     room_size: int = 5
     second_layer: bool = False
     strict: bool = True
     test_colors: str = None
+    train_colors: str = None
     test_descriptors: str = None
     test_wordings: str = None
     test_walls: str = "south,southeast"
@@ -86,12 +89,15 @@ class Trainer(main.Trainer):
         def _thunk(
             env_id: str,
             go_and_face_synonyms: str,
+            negation_colors: str,
+            negation_types: str,
             num_dists: int,
             room_size: int,
             seed: int,
             strict: bool,
             test: bool,
             test_colors: str,
+            train_colors: str,
             test_descriptors: str,
             test_walls: str,
             test_wordings: str,
@@ -213,24 +219,25 @@ class Trainer(main.Trainer):
                 longest_mission = "go to (0, 0), then go to (0, 0)"
             elif env_id == "negation":
 
-                COLORS = ["red", "green", "blue"]
+                colors = negation_colors.split(",")
+                types = negation_types.split(",")
 
-                objects = {(ty, col) for ty in TYPES for col in COLORS}
+                objects = {(ty, col) for ty in types for col in colors}
                 goal_objects = (
                     {
                         NegationObject(positive=True, type=ty, color=col)
                         for (ty, col) in objects
                     }
-                    | {NegationObject(positive=False, type=ty) for ty in TYPES}
-                    | {NegationObject(positive=False, color=col) for col in COLORS}
+                    | {NegationObject(positive=False, type=ty) for ty in types}
+                    | {NegationObject(positive=False, color=col) for col in colors}
                 )
 
                 def get_test_goals():
                     assert isinstance(test_descriptors, str)
                     for s in test_descriptors.split(","):
-                        if s in TYPES:
+                        if s in types:
                             yield NegationObject(type=s, positive=False)
-                        elif s in COLORS:
+                        elif s in colors:
                             yield NegationObject(color=s, positive=False)
                         else:
                             raise RuntimeError(f"{s} is not a valid test_descriptor.")
@@ -243,7 +250,7 @@ class Trainer(main.Trainer):
                 longest_mission = "pick up an object that is not a ball."
             elif env_id == "colors":
                 test_colors = test_colors.split(",")
-                train_colors = set(COLOR_NAMES) - set(test_colors)
+                train_colors = train_colors.split(",")
                 train_objects = sorted(
                     {(ty, col) for ty in TYPES for col in train_colors}
                 )
