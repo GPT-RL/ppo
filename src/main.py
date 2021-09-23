@@ -90,6 +90,7 @@ class Args(Tap):
     allow_early_resets: bool = False
     alpha: float = 0.99  # Adam alpha
     clip_param: float = 0.1  # PPO clip parameter
+    config: Optional[str] = None  # If given, yaml config from which to load params
     cuda: bool = True  # enable CUDA
     entropy_coef: float = 0.01  # auxiliary entropy objective coefficient
     env: str = "BreakoutNoFrameskip-v4"  # env ID for gym
@@ -116,10 +117,10 @@ class Args(Tap):
     render_test: bool = False
     save_interval: Optional[int] = None  # how many updates to save between
     seed: int = 0  # random seed
+    sync_envs: bool = False
     test_interval: Optional[int] = None  # how many updates to evaluate between
     use_proper_time_limits: bool = False  # compute returns with time limits
     value_coef: float = 1  # value loss coefficient
-    config: Optional[str] = None  # If given, yaml config from which to load params
 
     def configure(self) -> None:
         self.add_subparsers(dest="logger_args")
@@ -447,6 +448,7 @@ class Trainer:
         render,
         render_test,
         seed,
+        sync_envs,
         test,
         num_frame_stack=None,
         **kwargs,
@@ -458,7 +460,7 @@ class Trainer:
             for i in range(num_processes)
         ]
 
-        if len(envs) > 1:
+        if len(envs) > 1 and not sync_envs:
             envs = SubprocVecEnv(envs)
         else:
             envs = DummyVecEnv(envs)
@@ -576,6 +578,7 @@ class Trainer:
         return {
             "config",
             "name",
+            "sync_envs",
             "render",
             "render_test",
             "subcommand",
