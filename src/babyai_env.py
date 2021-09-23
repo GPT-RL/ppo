@@ -419,38 +419,6 @@ class ToggleEnv(RenderEnv, ReproducibleEnv):
         self.instrs = ToggleInstr(ObjDesc(*goal_object), strict=self.strict)
 
 
-class PickupEnvRoomObjects(RenderEnv, ReproducibleEnv):
-    def __init__(
-        self,
-        room_objects: typing.Iterable,
-        room_size: int,
-        seed: int,
-        strict: bool,
-        num_dists: int = 1,
-    ):
-        self.strict = strict
-        self.room_objects = list(room_objects)
-        self.num_dists = num_dists
-        super().__init__(
-            room_size=room_size,
-            num_rows=1,
-            num_cols=1,
-            seed=seed,
-        )
-
-    def gen_mission(self):
-        self.place_agent()
-        self.connect_all()
-        goal_object = self._rand_elem(self.room_objects)
-        self.add_object(0, 0, *goal_object)
-        objects = {*self.room_objects} - {goal_object}
-        for _ in range(self.num_dists):
-            obj = self._rand_elem(objects)
-            self.add_object(0, 0, *obj)
-        self.check_objs_reachable()
-        self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
-
-
 class NegationObject(typing.NamedTuple):
     positive: bool
     type: str = None
@@ -1011,8 +979,9 @@ def main(args: "Args"):
             return
 
     room_objects = [(ty, col) for ty in TYPES for col in ("black", "white")]
-    env = PickupEnvRoomObjects(
+    env = PickupEnv(
         room_objects=room_objects,
+        goal_objects=room_objects,
         room_size=args.room_size,
         seed=args.seed,
         strict=not args.not_strict,

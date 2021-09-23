@@ -19,7 +19,6 @@ from babyai_env import (
     NegationEnv,
     NegationObject,
     PickupEnv,
-    PickupEnvRoomObjects,
     PickupRedEnv,
     PickupSynonymWrapper,
     PlantAnimalWrapper,
@@ -146,11 +145,13 @@ class Trainer(main.Trainer):
                     PlantAnimalWrapper.purple_animal,
                     PlantAnimalWrapper.black_plant,
                 }
-                train_objects = test_objects if test else objects - test_objects
+                train_objects = sorted(test_objects if test else objects - test_objects)
                 train_objects = [o.split() for o in train_objects]
                 train_objects = [(t, c) for (c, t) in train_objects]
-                _kwargs.update(room_objects=sorted(train_objects))
-                _env = PickupEnvRoomObjects(*args, **_kwargs)
+                objects = test_objects if test else train_objects
+                _env = PickupEnv(
+                    *args, room_objects=objects, goal_objects=objects, **_kwargs
+                )
                 _env = PlantAnimalWrapper(_env)
                 longest_mission = "pick up the grasshopper"
             elif env_id == "directions":
