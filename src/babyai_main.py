@@ -97,7 +97,6 @@ class Trainer(main.Trainer):
             test_colors: str,
             train_colors: str,
             test_descriptors: str,
-            test_walls: str,
             test_wordings: str,
             tokenizer: GPT2Tokenizer,
             train_wordings: str,
@@ -165,36 +164,25 @@ class Trainer(main.Trainer):
             elif env_id == "go-and-face":
                 del _kwargs["strict"]
 
-                def parse_test_walls() -> Generator[
-                    Union[CardinalDirection, OrdinalDirection], None, None
-                ]:
-                    for wall in test_walls.split(","):
-                        try:
-                            yield CardinalDirection[wall]
-                        except KeyError:
-                            yield OrdinalDirection[wall]
-
                 test_directions = {
                     GoAndFaceDirections(
-                        room_direction=OrdinalDirection.southeast,
-                        wall_direction=d1,
-                        face_direction=d2,
+                        room_direction=d1,
+                        wall_direction=d2,
+                        face_direction=CardinalDirection.south,
                     )
-                    for d1 in parse_test_walls()
-                    for d2 in CardinalDirection
+                    for d1 in OrdinalDirection
+                    for d2 in [*CardinalDirection, *OrdinalDirection]
                 }
 
-                def get_directions():
-                    for d1 in OrdinalDirection:
-                        for d2 in [*OrdinalDirection, *CardinalDirection]:
-                            for d3 in CardinalDirection:
-                                yield GoAndFaceDirections(
-                                    room_direction=d1,
-                                    wall_direction=d2,
-                                    face_direction=d3,
-                                )
+                directions = {
+                    GoAndFaceDirections(
+                        room_direction=d1, wall_direction=d2, face_direction=d3
+                    )
+                    for d1 in OrdinalDirection
+                    for d2 in [*CardinalDirection, *OrdinalDirection]
+                    for d3 in CardinalDirection
+                }
 
-                directions = set(get_directions())
                 directions = test_directions if test else directions - test_directions
                 _kwargs.update({k: True for k in go_and_face_synonyms.split(",")})
                 _env = GoAndFaceEnv(
