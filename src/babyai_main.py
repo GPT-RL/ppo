@@ -98,6 +98,7 @@ class Trainer(main.Trainer):
             test_colors: str,
             train_colors: str,
             test_descriptors: str,
+            test_walls: str,
             test_wordings: str,
             tokenizer: GPT2Tokenizer,
             train_wordings: str,
@@ -162,34 +163,46 @@ class Trainer(main.Trainer):
                 )
                 _env = DirectionsEnv(*args, directions=directions, **_kwargs)
                 longest_mission = "go to northwest corner"
-            elif env_id == "go-and-face":
-                del _kwargs["strict"]
+            elif env_id.startswith("go-and-face"):
+                del kwargs["strict"]
+
+                def parse_test_walls() -> Generator[
+                    Union[CardinalDirection, OrdinalDirection], None, None
+                ]:
+                    for wall in test_walls.split(","):
+                        try:
+                            yield CardinalDirection[wall]
+                        except KeyError:
+                            yield OrdinalDirection[wall]
 
                 test_directions = {
                     GoAndFaceDirections(
-                        room_direction=d1,
-                        wall_direction=d2,
-                        face_direction=CardinalDirection.south,
+                        room_direction=OrdinalDirection.southeast,
+                        wall_direction=d1,
+                        face_direction=d2,
                     )
-                    for d1 in OrdinalDirection
-                    for d2 in [*CardinalDirection, *OrdinalDirection]
+                    for d1 in parse_test_walls()
+                    for d2 in CardinalDirection
                 }
 
-                directions = {
-                    GoAndFaceDirections(
-                        room_direction=d1, wall_direction=d2, face_direction=d3
-                    )
-                    for d1 in OrdinalDirection
-                    for d2 in [*CardinalDirection, *OrdinalDirection]
-                    for d3 in CardinalDirection
-                }
+                def get_directions():
+                    for d1 in OrdinalDirection:
+                        for d2 in [*OrdinalDirection, *CardinalDirection]:
+                            for d3 in CardinalDirection:
+                                yield GoAndFaceDirections(
+                                    room_direction=d1,
+                                    wall_direction=d2,
+                                    face_direction=d3,
+                                )
 
+                directions = set(get_directions())
                 directions = test_directions if test else directions - test_directions
                 _kwargs.update({k: True for k in go_and_face_synonyms.split(",")})
                 _env = GoAndFaceEnv(
                     *args,
                     directions=directions,
-                    **_kwargs,
+                    synonyms="synonyms" in env_id,
+                    **kwargs,
                 )
                 longest_mission = (
                     "go to the southeast room, go to the west wall, and face east"
