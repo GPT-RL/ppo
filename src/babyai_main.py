@@ -22,6 +22,7 @@ from babyai_env import (
     PickupSynonymWrapper,
     PlantAnimalWrapper,
     RGBImgObsWithDirectionWrapper,
+    RenderColorPickupEnv,
     RolloutsWrapper,
     SequenceEnv,
     SequenceParaphrasesWrapper,
@@ -243,7 +244,7 @@ class Trainer(main.Trainer):
                 train_objects = sorted({(ball, col) for col in train_colors})
                 test_objects = sorted({(ball, col) for col in test_colors})
                 objects = test_objects if test else train_objects
-                _env = PickupEnv(
+                _env = RenderColorPickupEnv(
                     *args,
                     room_objects=objects,
                     goal_objects=objects,

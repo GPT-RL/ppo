@@ -118,8 +118,13 @@ class RenderEnv(RoomGridLevel, ABC):
 
             string = f"{string:<{self.max_string_length}}"
             if obj is not None:
-                string = ansi_color(string, tuple(COLORS[obj.color]))
+                color = obj.color
+                string = self.color_obj(color, string)
             yield string + "\033[0m"
+
+    @staticmethod
+    def color_obj(color, string):
+        return ansi_color(string, tuple(COLORS[color]))
 
     @property
     def max_string_length(self):
@@ -163,6 +168,14 @@ class RenderEnv(RoomGridLevel, ABC):
         self.__action = action
         s, self.__reward, self.__done, i = super().step(action)
         return s, self.__reward, self.__done, i
+
+
+class RenderColorEnv(RenderEnv, ABC):
+    @staticmethod
+    def color_obj(color: str, string: str):
+        if "agent" in string:
+            return string
+        return color.ljust(len(string))
 
 
 class GoToObjEnv(RenderEnv, ReproducibleEnv):
@@ -228,6 +241,10 @@ class PickupEnv(RenderEnv, ReproducibleEnv):
 
         self.check_objs_reachable()
         self.instrs = PickupInstr(ObjDesc(*goal_object), strict=self.strict)
+
+
+class RenderColorPickupEnv(RenderColorEnv, PickupEnv):
+    pass
 
 
 class GoToLocEnv(RenderEnv, ReproducibleEnv):
