@@ -1,3 +1,4 @@
+from torch import nn
 from transformers import GPT2Config, GPT2Model
 
 import babyai_agent
@@ -30,6 +31,24 @@ class Agent(babyai_agent.Agent):
         return Base(**kwargs)
 
 
+class GPTEmbed(nn.Module):
+    def __init__(
+        self,
+        embedding_size: str,
+        randomize_parameters: bool,
+        train_wpe: bool,
+        train_ln: bool,
+    ):
+        super().__init__()
+        self.gpt = build_gpt(embedding_size, randomize_parameters)
+        for name, p in self.gpt.named_parameters():
+            requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
+            p.requires_grad_(requires_grad)
+
+    def forward(self, x, **_):
+        return self.gpt.forward(x).last_hidden_state[:, -1]
+
+
 class Base(babyai_agent.Base):
     def __init__(
         self,
@@ -47,13 +66,9 @@ class Base(babyai_agent.Base):
         super().__init__(*args, embedding_size=embedding_size, **kwargs)
 
     def build_embeddings(self):
-        gpt = build_gpt(self._embedding_size, self.randomize_parameters)
-        for name, p in gpt.named_parameters():
-            requires_grad = (self.train_wpe and "wpe" in name) or (
-                self.train_ln and "ln" in name
-            )
-            p.requires_grad_(requires_grad)
-        return gpt
-
-    def embed(self, inputs):
-        return self.embeddings.forward(inputs).last_hidden_state[:, -1]
+        return GPTEmbed(
+            embedding_size=self._embedding_size,
+            randomize_parameters=self.randomize_parameters,
+            train_wpe=self.train_wpe,
+            train_ln=self.train_ln,
+        )

@@ -33,6 +33,21 @@ class Agent(agent.Agent):
         return Base(**kwargs)
 
 
+class GRUEmbed(nn.Module):
+    def __init__(self, num_embeddings, hidden_size, output_size):
+        super().__init__()
+        gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
+        self.embed = nn.Sequential(
+            nn.Embedding(num_embeddings, hidden_size),
+            gru,
+        )
+        self.projection = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x, **_):
+        hidden = self.embed.forward(x)[1].squeeze(0)
+        return self.projection(hidden)
+
+
 class Base(NNBase):
     def __init__(
         self,
@@ -122,10 +137,7 @@ class Base(NNBase):
 
     def build_embeddings(self):
         num_embeddings = int(self.observation_spaces.mission.nvec[0])
-        return nn.Sequential(
-            nn.Embedding(num_embeddings, self.embedding_size),
-            nn.GRU(self.embedding_size, self.embedding_size, batch_first=True),
-        )
+        return GRUEmbed(num_embeddings, 100, self.embedding_size)
 
     def forward(self, inputs, rnn_hxs, masks):
         inputs = Spaces(
@@ -145,12 +157,9 @@ class Base(NNBase):
         action = inputs.action.long()
         action = F.one_hot(action, num_classes=self.num_actions).squeeze(1)
 
-        mission = self.embed(inputs.mission.long())
+        mission = self.embeddings(inputs.mission.long())
         x = torch.cat([image, directions, action, mission], dim=-1)
         x = self.merge(x)
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
         return self.critic_linear(x), x, rnn_hxs
-
-    def embed(self, inputs):
-        return self.embeddings.forward(inputs)[1].squeeze(0)

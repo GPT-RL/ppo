@@ -20,18 +20,11 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import (
-    COLOR_NAMES,
-    MiniGridEnv,
-    OBJECT_TO_IDX,
-    WorldObj,
-    COLORS,
-)
+from gym_minigrid.minigrid import COLORS, MiniGridEnv, OBJECT_TO_IDX, WorldObj
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import (
     ImgObsWrapper,
     RGBImgObsWrapper,
-    RGBImgPartialObsWrapper,
 )
 from transformers import GPT2Tokenizer
 
@@ -173,7 +166,7 @@ class RenderEnv(RoomGridLevel, ABC):
 class RenderColorEnv(RenderEnv, ABC):
     @staticmethod
     def color_obj(color: str, string: str):
-        if "agent" in string:
+        if re.match("([v^><]|wall) *", string):
             return string
         return color.ljust(len(string))
 
