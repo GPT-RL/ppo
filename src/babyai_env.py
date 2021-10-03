@@ -1,13 +1,12 @@
 import abc
+from functools import total_ordering
 import itertools
 import re
 import typing
 from abc import ABC
 from dataclasses import astuple, dataclass
 from itertools import chain, cycle, islice
-from typing import Callable, Generator, Optional, TypeVar
-from typing import Set, Union
-
+from typing import Callable, Generator, Optional, TypeVar, Set, Union, List, Any
 import gym
 import gym_minigrid
 import numpy as np
@@ -20,7 +19,12 @@ from babyai.levels.verifier import (
 )
 from colors import color as ansi_color
 from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
-from gym_minigrid.minigrid import COLORS, MiniGridEnv, OBJECT_TO_IDX, WorldObj
+from gym_minigrid.minigrid import (
+    COLORS,
+    MiniGridEnv,
+    OBJECT_TO_IDX,
+    WorldObj,
+)
 from gym_minigrid.window import Window
 from gym_minigrid.wrappers import (
     ImgObsWrapper,
@@ -576,6 +580,339 @@ class SequenceEnv(RenderEnv, ReproducibleEnv):
         self.pause(pause)
 
 
+@total_ordering
+class ObjProperty(abc.ABC):
+    surface: str
+    surface_prefix: str
+
+    def __eq__(self, other: object) -> bool:
+        return self.__class__.__name__ == other.__class__.__name__
+
+    def __gt__(self, other: object) -> bool:
+        return self.__class__.__name__ > other.__class__.__name__
+
+    @staticmethod
+    def values(env: ReproducibleEnv) -> List[Any]:
+        """Get a list of possible values for this property"""
+        raise NotImplementedError
+
+    @staticmethod
+    def get_value(goal: WorldObj, env: ReproducibleEnv) -> Any:
+        """Get this property's value from the `goal` object"""
+        raise NotImplementedError
+
+    @staticmethod
+    def set_value(value: Any, goal: WorldObj, env: ReproducibleEnv):
+        """Set this property's value on the `goal` object"""
+        raise NotImplementedError
+
+
+class Shape(ObjProperty):
+    surface = "shape"
+    surface_prefix = "is"
+
+    @staticmethod
+    def values(env: ReproducibleEnv) -> List[str]:
+        return env.types
+
+    @staticmethod
+    def get_value(goal: WorldObj, env: ReproducibleEnv) -> str:
+        return goal.type
+
+    @staticmethod
+    def set_value(value: str, goal: WorldObj, env: ReproducibleEnv):
+        goal.type = value
+
+
+class Color(ObjProperty):
+    surface = "color"
+    surface_prefix = "is"
+
+    @staticmethod
+    def values(env: ReproducibleEnv) -> List[str]:
+        return env.colors
+
+    @staticmethod
+    def get_value(goal: WorldObj, env: ReproducibleEnv) -> str:
+        return goal.color
+
+    @staticmethod
+    def set_value(value: str, goal: WorldObj, env: ReproducibleEnv):
+        goal.color = value
+
+
+class Position(ObjProperty):
+    surface = "location"
+    surface_prefix = "in"
+
+    @staticmethod
+    def values(env: ReproducibleEnv) -> List[typing.Tuple[int, int]]:
+        return list(env.positions)
+
+    @staticmethod
+    def get_value(goal: WorldObj, env: ReproducibleEnv) -> typing.Tuple[int, int]:
+        return goal.init_pos
+
+    @staticmethod
+    def set_value(value: typing.Tuple[int, int], goal: WorldObj, env: ReproducibleEnv):
+        goal.init_pos = value
+
+
+class RoomPosition(ObjProperty):
+    surface = "room"
+    surface_prefix = "in"
+
+    @staticmethod
+    def values(env: ReproducibleEnv) -> List[typing.Tuple[int, int]]:
+        return list({env.room_pos_from_pos(*p) for p in env.positions})
+
+    @staticmethod
+    def get_value(goal: WorldObj, env: ReproducibleEnv) -> typing.Tuple[int, int]:
+        return env.room_pos_from_pos(*goal.init_pos)
+
+    @staticmethod
+    def set_value(value: typing.Tuple[int, int], goal: WorldObj, env: ReproducibleEnv):
+        room = env.get_room(*value)
+        goal.init_pos = room.rand_pos(env)
+
+
+ALL_OBJ_PROPERTIES = [Shape, Color, Position, RoomPosition]
+
+
+@total_ordering
+class Relation(abc.ABC):
+    # A list of properties that this relation is compatible with.
+    compatible_properties: List[ObjProperty]
+
+    def __eq__(self, other: object) -> bool:
+        return self.__class__.__name__ == other.__class__.__name__
+
+    def __gt__(self, other: object) -> bool:
+        return self.__class__.__name__ > other.__class__.__name__
+
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def valid_values(
+        prop: ObjProperty, goal: WorldObj, env: ReproducibleEnv
+    ) -> List[Any]:
+        """Get a list of valid values for a given object property, goal object, and environment.
+        (e.g. If this relation is 'North Of', then `valid_values` should return the subset of `prop.values()`
+        that are north of `prop.get_value(goal)`."""
+        raise NotImplementedError
+
+
+class Same(Relation):
+    compatible_properties = ALL_OBJ_PROPERTIES
+
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} the same {prop.surface} as"
+
+    @staticmethod
+    def valid_values(
+        prop: ObjProperty, goal: WorldObj, env: ReproducibleEnv
+    ) -> List[Any]:
+        return [v for v in prop.values(env) if v == prop.get_value(goal, env)]
+
+
+class Different(Relation):
+    compatible_properties = ALL_OBJ_PROPERTIES
+
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} a different {prop.surface} from"
+
+    @staticmethod
+    def valid_values(
+        prop: ObjProperty, goal: WorldObj, env: ReproducibleEnv
+    ) -> List[Any]:
+        return [v for v in prop.values(env) if v != prop.get_value(goal, env)]
+
+
+class RelativeDirection(Relation, abc.ABC):
+    compatible_properties = [Position, RoomPosition]
+
+    @staticmethod
+    def is_valid(x, y, goal_x, goal_y) -> bool:
+        raise NotImplementedError
+
+    @classmethod
+    def valid_values(
+        cls, prop: ObjProperty, goal: WorldObj, env: ReproducibleEnv
+    ) -> List[Any]:
+        goal_value = prop.get_value(goal, env)
+        return [v for v in prop.values(env) if cls.is_valid(*v, *goal_value)]
+
+
+class AdjacentTo(RelativeDirection):
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} a {prop.surface} adjacent to"
+
+    @staticmethod
+    def is_valid(x, y, goal_x, goal_y) -> bool:
+        low_offset, high_offset = sorted((abs(x - goal_x), abs(y - goal_y)))
+        return (low_offset == 0) and (high_offset == 1)
+
+
+class NorthOf(RelativeDirection):
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} a {prop.surface} north of"
+
+    @staticmethod
+    def is_valid(x, y, goal_x, goal_y) -> bool:
+        return y > goal_y
+
+
+class EastOf(RelativeDirection):
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} a {prop.surface} east of"
+
+    @staticmethod
+    def is_valid(x, y, goal_x, goal_y) -> bool:
+        return x > goal_x
+
+
+class SouthOf(RelativeDirection):
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} a {prop.surface} south of"
+
+    @staticmethod
+    def is_valid(x, y, goal_x, goal_y) -> bool:
+        return y < goal_y
+
+
+class WestOf(RelativeDirection):
+    @staticmethod
+    def surface(prop: ObjProperty) -> str:
+        return f"{prop.surface_prefix} a {prop.surface} west of"
+
+    @staticmethod
+    def is_valid(x, y, goal_x, goal_y) -> bool:
+        return x < goal_x
+
+
+ALL_RELATIONS = [Same, Different, AdjacentTo, NorthOf, EastOf, SouthOf, WestOf]
+
+
+class RelativePickupInstr(PickupInstr):
+    """
+    Pick up an object matching a given description relative to other objects
+    e.g.: pick up the grey ball, which is beside the blue box, which is in the east room
+    """
+
+    def __init__(
+        self,
+        goal_desc,
+        relations: List[typing.Tuple[Relation, ObjProperty, WorldObj]],
+        strict=False,
+    ):
+        super().__init__(goal_desc, strict=strict)
+        self.relations = relations
+
+    def surface(self, env) -> str:
+        s = "pick up " + self.desc.surface(env)
+        for r, p, o in self.relations:
+            s += f", which is {r.surface(p)} {ObjDesc(o.type, color=o.color)}"
+        return s
+
+
+class RelativePickupEnv(RenderEnv, ReproducibleEnv):
+    def __init__(
+        self,
+        room_size: int,
+        seed: int,
+        strict: bool,
+        max_relations: int = 2,
+        properties: List[ObjProperty] = None,
+        relations: List[Relation] = None,
+        types: List[str] = None,
+        colors: List[str] = None,
+    ):
+        self.strict = strict
+        self.max_relations = max_relations
+
+        self.properties = [p() for p in properties or ALL_OBJ_PROPERTIES]
+        self.relations = [r() for r in relations or ALL_RELATIONS]
+        self.types = types or TYPES
+        self.colors = colors or COLORS
+        super().__init__(
+            room_size=room_size,
+            num_rows=2,
+            num_cols=2,
+            seed=seed,
+        )
+
+    @property
+    def positions(self) -> typing.Iterator[typing.Tuple[int, int]]:
+        return itertools.product(
+            range(1, self.grid.height - 1),
+            range(1, self.grid.width - 1),
+        )
+
+    def room_pos_from_pos(self, x: int, y: int) -> typing.Tuple[int, int]:
+        "Given a position, find the room it corresponds to and return the room_grid coordinates of that room."
+        assert x >= 0
+        assert y >= 0
+
+        i = x // (self.room_size - 1)
+        j = y // (self.room_size - 1)
+
+        assert i < self.num_cols
+        assert j < self.num_rows
+
+        return j, i
+
+    def _rand_obj(
+        self, props: Optional[List[typing.Tuple[ObjProperty, Any]]] = None
+    ) -> WorldObj:
+        kind = self._rand_elem(self.types)
+        color = self._rand_elem(self.colors)
+        if kind == "key":
+            obj = gym_minigrid.minigrid.Key(color)
+        elif kind == "ball":
+            obj = gym_minigrid.minigrid.Ball(color)
+        elif kind == "box":
+            obj = gym_minigrid.minigrid.Box(color)
+
+        obj.init_pos = self._rand_pos(0, self.width, 0, self.height)
+        if props:
+            for p, v in props:
+                p.set_value(v, obj, self)
+        return obj
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+
+        goal = self._rand_obj()
+        self.put_obj(goal, *goal.init_pos)
+
+        relation_triples = []
+        n_relations = self._rand_int(0, self.max_relations)
+        if n_relations > 0:
+            cur_obj = goal
+            relations: List[Relation] = self._rand_subset(self.relations, n_relations)
+
+            for r in relations:
+                prop = self._rand_elem([p() for p in r.compatible_properties])
+                value = self._rand_elem(r.valid_values(prop, cur_obj, self))
+                cur_obj = self._rand_obj([(prop, value)])
+                self.put_obj(cur_obj, *cur_obj.init_pos)
+                relation_triples.append((r, prop, cur_obj))
+
+        self.check_objs_reachable()
+        self.instrs = RelativePickupInstr(
+            ObjDesc(type=goal.type), relation_triples, strict=self.strict
+        )
+
+
 class MissionWrapper(gym.Wrapper, abc.ABC):
     def __init__(self, env):
         self._mission = None
@@ -988,14 +1325,11 @@ def main(args: "Args"):
             step(env.actions.done)
             return
 
-    room_objects = [("ball", col) for col in ("black", "white")]
-    env = PickupEnv(
-        room_objects=room_objects,
-        goal_objects=room_objects,
+    # room_objects = [("ball", col) for col in ("black", "white")]
+    env = RelativePickupEnv(
         room_size=args.room_size,
         seed=args.seed,
         strict=not args.not_strict,
-        num_dists=args.num_dists,
     )
     if args.agent_view:
         env = RGBImgObsWithDirectionWrapper(env)
