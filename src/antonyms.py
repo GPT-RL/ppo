@@ -1,8 +1,12 @@
 from __future__ import print_function
 
+import logging
+import os
 import re
 import zipfile
-from typing import Literal
+from pathlib import Path
+from pprint import pprint
+from typing import Literal, Optional, get_args
 
 import numpy as np
 import pandas as pd
@@ -10,12 +14,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from pandas._typing import FilePathOrBuffer
+import yaml
+from gql import gql
+from run_logger import HasuraLogger
 from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
 from transformers import GPT2Config, GPT2Model, GPT2Tokenizer
+
+from spec import spec
 
 GPTSize = Literal["small", "medium", "large", "xl"]
 
@@ -84,57 +92,6 @@ class Net(nn.Module):
         return output
 
 
-def train(args, model, device, train_loader, optimizer, epoch):
-    model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
-        optimizer.zero_grad()
-        output = model(data)
-        loss = F.nll_loss(output, target)
-        loss.backward()
-        optimizer.step()
-        if batch_idx % args.log_interval == 0:
-            print(
-                "Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-                    epoch,
-                    batch_idx * len(data),
-                    len(train_loader.dataset),
-                    100.0 * batch_idx / len(train_loader),
-                    loss.item(),
-                )
-            )
-            if args.dry_run:
-                break
-
-
-def test(model, device, test_loader):
-    model.eval()
-    test_loss = 0
-    correct = 0
-    with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            test_loss += F.nll_loss(
-                output, target, reduction="sum"
-            ).item()  # sum up batch loss
-            pred = output.argmax(
-                dim=1, keepdim=True
-            )  # get the index of the max log-probability
-            correct += pred.eq(target.view_as(pred)).sum().item()
-
-    test_loss /= len(test_loader.dataset)
-
-    print(
-        "\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
-            test_loss,
-            correct,
-            len(test_loader.dataset),
-            100.0 * correct / len(test_loader.dataset),
-        )
-    )
-
-
 def get_gpt_size(gpt_size: GPTSize):
     gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
     gpt_size = f"gpt2{gpt_size}"
@@ -144,7 +101,7 @@ def get_gpt_size(gpt_size: GPTSize):
 class Antonyms(Dataset):
     def __init__(
         self,
-        csv_file: FilePathOrBuffer,
+        csv_file,
         gpt_size: GPTSize,
         n_classes: int,
         seed: int,
@@ -212,15 +169,38 @@ class Antonyms(Dataset):
         return self.data[idx], self.targets[idx]
 
 
+RUN_OR_SWEEP = Literal["run", "sweep"]
+
+
+class Run(Tap):
+    name: str
+
+    def configure(self) -> None:
+        self.add_argument("name", type=str)  # positional
+
+
+class Sweep(Tap):
+    sweep_id: int = None
+
+
+def configure_logger_args(args: Tap):
+    args.add_subparser("run", Run)
+    args.add_subparser("sweep", Sweep)
+
+
 class Args(Tap):
     batch_size: int = 32
+    config: Optional[str] = None  # If given, yaml config from which to load params
     data_path: str = "antonyms.zip"
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
     gamma: float = 0.7
+    graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
     hidden_size: int = 512
+    host_machine: str = os.getenv("HOST_MACHINE")
     log_interval: int = 10
+    log_level: str = "INFO"
     lr: float = 1.0
     n_classes: int = 3
     n_train: int = 10000
@@ -233,8 +213,17 @@ class Args(Tap):
     train_ln: bool = False
     train_wpe: bool = False
 
+    def configure(self) -> None:
+        self.add_subparsers(dest="logger_args")
+        self.add_subparser("run", Run)
+        self.add_subparser("sweep", Sweep)
 
-def main(args: Args):
+
+class ArgsType(Args):
+    logger_args: Optional[RUN_OR_SWEEP]
+
+
+def train(args: Args, logger: HasuraLogger):
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -275,12 +264,139 @@ def main(args: Args):
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader)
+
+        model.train()
+        correct = []
+        for batch_idx, (data, target) in enumerate(train_loader):
+            data, target = data.to(device), target.to(device)
+            optimizer.zero_grad()
+            output = model(data)
+            loss = F.nll_loss(output, target)
+            pred = output.argmax(
+                dim=1, keepdim=True
+            )  # get the index of the max log-probability
+            correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+            loss.backward()
+            optimizer.step()
+            if batch_idx % args.log_interval == 0:
+                accuracy = torch.cat(correct).mean()
+                log = {
+                    EPOCH: epoch,
+                    LOSS: loss.item(),
+                    ACCURACY: accuracy.item(),
+                }
+                pprint(log)
+                if logger.run_id is not None:
+                    logger.log(log)
+
+                if args.dry_run:
+                    break
+
+        model.eval()
+        test_loss = 0
+        correct = []
+        with torch.no_grad():
+            for data, target in test_loader:
+                data, target = data.to(device), target.to(device)
+                output = model(data)
+                test_loss += F.nll_loss(
+                    output, target, reduction="sum"
+                ).item()  # sum up batch loss
+                pred = output.argmax(
+                    dim=1, keepdim=True
+                )  # get the index of the max log-probability
+                correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+
+        test_loss /= len(test_loader.dataset)
+        test_accuracy = torch.cat(correct).mean()
+
+        log = {EPOCH: epoch, TEST_LOSS: test_loss, TEST_ACCURACY: test_accuracy}
+        pprint(log)
+        if logger.run_id is not None:
+            logger.log(log)
         scheduler.step()
 
     if args.save_model:
         torch.save(model.state_dict(), "antonyms_model.pt")
+
+
+EXCLUDED = {
+    "config",
+    "name",
+    "sync_envs",
+    "render",
+    "render_test",
+    "subcommand",
+    "sweep_id",
+    "load_id",
+    "logger_args",
+}
+
+FPS = "fps"
+GRADIENT_NORM = "gradient norm"
+TIME = "time"
+HOURS = "hours"
+EPOCH = "epoch"
+SAVE_COUNT = "save count"
+LOSS = "loss"
+TEST_LOSS = "test loss"
+ACCURACY = "accuracy"
+TEST_ACCURACY = "test accuracy"
+
+
+def update_args(args, parameters, check_hasattr=True):
+    for k, v in parameters.items():
+        if k not in EXCLUDED:
+            if check_hasattr:
+                assert hasattr(args, k), k
+            setattr(args, k, v)
+
+
+def main(args: ArgsType):
+    logging.getLogger().setLevel(args.log_level)
+    if args.config is not None:
+        with Path(args.config).open() as f:
+            config = yaml.load(f, yaml.FullLoader)
+            args = args.from_dict(
+                {k: v for k, v in config.items() if k not in EXCLUDED}
+            )
+
+    metadata = dict(reproducibility_info=args.get_reproducibility_info())
+    if args.host_machine:
+        metadata.update(host_machine=args.host_machine)
+    if name := getattr(args, "name", None):
+        metadata.update(name=name)
+
+    logger: HasuraLogger
+    with HasuraLogger(args.graphql_endpoint) as logger:
+        valid = (*get_args(RUN_OR_SWEEP), None)
+        assert args.logger_args in valid, f"{args.logger_args} is not in {valid}."
+
+        if args.logger_args is not None:
+            charts = [
+                spec(x=x, y=y)
+                for y in (
+                    LOSS,
+                    ACCURACY,
+                    TEST_LOSS,
+                    TEST_ACCURACY,
+                )
+                for x in (HOURS, EPOCH)
+            ]
+            sweep_id = getattr(args, "sweep_id", None)
+            parameters = logger.create_run(
+                metadata=metadata,
+                sweep_id=sweep_id,
+                charts=charts,
+            )
+
+            if parameters is not None:
+                update_args(args, parameters)
+            logger.update_metadata(
+                dict(parameters=args.as_dict(), run_id=logger.run_id)
+            )
+
+        return train(args=args, logger=logger)
 
 
 if __name__ == "__main__":
