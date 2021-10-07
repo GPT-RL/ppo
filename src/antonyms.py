@@ -195,7 +195,7 @@ class Args(Tap):
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
-    gamma: float = 0.7
+    gamma: float = 0.99
     graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
     hidden_size: int = 512
     host_machine: str = os.getenv("HOST_MACHINE")
@@ -310,7 +310,7 @@ def train(args: Args, logger: HasuraLogger):
         test_loss /= len(test_loader.dataset)
         test_accuracy = torch.cat(correct).mean()
 
-        log = {EPOCH: epoch, TEST_LOSS: test_loss, TEST_ACCURACY: test_accuracy}
+        log = {EPOCH: epoch, TEST_LOSS: test_loss, TEST_ACCURACY: test_accuracy.item()}
         pprint(log)
         if logger.run_id is not None:
             logger.log(log)
