@@ -202,8 +202,8 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     n_classes: int = 3
-    n_train: int = 10000
-    n_test: int = 1000
+    n_train: int = 14000
+    n_test: int = 800
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
@@ -310,7 +310,12 @@ def train(args: Args, logger: HasuraLogger):
         test_loss /= len(test_loader.dataset)
         test_accuracy = torch.cat(correct).mean()
 
-        log = {EPOCH: epoch, TEST_LOSS: test_loss, TEST_ACCURACY: test_accuracy.item(), RUN_ID: logger.run_id}
+        log = {
+            EPOCH: epoch,
+            TEST_LOSS: test_loss,
+            TEST_ACCURACY: test_accuracy.item(),
+            RUN_ID: logger.run_id,
+        }
         pprint(log)
         if logger.run_id is not None:
             logger.log(log)
