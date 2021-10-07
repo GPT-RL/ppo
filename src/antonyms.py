@@ -15,7 +15,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import yaml
-from gql import gql
 from run_logger import HasuraLogger
 from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
@@ -284,6 +283,7 @@ def train(args: Args, logger: HasuraLogger):
                     EPOCH: epoch,
                     LOSS: loss.item(),
                     ACCURACY: accuracy.item(),
+                    RUN_ID: logger.run_id,
                 }
                 pprint(log)
                 if logger.run_id is not None:
@@ -310,7 +310,7 @@ def train(args: Args, logger: HasuraLogger):
         test_loss /= len(test_loader.dataset)
         test_accuracy = torch.cat(correct).mean()
 
-        log = {EPOCH: epoch, TEST_LOSS: test_loss, TEST_ACCURACY: test_accuracy.item()}
+        log = {EPOCH: epoch, TEST_LOSS: test_loss, TEST_ACCURACY: test_accuracy.item(), RUN_ID: logger.run_id}
         pprint(log)
         if logger.run_id is not None:
             logger.log(log)
@@ -342,6 +342,7 @@ LOSS = "loss"
 TEST_LOSS = "test loss"
 ACCURACY = "accuracy"
 TEST_ACCURACY = "test accuracy"
+RUN_ID = "run ID"
 
 
 def update_args(args, parameters, check_hasattr=True):
