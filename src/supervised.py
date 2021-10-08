@@ -8,7 +8,6 @@ from pathlib import Path
 from pprint import pprint
 from typing import Literal, Optional, cast, get_args
 
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -74,21 +73,16 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        self.K = nn.Linear(hidden_size, hidden_size)
-        self.Q = nn.Linear(hidden_size, hidden_size)
-        self.gpt = nn.Sequential(
+        self.net = nn.Sequential(
             GPTEmbed(embedding_size=embedding_size, **kwargs),
             nn.Linear(self.embedding_size, hidden_size),
             nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(2 * hidden_size, 2),
         )
 
     def forward(self, x):
-        embedded = self.gpt(x)
-        n_classes = x.size(1) - 1
-        lemma, choices = torch.split(embedded, [1, n_classes], dim=1)
-        lemma = self.K(lemma)
-        choices = self.Q(choices)
-        weights = (lemma * choices).sum(-1)
+        weights = self.net(x)
         output = F.log_softmax(weights, dim=1)
         return output
 
@@ -104,61 +98,39 @@ def shuffle(df: pd.DataFrame, **kwargs):
 
 
 ANTONYMS = "antonyms"
+SYNONYMS = "synonyms"
 LEMMA = "lemma"
 TARGET = "target"
+CATEGORY = "category"
+WORD1 = "word1"
+WORD2 = "word2"
 
 
-def explode_antonyms(data: pd.DataFrame):
-    data[ANTONYMS] = data.apply(
-        func=lambda x: re.split("[;|]", x.antonyms),
+def explode_column(data: pd.DataFrame, column: str):
+    data[column] = data.apply(
+        func=lambda x: re.split("[;|]", x[column]),
         axis=1,
     )
-    data = data.explode(ANTONYMS)
+    data = data.explode(column)
     return data
 
 
-class Antonyms(Dataset):
+class SynonymsAntonyms(Dataset):
     def __init__(
         self,
         data: pd.DataFrame,
-        gpt_size: GPTSize,
-        n_classes: int,
+        eos_token_id: int,
         seed: int,
     ):
         data = shuffle(data, random_state=seed)  # shuffle data
 
-        data = data.rename(columns=dict(antonyms=0))  # correct answer goes to column 0
-        assert n_classes >= 2
-        for i in range(1, n_classes):
-            # classes 1...n_classes contain randomly chosen wrong choices
-            data[i] = shuffle(data[LEMMA], random_state=seed + i)
-
-        # permute choices (otherwise correct answer is always 0)
-        input_columns = list(range(n_classes))  # inputs will be columns 0...n_classes
-        N = len(data)
-        ii = np.tile(np.expand_dims(np.arange(N), 1), (1, n_classes))
-        jj = np.tile(np.arange(n_classes), (N, 1))
-        jj = np.random.default_rng(seed).permuted(
-            jj, axis=1
-        )  # shuffle indices along y-axis
-        permuted_inputs = data[input_columns].to_numpy()[
-            ii, jj
-        ]  # shuffle data using indices
-        data[input_columns] = permuted_inputs
-        _, data[TARGET] = (
-            jj == 0
-        ).nonzero()  # identify new targets (where 0-index was shuffled to)
-        self.data = data
-
-        tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(gpt_size))
-
         padded = [
-            pad_sequence(list(data[col]), padding_value=tokenizer.eos_token_id)
-            for col in [LEMMA, *input_columns]
+            pad_sequence(list(data[col]), padding_value=eos_token_id)
+            for col in [WORD1, WORD2]
         ]
-        self.inputs = pad_sequence(padded, padding_value=tokenizer.eos_token_id)
+        self.inputs = pad_sequence(padded, padding_value=eos_token_id)
         self.inputs = self.inputs.transpose(0, 2)
-        self.targets = torch.tensor(data[TARGET].to_numpy())
+        self.targets = torch.tensor(data[CATEGORY].to_numpy())
 
     def __len__(self):
         return len(self.inputs)
@@ -189,11 +161,10 @@ def configure_logger_args(args: Tap):
 class Args(Tap):
     batch_size: int = 32
     config: Optional[str] = None  # If given, yaml config from which to load params
-    data_path: str = "antonyms.zip"
+    data_path: str = "data.zip"
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
-    disjoint_only: bool = False
     gamma: float = 0.99
     graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
     hidden_size: int = 512
@@ -204,7 +175,7 @@ class Args(Tap):
     lr: float = 1.0
     n_classes: int = 3
     n_train: int = 9000
-    n_test: int = 320
+    n_test: int = 800
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
@@ -247,14 +218,43 @@ def train(args: Args, logger: HasuraLogger):
         test_kwargs.update(cuda_kwargs)
 
     with zipfile.ZipFile(args.data_path) as zip_file:
-        with zip_file.open("antonyms.csv") as file:
-            data: pd.DataFrame = pd.read_csv(file)
+        stem = Path(args.data_path).stem
+        with zip_file.open(str(Path(stem, "antonyms.csv"))) as file:
+            antonyms: pd.DataFrame = pd.read_csv(file).dropna()
+        with zip_file.open(str(Path(stem, "synonyms.csv"))) as file:
+            synonyms: pd.DataFrame = pd.read_csv(file).dropna()
 
+    antonyms = explode_column(antonyms, ANTONYMS)
+    synonyms = explode_column(synonyms, SYNONYMS)
+    antonyms[CATEGORY] = 0
+    synonyms[CATEGORY] = 1
+    antonyms = antonyms.rename(columns={LEMMA: WORD1, ANTONYMS: WORD2})
+    synonyms = synonyms.rename(columns={LEMMA: WORD1, SYNONYMS: WORD2})
+    data = pd.concat([antonyms, synonyms])
     data = shuffle(data, random_state=args.seed)
-    data = explode_antonyms(data)
+
+    vocab = set()
+    train_vocab = set()
+    for _, row in data.iterrows():
+        word1 = row[WORD1]
+        word2 = row[WORD2]
+        vocab |= {word1, word2}
+        if len(train_vocab) < args.n_train:
+            train_vocab |= {word1}
+        if len(train_vocab) < args.n_train:
+            train_vocab |= {word2}
+
+    assert args.n_train + args.n_test <= len(
+        vocab
+    ), f"n_train ({args.n_train}) + n_test ({args.n_test}) should be <= len(vocab) ({len(vocab)})"
+
+    word1_is_in_train = data[WORD1].isin(train_vocab)
+    word2_is_in_train = data[WORD2].isin(train_vocab)
+    add_to_train_data = word1_is_in_train & word2_is_in_train
+    add_to_test_data = ~word1_is_in_train & ~word2_is_in_train
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
-    columns = [LEMMA, ANTONYMS]
+    columns = [WORD1, WORD2]
 
     with tqdm(
         desc="Encoding data", total=sum(len(data[col]) for col in columns)
@@ -267,64 +267,17 @@ def train(args: Args, logger: HasuraLogger):
         for col in columns:
             data[col] = data[col].apply(encode)
 
-    if args.disjoint_only:
-        with tqdm(desc="Checking disjoint", total=len(data)) as bar:
-
-            def is_disjoint(r: pd.Series):
-                bar.update(1)
-                disjoint = set(r[LEMMA]).isdisjoint(set(r[ANTONYMS]))
-                return r.append(pd.Series(dict(disjoint=disjoint)))
-
-            data = data.apply(is_disjoint, axis=1)
-            logging.info(f"Excluding {sum(~data.disjoint)} rows.")
-            data = data[data.disjoint]
-
-    vocab = set()
-    train_vocab = set()
-    for _, row in data.iterrows():
-        lemma = row[LEMMA]
-        antonyms = row[ANTONYMS]
-        vocab |= {lemma, antonyms}
-        if len(train_vocab) < args.n_train:
-            train_vocab |= {lemma}
-        if len(train_vocab) < args.n_train:
-            train_vocab |= {antonyms}
-
-    assert args.n_train + args.n_test <= len(
-        vocab
-    ), f"n_train ({args.n_train}) + n_test ({args.n_test}) should be <= len(vocab) ({len(vocab)})"
-
-    lemma_is_in_train = data[LEMMA].isin(train_vocab)
-    antonym_is_in_train = data[ANTONYMS].isin(train_vocab)
-    add_to_train_data = lemma_is_in_train & antonym_is_in_train
-    add_to_test_data = ~lemma_is_in_train & ~antonym_is_in_train
-
-    for col in [LEMMA, ANTONYMS]:
+    # convert all to tensors
+    for col in [WORD1, WORD2]:
         data[col] = data[col].apply(torch.tensor)
+
     train_data = data[add_to_train_data].copy()
     test_data = data[add_to_test_data].copy().iloc[: args.n_test]
 
-    def collect_vocab(df: pd.DataFrame):
-        return set(df[LEMMA]) | set(df[ANTONYMS])
+    kwargs = dict(eos_token_id=tokenizer.eos_token_id, seed=0)
 
-    train_vocab = collect_vocab(train_data)
-    test_vocab = collect_vocab(test_data)
-    assert (
-        len(test_vocab) >= args.n_test
-    ), f"Insufficient test data ({len(test_vocab)}). Required {args.n_test}."
-    logging.info(f"Unused rows: {len(data) - len(train_data) - len(test_data)}")
-
-    common = train_vocab & test_vocab
-    assert not common, f"Vocabulary is shared between train and test: {common}"
-
-    kwargs = dict(
-        gpt_size=args.embedding_size,
-        n_classes=args.n_classes,
-        seed=0,
-    )
-
-    train_dataset = Antonyms(train_data, **kwargs)
-    test_dataset = Antonyms(test_data, **kwargs)
+    train_dataset = SynonymsAntonyms(train_data, **kwargs)
+    test_dataset = SynonymsAntonyms(test_data, **kwargs)
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
