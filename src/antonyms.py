@@ -21,6 +21,7 @@ from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
+from tqdm import tqdm
 from transformers import GPT2Config, GPT2Model, GPT2Tokenizer
 
 from spec import spec
@@ -151,17 +152,11 @@ class Antonyms(Dataset):
 
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(gpt_size))
 
-        def encode(s: str):
-            return tokenizer.encode(s, return_tensors="pt").squeeze(0)
-
-        def generate_tensors():
-            for col in [LEMMA, *input_columns]:
-                tensors = data[col].apply(encode)
-                yield pad_sequence(list(tensors), padding_value=tokenizer.eos_token_id)
-
-        self.inputs = pad_sequence(
-            list(generate_tensors()), padding_value=tokenizer.eos_token_id
-        )
+        padded = [
+            pad_sequence(list(data[col]), padding_value=tokenizer.eos_token_id)
+            for col in [LEMMA, *input_columns]
+        ]
+        self.inputs = pad_sequence(padded, padding_value=tokenizer.eos_token_id)
         self.inputs = self.inputs.transpose(0, 2)
         self.targets = torch.tensor(data[TARGET].to_numpy())
 
@@ -198,6 +193,7 @@ class Args(Tap):
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
+    disjoint_only: bool = False
     gamma: float = 0.99
     graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
     hidden_size: int = 512
@@ -257,6 +253,32 @@ def train(args: Args, logger: HasuraLogger):
     data = shuffle(data, random_state=args.seed)
     data = explode_antonyms(data)
 
+    tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
+    columns = [LEMMA, ANTONYMS]
+
+    with tqdm(
+        desc="Encoding data", total=sum(len(data[col]) for col in columns)
+    ) as bar:
+
+        def encode(s: str):
+            bar.update(1)
+            return tuple(tokenizer.encode(s))
+
+        for col in columns:
+            data[col] = data[col].apply(encode)
+
+    if args.disjoint_only:
+        with tqdm(desc="Checking disjoint", total=len(data)) as bar:
+
+            def is_disjoint(r: pd.Series):
+                bar.update(1)
+                disjoint = set(r[LEMMA]).isdisjoint(set(r[ANTONYMS]))
+                return r.append(pd.Series(dict(disjoint=disjoint)))
+
+            data = data.apply(is_disjoint, axis=1)
+            logging.info(f"Excluding {sum(~data.disjoint)} rows.")
+            data = data[data.disjoint]
+
     vocab = set()
     train_vocab = set()
     for _, row in data.iterrows():
@@ -275,13 +297,15 @@ def train(args: Args, logger: HasuraLogger):
     lemma_is_in_train = data[LEMMA].isin(train_vocab)
     antonym_is_in_train = data[ANTONYMS].isin(train_vocab)
     add_to_train_data = lemma_is_in_train & antonym_is_in_train
-    train_data = data[add_to_train_data].copy()
     add_to_test_data = ~lemma_is_in_train & ~antonym_is_in_train
+
+    for col in [LEMMA, ANTONYMS]:
+        data[col] = data[col].apply(torch.tensor)
+    train_data = data[add_to_train_data].copy()
     test_data = data[add_to_test_data].copy().iloc[: args.n_test]
 
     def collect_vocab(df: pd.DataFrame):
-        exploded = explode_antonyms(df.copy())
-        return set(exploded[LEMMA]) | set(exploded[ANTONYMS])
+        return set(df[LEMMA]) | set(df[ANTONYMS])
 
     train_vocab = collect_vocab(train_data)
     test_vocab = collect_vocab(test_data)
