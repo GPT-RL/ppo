@@ -6,7 +6,7 @@ import re
 import zipfile
 from pathlib import Path
 from pprint import pprint
-from typing import Literal, Optional, get_args
+from typing import Literal, Optional, cast, get_args
 
 import numpy as np
 import pandas as pd
@@ -97,10 +97,14 @@ def get_gpt_size(gpt_size: GPTSize):
     return gpt_size
 
 
+def shuffle(df: pd.DataFrame, **kwargs):
+    return df.sample(frac=1, **kwargs).reset_index(drop=True)
+
+
 class Antonyms(Dataset):
     def __init__(
         self,
-        csv_file,
+        data: pd.DataFrame,
         gpt_size: GPTSize,
         n_classes: int,
         seed: int,
@@ -109,17 +113,12 @@ class Antonyms(Dataset):
         LEMMA = "lemma"
         TARGET = "target"
 
-        data: pd.DataFrame = pd.read_csv(csv_file)
-
         # split antonyms into separate rows
         data[ANTONYMS] = data.apply(
             func=lambda x: re.split("[;|]", x.antonyms),
             axis=1,
         )
         data = data.explode(ANTONYMS)
-
-        def shuffle(df, **kwargs):
-            return df.sample(frac=1, **kwargs).reset_index(drop=True)
 
         data = shuffle(data, random_state=seed)  # shuffle data
 
@@ -144,6 +143,7 @@ class Antonyms(Dataset):
         _, data[TARGET] = (
             jj == 0
         ).nonzero()  # identify new targets (where 0-index was shuffled to)
+        self.data = data
 
         tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(gpt_size))
 
@@ -155,17 +155,17 @@ class Antonyms(Dataset):
                 tensors = data[col].apply(encode)
                 yield pad_sequence(list(tensors), padding_value=tokenizer.eos_token_id)
 
-        self.data = pad_sequence(
+        self.inputs = pad_sequence(
             list(generate_tensors()), padding_value=tokenizer.eos_token_id
         )
-        self.data = self.data.transpose(0, 2)
+        self.inputs = self.inputs.transpose(0, 2)
         self.targets = torch.tensor(data[TARGET].to_numpy())
 
     def __len__(self):
-        return len(self.data)
+        return len(self.inputs)
 
     def __getitem__(self, idx):
-        return self.data[idx], self.targets[idx]
+        return self.inputs[idx], self.targets[idx]
 
 
 RUN_OR_SWEEP = Literal["run", "sweep"]
@@ -202,8 +202,8 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     n_classes: int = 3
-    n_train: int = 14000
-    n_test: int = 800
+    n_train: int = 11000
+    n_test: int = 240
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
@@ -239,16 +239,22 @@ def train(args: Args, logger: HasuraLogger):
 
     with zipfile.ZipFile(args.data_path) as zip_file:
         with zip_file.open("antonyms.csv") as file:
-            dataset = Antonyms(
-                file,
-                gpt_size=args.embedding_size,
-                n_classes=args.n_classes,
-                seed=0,
-            )
-    dataset = torch.utils.data.Subset(dataset, range(args.n_train + args.n_test))
-    train_dataset, test_dataset = torch.utils.data.random_split(
-        dataset, [args.n_train, args.n_test], generator=rng
+            data: pd.DataFrame = pd.read_csv(file)
+
+    data = shuffle(data)
+    assert args.n_train + args.n_test <= len(
+        data
+    ), f"n_train ({args.n_train}) + n_test ({args.n_test}) should be <= len(data) ({len(data)})"
+    train_data = data.iloc[: args.n_train].copy()
+    test_data = data.iloc[args.n_train : args.n_train + args.n_test].copy()
+    kwargs = dict(
+        gpt_size=args.embedding_size,
+        n_classes=args.n_classes,
+        seed=0,
     )
+
+    train_dataset = Antonyms(train_data, **kwargs)
+    test_dataset = Antonyms(test_data, **kwargs)
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
@@ -406,4 +412,4 @@ def main(args: ArgsType):
 
 
 if __name__ == "__main__":
-    main(Args().parse_args())
+    main(cast(ArgsType, Args().parse_args()))
