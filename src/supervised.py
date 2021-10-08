@@ -230,6 +230,11 @@ def train(args: Args, logger: HasuraLogger):
     synonyms[CATEGORY] = 1
     antonyms = antonyms.rename(columns={LEMMA: WORD1, ANTONYMS: WORD2})
     synonyms = synonyms.rename(columns={LEMMA: WORD1, SYNONYMS: WORD2})
+    antonyms = shuffle(antonyms, random_state=args.seed)
+    synonyms = shuffle(synonyms, random_state=args.seed)
+    size = min(len(antonyms), len(synonyms))
+    antonyms = antonyms.iloc[:size]
+    synonyms = synonyms.iloc[:size]
     data = pd.concat([antonyms, synonyms])
     data = shuffle(data, random_state=args.seed)
 
