@@ -226,7 +226,15 @@ def train(args: Args, logger: HasuraLogger):
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
-    rng = torch.manual_seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    save_path = (
+        Path("/tmp/logs/checkpoint.pkl")
+        if logger.run_id is None
+        else Path("/tmp/logs", str(logger.run_id), "checkpoint.pkl")
+    )
+    if args.save_model:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
 
     device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -328,7 +336,7 @@ def train(args: Args, logger: HasuraLogger):
         scheduler.step()
 
     if args.save_model:
-        torch.save(model.state_dict(), "antonyms_model.pt")
+        torch.save(model.state_dict(), str(save_path))
 
 
 EXCLUDED = {
