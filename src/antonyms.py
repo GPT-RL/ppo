@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import yaml
+from gql import gql
 from run_logger import HasuraLogger
 from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
@@ -198,6 +199,7 @@ class Args(Tap):
     graphql_endpoint: str = os.getenv("GRAPHQL_ENDPOINT")
     hidden_size: int = 512
     host_machine: str = os.getenv("HOST_MACHINE")
+    load_id: int = None  # path to load parameters from if at all
     log_interval: int = 10
     log_level: str = "INFO"
     lr: float = 1.0
@@ -222,19 +224,19 @@ class ArgsType(Args):
     logger_args: Optional[RUN_OR_SWEEP]
 
 
+def get_save_path(run_id: Optional[int]):
+    return (
+        Path("/tmp/logs/checkpoint.pkl")
+        if run_id is None
+        else Path("/tmp/logs", str(run_id), "checkpoint.pkl")
+    )
+
+
 def train(args: Args, logger: HasuraLogger):
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
     torch.manual_seed(args.seed)
-
-    save_path = (
-        Path("/tmp/logs/checkpoint.pkl")
-        if logger.run_id is None
-        else Path("/tmp/logs", str(logger.run_id), "checkpoint.pkl")
-    )
-    if args.save_model:
-        save_path.parent.mkdir(parents=True, exist_ok=True)
 
     device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -273,6 +275,15 @@ def train(args: Args, logger: HasuraLogger):
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
     ).to(device)
+
+    save_path = get_save_path(logger.run_id)
+    if args.load_id is not None:
+        load_path = get_save_path(args.load_id)
+        logging.info(f"Loading checkpoint from {load_path}...")
+        model.load_state_dict(torch.load(load_path))
+    if args.save_model:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
@@ -416,6 +427,19 @@ def main(args: ArgsType):
                 dict(parameters=args.as_dict(), run_id=logger.run_id)
             )
 
+        if args.load_id is not None:
+            parameters = logger.execute(
+                gql(
+                    """
+query GetParameters($id: Int!) {
+  run_by_pk(id: $id) {
+    metadata(path: "parameters")
+  }
+}"""
+                ),
+                variable_values=dict(id=args.load_id),
+            )["run_by_pk"]["metadata"]
+            update_args(args, parameters, check_hasattr=False)
         return train(args=args, logger=logger)
 
 
