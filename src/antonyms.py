@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import zipfile
+from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
 from typing import Literal, Optional, cast, get_args
@@ -17,10 +18,12 @@ import torch.optim as optim
 import yaml
 from gql import gql
 from run_logger import HasuraLogger
+from setuptools._vendor.ordered_set import OrderedSet
 from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
+from tqdm import tqdm
 from transformers import GPT2Config, GPT2Model, GPT2Tokenizer
 
 from spec import spec
@@ -102,6 +105,20 @@ def shuffle(df: pd.DataFrame, **kwargs):
     return df.sample(frac=1, **kwargs).reset_index(drop=True)
 
 
+ANTONYMS = "antonyms"
+LEMMA = "lemma"
+TARGET = "target"
+
+
+def explode_antonyms(data: pd.DataFrame):
+    data[ANTONYMS] = data.apply(
+        func=lambda x: re.split("[;|]", x.antonyms),
+        axis=1,
+    )
+    data = data.explode(ANTONYMS)
+    return data
+
+
 class Antonyms(Dataset):
     def __init__(
         self,
@@ -110,16 +127,9 @@ class Antonyms(Dataset):
         n_classes: int,
         seed: int,
     ):
-        ANTONYMS = "antonyms"
-        LEMMA = "lemma"
-        TARGET = "target"
 
         # split antonyms into separate rows
-        data[ANTONYMS] = data.apply(
-            func=lambda x: re.split("[;|]", x.antonyms),
-            axis=1,
-        )
-        data = data.explode(ANTONYMS)
+        data = explode_antonyms(data)
 
         data = shuffle(data, random_state=seed)  # shuffle data
 
@@ -204,8 +214,8 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     n_classes: int = 3
-    n_train: int = 11000
-    n_test: int = 240
+    n_train: int = 6000
+    n_test: int = 600
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
@@ -251,12 +261,71 @@ def train(args: Args, logger: HasuraLogger):
         with zip_file.open("antonyms.csv") as file:
             data: pd.DataFrame = pd.read_csv(file)
 
-    data = shuffle(data)
+    data = shuffle(data, random_state=args.seed)
     assert args.n_train + args.n_test <= len(
         data
     ), f"n_train ({args.n_train}) + n_test ({args.n_test}) should be <= len(data) ({len(data)})"
-    train_data = data.iloc[: args.n_train].copy()
-    test_data = data.iloc[args.n_train : args.n_train + args.n_test].copy()
+    data = explode_antonyms(data)
+
+    tree = OrderedDict()
+    vocab = set()
+    for _, row in data.iterrows():
+        lemma = row[LEMMA]
+        if lemma not in tree:
+            tree[lemma] = []
+        antonyms = row[ANTONYMS]
+        tree[lemma].append(antonyms)
+        vocab |= {lemma, antonyms}
+    tree = OrderedDict(tree)
+
+    def traverse(start: str, traversed: OrderedSet, size: int):
+        if len(traversed) >= size:
+            return traversed
+        traversed = traversed | {start}
+        try:
+            children = tree[start]
+        except KeyError:
+            children = []
+        for child in children:
+            if child not in traversed:
+                traversed = traversed | {child}
+                traversed = traversed | traverse(child, traversed, size)
+        return traversed
+
+    train_vocab = OrderedSet()
+    assert args.n_train < len(
+        vocab
+    ), f"args.n_train ({args.n_train}) must be less than len(vocab) ({len(vocab)})"
+    with tqdm(total=args.n_train) as bar:
+
+        def update_bar(n):
+            bar.update(len(n) - len(train_vocab))
+
+        for key, values in tree.items():
+            new = train_vocab | traverse(key, train_vocab, args.n_train)
+            update_bar(new)
+            train_vocab = new
+            for value in values:
+                new = train_vocab | traverse(value, train_vocab, args.n_train)
+                update_bar(new)
+                train_vocab = new
+
+    lemma_is_in_train = data[LEMMA].isin(train_vocab)
+    antonym_is_in_train = data[ANTONYMS].isin(train_vocab)
+    add_to_train_data = lemma_is_in_train & antonym_is_in_train
+    train_data = data[add_to_train_data].copy()
+    add_to_test_data = ~lemma_is_in_train & ~antonym_is_in_train
+    test_data = data[add_to_test_data].copy()
+
+    def collect_vocab(df: pd.DataFrame):
+        exploded = explode_antonyms(df.copy())
+        return set(exploded[LEMMA]) | set(exploded[ANTONYMS])
+
+    train_vocab = collect_vocab(train_data)
+    test_vocab = collect_vocab(test_data)
+    common = train_vocab & test_vocab
+    assert not common, common
+
     kwargs = dict(
         gpt_size=args.embedding_size,
         n_classes=args.n_classes,
