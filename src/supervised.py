@@ -78,7 +78,7 @@ class Net(nn.Module):
             GPTEmbed(embedding_size=embedding_size, **kwargs),
             nn.Linear(self.embedding_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, 2),
+            nn.Linear(hidden_size, 3),
             nn.LogSoftmax(dim=1),
         )
 
@@ -151,7 +151,7 @@ class Args(Tap):
     log_interval: int = 100
     log_level: str = "INFO"
     lr: float = 1.0
-    max_integer: int = 100
+    max_integer: int = 20
     test_integer: int = 2
     no_cuda: bool = False
     randomize_parameters: bool = False
@@ -195,13 +195,38 @@ def train(args: Args, logger: HasuraLogger):
         test_kwargs.update(cuda_kwargs)
 
     data = np.arange(args.max_integer)
-    data = np.expand_dims(data, axis=0)
-    data = np.tile(data, (args.max_integer, 1))
-    data = np.stack([data.flatten(), data.T.flatten()], axis=1)
+    data = np.expand_dims(data, axis=(1, 2))
+    data = np.tile(data, (1, args.max_integer, args.max_integer))
+    data = np.stack(
+        [
+            data.flatten(),
+            data.swapaxes(0, 1).flatten(),
+            data.swapaxes(0, 2).flatten(),
+        ],
+        axis=1,
+    )
+
+    c1 = data[:, 1] != data[:, 0]
+    c2 = data[:, 2] != data[:, 1]
+    c3 = data[:, 2] != data[:, 0]
+    keep = c1 & c2 & c3
+    data = data[keep]
 
     rng = np.random.default_rng()
     rng.shuffle(data, axis=0)
-    targets = data[:, 0] > data[:, 1]
+
+    argmin = np.argmin(data, axis=1)
+    argmax = np.argmax(data, axis=1)
+    extrema = np.stack([argmin, argmax], axis=1)
+
+    indices = np.arange(3)
+    indices = np.expand_dims(indices, 0)
+    indices = np.tile(indices, (len(data), 1))
+
+    extrema = np.expand_dims(extrema, 1)
+    indices = np.expand_dims(indices, 2)
+    not_extreme = np.all(indices != extrema, axis=2)
+    targets = indices[not_extreme].flatten()
 
     def get_divisors():
         divisor = 1
@@ -215,8 +240,8 @@ def train(args: Args, logger: HasuraLogger):
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
     def tokenize():
-        for n1, n2 in tqdm(data, desc="Tokenizing data"):
-            yield tokenizer.encode(f"{n1},{n2}", return_tensors="pt").squeeze(0)
+        for n1, n2, n3 in tqdm(data, desc="Tokenizing data"):
+            yield tokenizer.encode(f"{n1},{n2},{n3}", return_tensors="pt").squeeze(0)
 
     inputs = list(tokenize())
     inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).squeeze(0).T
