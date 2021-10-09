@@ -3,11 +3,12 @@ from __future__ import print_function
 import logging
 import os
 import re
-import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
 from typing import Literal, Optional, cast, get_args
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -15,12 +16,12 @@ import torch.nn.functional as F
 import torch.optim as optim
 import yaml
 from gql import gql
+from numpy.random import Generator
 from run_logger import HasuraLogger
 from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
-from tqdm import tqdm
 from transformers import GPT2Config, GPT2Model, GPT2Tokenizer
 
 from spec import spec
@@ -64,7 +65,7 @@ class GPTEmbed(nn.Module):
             p.requires_grad_(requires_grad)
 
     def forward(self, x, **_):
-        return self.gpt.forward(x).last_hidden_state[:, :, -1]
+        return self.gpt.forward(x).last_hidden_state[:, -1]
 
 
 class Net(nn.Module):
@@ -77,14 +78,12 @@ class Net(nn.Module):
             GPTEmbed(embedding_size=embedding_size, **kwargs),
             nn.Linear(self.embedding_size, hidden_size),
             nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(2 * hidden_size, 2),
+            nn.Linear(hidden_size, 2),
+            nn.LogSoftmax(dim=1),
         )
 
     def forward(self, x):
-        weights = self.net(x)
-        output = F.log_softmax(weights, dim=1)
-        return output
+        return self.net(x)
 
 
 def get_gpt_size(gpt_size: GPTSize):
@@ -115,22 +114,10 @@ def explode_column(data: pd.DataFrame, column: str):
     return data
 
 
-class SynonymsAntonyms(Dataset):
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        eos_token_id: int,
-        seed: int,
-    ):
-        data = shuffle(data, random_state=seed)  # shuffle data
-
-        padded = [
-            pad_sequence(list(data[col]), padding_value=eos_token_id)
-            for col in [WORD1, WORD2]
-        ]
-        self.inputs = pad_sequence(padded, padding_value=eos_token_id)
-        self.inputs = self.inputs.transpose(0, 2)
-        self.targets = torch.tensor(data[CATEGORY].to_numpy())
+@dataclass
+class _Dataset(Dataset):
+    inputs: torch.tensor
+    targets: torch.tensor
 
     def __len__(self):
         return len(self.inputs)
@@ -170,12 +157,11 @@ class Args(Tap):
     hidden_size: int = 512
     host_machine: str = os.getenv("HOST_MACHINE")
     load_id: int = None  # path to load parameters from if at all
-    log_interval: int = 10
+    log_interval: int = 100
     log_level: str = "INFO"
     lr: float = 1.0
-    n_classes: int = 3
-    n_train: int = 9000
-    n_test: int = 800
+    max_integer: int = 100
+    n_test: int = 10
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
@@ -217,72 +203,29 @@ def train(args: Args, logger: HasuraLogger):
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
 
-    with zipfile.ZipFile(args.data_path) as zip_file:
-        stem = Path(args.data_path).stem
-        with zip_file.open(str(Path(stem, "antonyms.csv"))) as file:
-            antonyms: pd.DataFrame = pd.read_csv(file).dropna()
-        with zip_file.open(str(Path(stem, "synonyms.csv"))) as file:
-            synonyms: pd.DataFrame = pd.read_csv(file).dropna()
+    data = np.arange(args.max_integer)
+    data = np.expand_dims(data, axis=0)
+    data = np.tile(data, (args.max_integer, 1))
+    data = np.stack([data.flatten(), data.T.flatten()], axis=1)
 
-    antonyms = explode_column(antonyms, ANTONYMS)
-    synonyms = explode_column(synonyms, SYNONYMS)
-    antonyms[CATEGORY] = 0
-    synonyms[CATEGORY] = 1
-    antonyms = antonyms.rename(columns={LEMMA: WORD1, ANTONYMS: WORD2})
-    synonyms = synonyms.rename(columns={LEMMA: WORD1, SYNONYMS: WORD2})
-    antonyms = shuffle(antonyms, random_state=args.seed)
-    synonyms = shuffle(synonyms, random_state=args.seed)
-    size = min(len(antonyms), len(synonyms))
-    antonyms = antonyms.iloc[:size]
-    synonyms = synonyms.iloc[:size]
-    data = pd.concat([antonyms, synonyms])
-    data = shuffle(data, random_state=args.seed)
+    rng = np.random.default_rng()
+    rng.shuffle(data, axis=0)
+    targets = data[:, 0] > data[:, 1]
 
-    vocab = set()
-    train_vocab = set()
-    for _, row in data.iterrows():
-        word1 = row[WORD1]
-        word2 = row[WORD2]
-        vocab |= {word1, word2}
-        if len(train_vocab) < args.n_train:
-            train_vocab |= {word1}
-        if len(train_vocab) < args.n_train:
-            train_vocab |= {word2}
-
-    assert args.n_train + args.n_test <= len(
-        vocab
-    ), f"n_train ({args.n_train}) + n_test ({args.n_test}) should be <= len(vocab) ({len(vocab)})"
-
-    word1_is_in_train = data[WORD1].isin(train_vocab)
-    word2_is_in_train = data[WORD2].isin(train_vocab)
-    add_to_train_data = word1_is_in_train & word2_is_in_train
-    add_to_test_data = ~word1_is_in_train & ~word2_is_in_train
+    test_ints = rng.choice(args.max_integer, size=args.n_test)
+    is_test = np.expand_dims(data, axis=-1) == np.expand_dims(test_ints, axis=(0, 1))
+    is_test = is_test.any(axis=(1, 2))
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
-    columns = [WORD1, WORD2]
+    inputs = [f"{n1},{n2}" for n1, n2 in data]
+    inputs = [tokenizer.encode(r, return_tensors="pt") for r in inputs]
+    inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).squeeze(0)
 
-    with tqdm(
-        desc="Encoding data", total=sum(len(data[col]) for col in columns)
-    ) as bar:
+    _is_test = torch.tensor(is_test)
+    _targets = torch.tensor(targets, dtype=torch.long)
+    train_dataset = _Dataset(inputs=inputs[~_is_test], targets=_targets[~_is_test])
+    test_dataset = _Dataset(inputs=inputs[_is_test], targets=_targets[_is_test])
 
-        def encode(s: str):
-            bar.update(1)
-            return tuple(tokenizer.encode(s))
-
-        for col in columns:
-            data[col] = data[col].apply(encode)
-
-    # convert all to tensors
-    for col in [WORD1, WORD2]:
-        data[col] = data[col].apply(torch.tensor)
-
-    train_data = data[add_to_train_data].copy()
-    test_data = data[add_to_test_data].copy().iloc[: args.n_test]
-
-    kwargs = dict(eos_token_id=tokenizer.eos_token_id, seed=0)
-
-    train_dataset = SynonymsAntonyms(train_data, **kwargs)
-    test_dataset = SynonymsAntonyms(test_data, **kwargs)
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
