@@ -215,7 +215,7 @@ def train(args: Args, logger: HasuraLogger):
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
     def tokenize():
-        for n1, n2 in tqdm(data, desc="Tokenizing data."):
+        for n1, n2 in tqdm(data, desc="Tokenizing data"):
             yield tokenizer.encode(f"{n1},{n2}", return_tensors="pt").squeeze(0)
 
     inputs = list(tokenize())
@@ -250,6 +250,34 @@ def train(args: Args, logger: HasuraLogger):
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
 
+        model.eval()
+        test_loss = 0
+        correct = []
+        with torch.no_grad():
+            for data, target in test_loader:
+                data, target = data.to(device), target.to(device)
+                output = model(data)
+                test_loss += F.nll_loss(
+                    output, target, reduction="sum"
+                ).item()  # sum up batch loss
+                pred = output.argmax(
+                    dim=1, keepdim=True
+                )  # get the index of the max log-probability
+                correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+
+        test_loss /= len(test_loader.dataset)
+        test_accuracy = torch.cat(correct).mean()
+
+        log = {
+            EPOCH: epoch,
+            TEST_LOSS: test_loss,
+            TEST_ACCURACY: test_accuracy.item(),
+            RUN_ID: logger.run_id,
+        }
+        pprint(log)
+        if logger.run_id is not None:
+            logger.log(log)
+
         model.train()
         correct = []
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -278,33 +306,6 @@ def train(args: Args, logger: HasuraLogger):
                 if args.dry_run:
                     break
 
-        model.eval()
-        test_loss = 0
-        correct = []
-        with torch.no_grad():
-            for data, target in test_loader:
-                data, target = data.to(device), target.to(device)
-                output = model(data)
-                test_loss += F.nll_loss(
-                    output, target, reduction="sum"
-                ).item()  # sum up batch loss
-                pred = output.argmax(
-                    dim=1, keepdim=True
-                )  # get the index of the max log-probability
-                correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
-
-        test_loss /= len(test_loader.dataset)
-        test_accuracy = torch.cat(correct).mean()
-
-        log = {
-            EPOCH: epoch,
-            TEST_LOSS: test_loss,
-            TEST_ACCURACY: test_accuracy.item(),
-            RUN_ID: logger.run_id,
-        }
-        pprint(log)
-        if logger.run_id is not None:
-            logger.log(log)
         scheduler.step()
 
     if args.save_model:
