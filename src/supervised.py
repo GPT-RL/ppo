@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import logging
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
@@ -22,6 +21,7 @@ from tap import Tap
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
+from tqdm import tqdm
 from transformers import GPT2Config, GPT2Model, GPT2Tokenizer
 
 from spec import spec
@@ -105,15 +105,6 @@ WORD1 = "word1"
 WORD2 = "word2"
 
 
-def explode_column(data: pd.DataFrame, column: str):
-    data[column] = data.apply(
-        func=lambda x: re.split("[;|]", x[column]),
-        axis=1,
-    )
-    data = data.explode(column)
-    return data
-
-
 @dataclass
 class _Dataset(Dataset):
     inputs: torch.tensor
@@ -161,7 +152,7 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     max_integer: int = 100
-    n_test: int = 10
+    test_integer: int = 2
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
@@ -212,14 +203,23 @@ def train(args: Args, logger: HasuraLogger):
     rng.shuffle(data, axis=0)
     targets = data[:, 0] > data[:, 1]
 
-    test_ints = rng.choice(args.max_integer, size=args.n_test)
-    is_test = np.expand_dims(data, axis=-1) == np.expand_dims(test_ints, axis=(0, 1))
+    def get_divisors():
+        divisor = 1
+        while divisor <= args.max_integer:
+            yield divisor
+            divisor *= 10
+
+    is_test = np.dstack([(data // d) == args.test_integer for d in get_divisors()])
     is_test = is_test.any(axis=(1, 2))
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
-    inputs = [f"{n1},{n2}" for n1, n2 in data]
-    inputs = [tokenizer.encode(r, return_tensors="pt") for r in inputs]
-    inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).squeeze(0)
+
+    def tokenize():
+        for n1, n2 in tqdm(data, desc="Tokenizing data."):
+            yield tokenizer.encode(f"{n1},{n2}", return_tensors="pt").squeeze(0)
+
+    inputs = list(tokenize())
+    inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).squeeze(0).T
 
     _is_test = torch.tensor(is_test)
     _targets = torch.tensor(targets, dtype=torch.long)
