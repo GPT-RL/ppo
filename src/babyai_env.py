@@ -249,8 +249,10 @@ class GoToLocEnv(RenderEnv, ReproducibleEnv):
         self,
         room_size: int,
         seed: int,
+        locs: typing.Iterable,
         num_dists: int = 0,
     ):
+        self.locs = locs
         self.num_dists = num_dists
         super().__init__(
             room_size=room_size,
@@ -264,11 +266,7 @@ class GoToLocEnv(RenderEnv, ReproducibleEnv):
         self.connect_all()
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
-        locs = itertools.product(
-            range(1, self.grid.height - 1),
-            range(1, self.grid.width - 1),
-        )
-        self.instrs = GoToLoc(LocDesc(self.grid, *self._rand_elem(locs)))
+        self.instrs = GoToLoc(LocDesc(self.grid, *self._rand_elem(self.locs)))
 
 
 class InvalidDirectionError(RuntimeError):

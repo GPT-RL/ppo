@@ -249,12 +249,16 @@ class GoToLoc(ActionInstr):
     def reset_verifier(self, env: MiniGridEnv):
         super().reset_verifier(env)
 
-    def verify_action(self, *args, **kwargs):
-        # Only verify when the pickup action is performed
+    def verify_action(self):
+        raise NotImplementedError
+
+    def verify(self, action):
+        if not action == self.env.actions.done:
+            return "continue"
         if np.array_equal(self.env.agent_pos, self.desc.array):
             return "success"
 
-        return "continue"
+        return "failure"
 
 
 class AndDoneInstr(AndInstr):

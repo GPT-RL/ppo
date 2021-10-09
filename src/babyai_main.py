@@ -1,4 +1,5 @@
 import functools
+import itertools
 from typing import Generator, Literal, Union, cast
 
 from stable_baselines3.common.monitor import Monitor
@@ -50,6 +51,7 @@ class Args(main.Args):
     test_colors: str = None
     train_colors: str = None
     test_descriptors: str = None
+    test_number: int = None
     test_wordings: str = None
     test_walls: str = "south,southeast"
     train_wordings: str = None
@@ -98,6 +100,7 @@ class Trainer(main.Trainer):
             test_colors: str,
             train_colors: str,
             test_descriptors: str,
+            test_number: int,
             test_walls: str,
             test_wordings: str,
             tokenizer: GPT2Tokenizer,
@@ -120,9 +123,6 @@ class Trainer(main.Trainer):
             if env_id == "go-to-obj":
                 _env = GoToObjEnv(*args, goal_objects=goal_objects, **_kwargs)
                 longest_mission = "go to the red ball"
-            elif env_id == "go-to-loc":
-                _env = GoToLocEnv(*args, **_kwargs)
-                longest_mission = "go to (0, 0)"
             elif env_id == "toggle":
                 _env = ToggleEnv(*args, **_kwargs)
                 longest_mission = "toggle the red ball"
@@ -264,6 +264,31 @@ class Trainer(main.Trainer):
                     **_kwargs,
                 )
                 longest_mission = "pick up the forest green ball."
+            elif env_id == "go-to-loc":
+
+                def is_test(n: int):
+                    return str(test_number) in str(n)
+
+                def is_train(n: int):
+                    return not is_test(n)
+
+                filter_fn = is_test if test else is_train
+
+                locs = itertools.product(
+                    filter(
+                        filter_fn,
+                        range(1, room_size - 1),
+                    ),
+                    filter(
+                        filter_fn,
+                        range(1, room_size - 1),
+                    ),
+                )
+                locs = list(locs)
+                del _kwargs["strict"]
+                _kwargs.update(num_dists=0)
+                _env = GoToLocEnv(locs=locs, **_kwargs)
+                longest_mission = "go to (0, 0)"
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
 
