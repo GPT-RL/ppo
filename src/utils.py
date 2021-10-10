@@ -4,6 +4,8 @@ import os
 import torch.nn as nn
 
 # Get a render function
+from transformers import GPT2Config, GPT2Model
+
 from envs import VecNormalize
 
 
@@ -68,3 +70,24 @@ def cleanup_log_dir(log_dir):
         files = glob.glob(os.path.join(log_dir, "*.monitor.csv"))
         for f in files:
             os.remove(f)
+
+
+def build_gpt(gpt_size, randomize_parameters):
+    gpt_size = get_gpt_size(gpt_size)
+    return (
+        GPT2Model(
+            GPT2Config.from_pretrained(
+                gpt_size,
+                use_cache=False,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
+        )
+        if randomize_parameters
+        else GPT2Model.from_pretrained(
+            gpt_size,
+            use_cache=False,
+            output_attentions=False,
+            output_hidden_states=False,
+        )
+    )

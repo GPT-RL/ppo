@@ -1,15 +1,18 @@
 import abc
-from functools import total_ordering
 import itertools
 import re
 import typing
 from abc import ABC
 from dataclasses import astuple, dataclass
+from functools import lru_cache, total_ordering
 from itertools import chain, cycle, islice
-from typing import Callable, Generator, Optional, TypeVar, Set, Union, List, Any
+from typing import Any, Callable, Generator, List, Optional, Set, TypeVar, Union
+
 import gym
 import gym_minigrid
 import numpy as np
+import torch
+import torch.nn.functional as F
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     BeforeInstr,
@@ -30,7 +33,7 @@ from gym_minigrid.wrappers import (
     ImgObsWrapper,
     RGBImgObsWrapper,
 )
-from transformers import GPT2Tokenizer
+from transformers import GPT2Model, GPT2Tokenizer
 
 from descs import (
     CardinalDirection,
@@ -1213,19 +1216,59 @@ class RolloutsWrapper(gym.ObservationWrapper):
 class TokenizerWrapper(gym.ObservationWrapper):
     def __init__(self, env, tokenizer: GPT2Tokenizer, longest_mission: str):
         self.tokenizer: GPT2Tokenizer = tokenizer
-        encoded = tokenizer.encode(longest_mission)
+        self.encoded = self.tokenizer_encode(longest_mission)
         super().__init__(env)
         spaces = {**self.observation_space.spaces}
         self.observation_space = Dict(
-            spaces=dict(**spaces, mission=MultiDiscrete([50257 for _ in encoded]))
+            spaces=dict(**spaces, mission=MultiDiscrete([50257 for _ in self.encoded]))
         )
 
-    def observation(self, observation):
-        mission = self.tokenizer.encode(observation["mission"])
-        length = len(self.observation_space.spaces["mission"].nvec)
+    def tokenizer_encode(self, string: str):
+        return self.tokenizer.encode(string)
+
+    @staticmethod
+    def pad(encoded, pad_value, length: int):
+        return [*islice(chain(encoded, cycle([pad_value])), length)]
+
+    @lru_cache
+    def tokenize_mission(self, mission: str):
+        mission = self.tokenizer_encode(mission)
         eos = self.tokenizer.eos_token_id
-        mission = [*islice(chain(mission, cycle([eos])), length)]
-        observation.update(mission=mission)
+        mission = self.pad(mission, eos, len(self.encoded))
+        return mission
+
+    def observation(self, observation):
+        observation.update(mission=self.tokenize_mission(observation["mission"]))
+        return observation
+
+
+class EmbedWrapper(TokenizerWrapper):
+    def __init__(self, *args, gpt: GPT2Model, **kwargs):
+        super().__init__(*args, **kwargs)
+        embedded = gpt.forward(self.encoded).last_hidden_state[-1]
+        self.gpt = gpt
+        spaces = {**self.observation_space.spaces}
+        spaces.update(mission=Box(low=-np.inf, high=np.inf, shape=embedded.shape))
+        self.observation_space = Dict(spaces=dict(**spaces))
+
+    @staticmethod
+    def pad(encoded, pad_value, length: int):
+        padded = F.pad(encoded, (0, length - len(encoded)), value=pad_value)
+        return padded
+
+    def tokenizer_encode(self, string: str):
+        encoded = self.tokenizer.encode(string, return_tensors="pt")
+        encoded = typing.cast(torch.Tensor, encoded)
+        return encoded.squeeze(0)
+
+    @lru_cache
+    def embed_mission(self, mission: str):
+        mission = self.tokenize_mission(mission)
+        mission = self.gpt.forward(mission).last_hidden_state[-1]
+        return mission.detach().numpy()
+
+    def observation(self, observation):
+        observation.update(mission=self.embed_mission(observation["mission"]))
         return observation
 
 
