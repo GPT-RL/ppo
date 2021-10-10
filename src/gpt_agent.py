@@ -1,29 +1,8 @@
+import torch
 from torch import nn
-from transformers import GPT2Config, GPT2Model
 
 import babyai_agent
-from utils import get_gpt_size
-
-
-def build_gpt(gpt_size, randomize_parameters):
-    gpt_size = get_gpt_size(gpt_size)
-    return (
-        GPT2Model(
-            GPT2Config.from_pretrained(
-                gpt_size,
-                use_cache=False,
-                output_attentions=False,
-                output_hidden_states=False,
-            )
-        )
-        if randomize_parameters
-        else GPT2Model.from_pretrained(
-            gpt_size,
-            use_cache=False,
-            output_attentions=False,
-            output_hidden_states=False,
-        )
-    )
+from utils import build_gpt
 
 
 class Agent(babyai_agent.Agent):
@@ -64,6 +43,13 @@ class Base(babyai_agent.Base):
         self.train_wpe = train_wpe
         self.train_ln = train_ln
         super().__init__(*args, embedding_size=embedding_size, **kwargs)
+
+    def embed_mission(self, mission: torch.Tensor):
+        return (
+            super().embed_mission(mission)
+            if self.train_wpe or self.train_ln
+            else mission
+        )
 
     def build_embeddings(self):
         return GPTEmbed(

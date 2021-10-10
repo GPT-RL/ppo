@@ -139,6 +139,9 @@ class Base(NNBase):
         num_embeddings = int(self.observation_spaces.mission.nvec[0])
         return GRUEmbed(num_embeddings, 100, self.embedding_size)
 
+    def embed_mission(self, mission: torch.Tensor):
+        return self.embeddings(mission.long())
+
     def forward(self, inputs, rnn_hxs, masks):
         inputs = Spaces(
             *torch.split(
@@ -157,7 +160,7 @@ class Base(NNBase):
         action = inputs.action.long()
         action = F.one_hot(action, num_classes=self.num_actions).squeeze(1)
 
-        mission = self.embeddings(inputs.mission.long())
+        mission = self.embed_mission(inputs.mission)
         x = torch.cat([image, directions, action, mission], dim=-1)
         x = self.merge(x)
         if self.is_recurrent:

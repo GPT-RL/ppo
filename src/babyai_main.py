@@ -11,6 +11,7 @@ from babyai_env import (
     ActionInObsWrapper,
     DirectionWrapper,
     DirectionsEnv,
+    EmbedWrapper,
     FullyObsWrapper,
     GoAndFaceDirections,
     GoAndFaceEnv,
@@ -33,7 +34,7 @@ from babyai_env import (
 )
 from descs import CardinalDirection, OrdinalDirection
 from envs import RenderWrapper, VecPyTorch
-from utils import get_gpt_size
+from utils import build_gpt, get_gpt_size
 
 
 class Args(main.Args):
@@ -105,6 +106,11 @@ class Trainer(main.Trainer):
             test_wordings: str,
             tokenizer: GPT2Tokenizer,
             train_wordings: str,
+            embedding_size: str = None,
+            gpt: bool = False,
+            randomize_parameters: bool = False,
+            train_ln: bool = True,
+            train_wpe: bool = True,
             **_,
         ):
             goal_objects = (
@@ -300,11 +306,19 @@ class Trainer(main.Trainer):
 
             _env = ActionInObsWrapper(_env)
             _env = ZeroOneRewardWrapper(_env)
-            _env = TokenizerWrapper(
-                _env,
-                tokenizer=tokenizer,
-                longest_mission=longest_mission,
-            )
+            if gpt and not (train_ln or train_wpe):
+                _env = EmbedWrapper(
+                    _env,
+                    gpt=build_gpt(embedding_size, randomize_parameters),
+                    tokenizer=tokenizer,
+                    longest_mission=longest_mission,
+                )
+            else:
+                _env = TokenizerWrapper(
+                    _env,
+                    tokenizer=tokenizer,
+                    longest_mission=longest_mission,
+                )
             _env = RolloutsWrapper(_env)
 
             _env = Monitor(_env, allow_early_resets=allow_early_resets)
