@@ -273,6 +273,7 @@ def train(args: Args, logger: HasuraLogger):
 
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     start = time.time()
+    frames = 0
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
@@ -282,6 +283,7 @@ def train(args: Args, logger: HasuraLogger):
         correct = []
         with torch.no_grad():
             for data, target in test_loader:
+                frames += len(data)
                 data, target = data.to(device), target.to(device)
                 output = model(data)
                 test_loss += F.nll_loss(
@@ -294,12 +296,14 @@ def train(args: Args, logger: HasuraLogger):
 
         test_loss /= len(test_loader.dataset)
         test_accuracy = torch.cat(correct).mean()
+        now = time.time()
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
             TEST_ACCURACY: test_accuracy.item(),
             RUN_ID: logger.run_id,
-            HOURS: (time.time() - start) / 3600,
+            HOURS: (now - start) / 3600,
+            FPS: frames / (now - start),
         }
         pprint(log)
         if logger.run_id is not None:
@@ -352,7 +356,7 @@ EXCLUDED = {
     "logger_args",
 }
 
-FPS = "fps"
+FPS = "FPS"
 GRADIENT_NORM = "gradient norm"
 TIME = "time"
 HOURS = "hours"
