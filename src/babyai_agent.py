@@ -34,7 +34,7 @@ class Agent(agent.Agent):
 
 
 class GRUEmbed(nn.Module):
-    def __init__(self, num_embeddings, hidden_size, output_size):
+    def __init__(self, num_embeddings: int, hidden_size: int, output_size: int):
         super().__init__()
         gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
         self.embed = nn.Sequential(
@@ -56,6 +56,7 @@ class Base(NNBase):
         observation_space: Dict,
         recurrent: bool,
         second_layer: bool,
+        encoded: torch.Tensor,
     ):
         super().__init__(
             recurrent=recurrent,
@@ -73,6 +74,7 @@ class Base(NNBase):
             output_hidden_states=False,
         ).n_embd
 
+        self.encodings = self.build_encodings(encoded)
         self.embeddings = self.build_embeddings()
 
         init_ = lambda m: init(
@@ -135,12 +137,16 @@ class Base(NNBase):
 
         self.train()
 
+    def build_encodings(self, encoded):
+        _, encoded = torch.sort(encoded)
+        return nn.Embedding.from_pretrained(encoded.float())
+
     def build_embeddings(self):
-        num_embeddings = int(self.observation_spaces.mission.nvec[0])
-        return GRUEmbed(num_embeddings, 100, self.embedding_size)
+        return GRUEmbed(1 + int(self.encodings.weight.max()), 100, self.embedding_size)
 
     def embed_mission(self, mission: torch.Tensor):
-        return self.embeddings(mission.long())
+        encoded = self.encodings(mission.long())
+        return self.embeddings(encoded.long())
 
     def forward(self, inputs, rnn_hxs, masks):
         inputs = Spaces(
@@ -160,7 +166,7 @@ class Base(NNBase):
         action = inputs.action.long()
         action = F.one_hot(action, num_classes=self.num_actions).squeeze(1)
 
-        mission = self.embed_mission(inputs.mission)
+        mission = self.embed_mission(inputs.mission.squeeze(-1))
         x = torch.cat([image, directions, action, mission], dim=-1)
         x = self.merge(x)
         if self.is_recurrent:

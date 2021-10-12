@@ -1,8 +1,11 @@
 import functools
 import itertools
-from typing import Generator, Literal, Union, cast
+from typing import Collection, Generator, List, Literal, Union, cast
 
+import gym
+import torch
 from stable_baselines3.common.monitor import Monitor
+from torch.nn.utils.rnn import pad_sequence
 from transformers import GPT2Tokenizer
 
 import main
@@ -11,12 +14,12 @@ from babyai_env import (
     ActionInObsWrapper,
     DirectionWrapper,
     DirectionsEnv,
-    EmbedWrapper,
     FullyObsWrapper,
     GoAndFaceDirections,
     GoAndFaceEnv,
     GoToLocEnv,
     GoToObjEnv,
+    MissionEnumeratorWrapper,
     NegationEnv,
     NegationObject,
     PickupEnv,
@@ -29,11 +32,11 @@ from babyai_env import (
     SequenceEnv,
     SequenceParaphrasesWrapper,
     ToggleEnv,
-    TokenizerWrapper,
     ZeroOneRewardWrapper,
 )
-from descs import CardinalDirection, OrdinalDirection
+from descs import CardinalDirection, LocDesc, OrdinalDirection
 from envs import RenderWrapper, VecPyTorch
+from instrs import GoToLoc
 from utils import build_gpt, get_gpt_size
 
 
@@ -71,6 +74,27 @@ class Trainer(main.Trainer):
     def make_agent(cls, envs: VecPyTorch, args: ArgsType) -> Agent:
         action_space = envs.action_space
         observation_space, *_ = envs.get_attr("original_observation_space")
+        missions: List[str]
+        missions, *_ = envs.get_attr("missions")
+        tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
+        encoded = [tokenizer.encode(m, return_tensors="pt") for m in missions]
+        encoded = [torch.squeeze(m, 0) for m in encoded]
+        encoded = pad_sequence(encoded, padding_value=tokenizer.eos_token_id).T
+        return cls._make_agent(
+            action_space=action_space,
+            observation_space=observation_space,
+            encoded=encoded,
+            args=args,
+        )
+
+    @classmethod
+    def _make_agent(
+        cls,
+        encoded: torch.Tensor,
+        action_space: gym.spaces.Discrete,
+        observation_space: gym.spaces.Dict,
+        args: ArgsType,
+    ):
         return Agent(
             action_space=action_space,
             embedding_size=args.embedding_size,
@@ -78,6 +102,7 @@ class Trainer(main.Trainer):
             observation_space=observation_space,
             recurrent=cls.recurrent(args),
             second_layer=args.second_layer,
+            encoded=encoded,
         )
 
     @staticmethod
@@ -86,8 +111,8 @@ class Trainer(main.Trainer):
             assert args.recurrent
         return args.recurrent
 
-    @staticmethod
-    def make_env(env, allow_early_resets, render: bool = False, *args, **kwargs):
+    @classmethod
+    def make_env(cls, env, allow_early_resets, render: bool = False, *args, **kwargs):
         def _thunk(
             env_id: str,
             go_and_face_synonyms: str,
@@ -104,13 +129,7 @@ class Trainer(main.Trainer):
             test_number: int,
             test_walls: str,
             test_wordings: str,
-            tokenizer: GPT2Tokenizer,
             train_wordings: str,
-            embedding_size: str = None,
-            gpt: bool = False,
-            randomize_parameters: bool = False,
-            train_ln: bool = True,
-            train_wpe: bool = True,
             **_,
         ):
             goal_objects = (
@@ -125,7 +144,7 @@ class Trainer(main.Trainer):
             _kwargs = dict(
                 room_size=room_size, strict=strict, num_dists=num_dists, seed=seed
             )
-
+            missions = None
             if env_id == "go-to-obj":
                 _env = GoToObjEnv(*args, goal_objects=goal_objects, **_kwargs)
                 longest_mission = "go to the red ball"
@@ -272,28 +291,30 @@ class Trainer(main.Trainer):
                 longest_mission = "pick up the forest green ball."
             elif env_id == "go-to-loc":
 
-                def is_test(n: int):
-                    return str(test_number) in str(n)
+                def is_test(x: int, y: int):
+                    return str(test_number) in f"{x}{y}"
 
-                def is_train(n: int):
-                    return not is_test(n)
+                def is_train(x: int, y: int):
+                    return not is_test(x, y)
 
                 filter_fn = is_test if test else is_train
 
-                locs = itertools.product(
-                    filter(
-                        filter_fn,
-                        range(1, room_size - 1),
-                    ),
-                    filter(
-                        filter_fn,
-                        range(1, room_size - 1),
-                    ),
+                floor_indices = list(range(1, room_size - 1))
+                locs = list(
+                    itertools.product(
+                        floor_indices,
+                        floor_indices,
+                    )
                 )
-                locs = list(locs)
                 del _kwargs["strict"]
                 _kwargs.update(num_dists=0)
-                _env = GoToLocEnv(locs=locs, **_kwargs)
+                _env = GoToLocEnv(
+                    locs=[l for l in locs if filter_fn(*l)],
+                    **_kwargs,
+                )
+                missions = [
+                    GoToLoc(LocDesc(_env.grid, *loc)).surface(None) for loc in locs
+                ]
                 longest_mission = "go to (0, 0)"
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
@@ -306,19 +327,7 @@ class Trainer(main.Trainer):
 
             _env = ActionInObsWrapper(_env)
             _env = ZeroOneRewardWrapper(_env)
-            if gpt and not (train_ln or train_wpe):
-                _env = EmbedWrapper(
-                    _env,
-                    gpt=build_gpt(embedding_size, randomize_parameters),
-                    tokenizer=tokenizer,
-                    longest_mission=longest_mission,
-                )
-            else:
-                _env = TokenizerWrapper(
-                    _env,
-                    tokenizer=tokenizer,
-                    longest_mission=longest_mission,
-                )
+            _env = MissionEnumeratorWrapper(_env, missions=missions)
             _env = RolloutsWrapper(_env)
 
             _env = Monitor(_env, allow_early_resets=allow_early_resets)
@@ -329,12 +338,12 @@ class Trainer(main.Trainer):
 
         return functools.partial(_thunk, env_id=env, **kwargs)
 
-    @classmethod
-    def make_vec_envs(cls, num_frame_stack=None, **kwargs):
-        tokenizer = GPT2Tokenizer.from_pretrained(
-            get_gpt_size(kwargs["embedding_size"])
-        )
-        return super().make_vec_envs(tokenizer=tokenizer, **kwargs)
+    # @classmethod
+    # def make_vec_envs(cls, num_frame_stack=None, **kwargs):
+    #     tokenizer = GPT2Tokenizer.from_pretrained(
+    #         get_gpt_size(kwargs["embedding_size"])
+    #     )
+    #     return super().make_vec_envs(tokenizer=tokenizer, **kwargs)
 
 
 if __name__ == "__main__":

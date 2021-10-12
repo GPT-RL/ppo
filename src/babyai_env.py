@@ -4,15 +4,12 @@ import re
 import typing
 from abc import ABC
 from dataclasses import astuple, dataclass
-from functools import lru_cache, total_ordering
-from itertools import chain, cycle, islice
+from functools import total_ordering
 from typing import Any, Callable, Generator, List, Optional, Set, TypeVar, Union
 
 import gym
 import gym_minigrid
 import numpy as np
-import torch
-import torch.nn.functional as F
 from babyai.levels.levelgen import RoomGridLevel
 from babyai.levels.verifier import (
     BeforeInstr,
@@ -21,7 +18,7 @@ from babyai.levels.verifier import (
     PickupInstr,
 )
 from colors import color as ansi_color
-from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
+from gym.spaces import Box, Dict, Discrete, Tuple
 from gym_minigrid.minigrid import (
     COLORS,
     MiniGridEnv,
@@ -33,7 +30,6 @@ from gym_minigrid.wrappers import (
     ImgObsWrapper,
     RGBImgObsWrapper,
 )
-from transformers import GPT2Model, GPT2Tokenizer
 
 from descs import (
     CardinalDirection,
@@ -1191,12 +1187,10 @@ class RolloutsWrapper(gym.ObservationWrapper):
         self.original_observation_space = Tuple(
             astuple(Spaces(**self.observation_space.spaces))
         )
-        image_space = spaces["image"]
-        mission_space = spaces["mission"]
+        n_discrete = sum(isinstance(s, Discrete) for s in spaces.values())
         self.observation_space = Box(
-            shape=[np.prod(image_space.shape) + 2 + np.prod(mission_space.shape)],
+            shape=[np.prod(spaces["image"].shape) + n_discrete],
             low=-np.inf,
-            # direction_space = spaces["direction"]
             high=np.inf,
         )
 
@@ -1207,68 +1201,24 @@ class RolloutsWrapper(gym.ObservationWrapper):
                     image=observation["image"].flatten(),
                     direction=np.array([observation["direction"]]),
                     action=np.array([int(observation["action"])]),
-                    mission=observation["mission"],
+                    mission=np.array([int(observation["mission"])]),
                 )
             )
         )
 
 
-class TokenizerWrapper(gym.ObservationWrapper):
-    def __init__(self, env, tokenizer: GPT2Tokenizer, longest_mission: str):
-        self.tokenizer: GPT2Tokenizer = tokenizer
-        self.encoded = self.tokenizer_encode(longest_mission)
+class MissionEnumeratorWrapper(gym.ObservationWrapper):
+    def __init__(self, env, missions: typing.Iterable[str]):
+        self.missions = list(missions)
+        self.cache = {k: i for i, k in enumerate(self.missions)}
         super().__init__(env)
         spaces = {**self.observation_space.spaces}
         self.observation_space = Dict(
-            spaces=dict(**spaces, mission=MultiDiscrete([50257 for _ in self.encoded]))
+            spaces=dict(**spaces, mission=Discrete(len(self.cache)))
         )
 
-    def tokenizer_encode(self, string: str):
-        return self.tokenizer.encode(string)
-
-    @staticmethod
-    def pad(encoded, pad_value, length: int):
-        return [*islice(chain(encoded, cycle([pad_value])), length)]
-
-    @lru_cache
-    def tokenize_mission(self, mission: str):
-        mission = self.tokenizer_encode(mission)
-        eos = self.tokenizer.eos_token_id
-        mission = self.pad(mission, eos, len(self.encoded))
-        return mission
-
     def observation(self, observation):
-        observation.update(mission=self.tokenize_mission(observation["mission"]))
-        return observation
-
-
-class EmbedWrapper(TokenizerWrapper):
-    def __init__(self, *args, gpt: GPT2Model, **kwargs):
-        super().__init__(*args, **kwargs)
-        embedded = gpt.forward(self.encoded).last_hidden_state[-1]
-        self.gpt = gpt
-        spaces = {**self.observation_space.spaces}
-        spaces.update(mission=Box(low=-np.inf, high=np.inf, shape=embedded.shape))
-        self.observation_space = Dict(spaces=dict(**spaces))
-
-    @staticmethod
-    def pad(encoded, pad_value, length: int):
-        padded = F.pad(encoded, (0, length - len(encoded)), value=pad_value)
-        return padded
-
-    def tokenizer_encode(self, string: str):
-        encoded = self.tokenizer.encode(string, return_tensors="pt")
-        encoded = typing.cast(torch.Tensor, encoded)
-        return encoded.squeeze(0)
-
-    @lru_cache
-    def embed_mission(self, mission: str):
-        mission = self.tokenize_mission(mission)
-        mission = self.gpt.forward(mission).last_hidden_state[-1]
-        return mission.detach().numpy()
-
-    def observation(self, observation):
-        observation.update(mission=self.embed_mission(observation["mission"]))
+        observation.update(mission=self.cache[observation["mission"]])
         return observation
 
 

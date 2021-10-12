@@ -72,7 +72,7 @@ def cleanup_log_dir(log_dir):
             os.remove(f)
 
 
-def build_gpt(gpt_size, randomize_parameters):
+def build_gpt(gpt_size: str, randomize_parameters):
     gpt_size = get_gpt_size(gpt_size)
     return (
         GPT2Model(
