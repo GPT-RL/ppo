@@ -50,6 +50,7 @@ class Args(main.Args):
     negation_colors: str = None
     num_dists: int = 1
     room_size: int = 5
+    scaled_reward: bool = False
     second_layer: bool = False
     strict: bool = True
     test_colors: str = None
@@ -120,6 +121,7 @@ class Trainer(main.Trainer):
             negation_types: str,
             num_dists: int,
             room_size: int,
+            scaled_reward: bool,
             seed: int,
             strict: bool,
             test: bool,
@@ -310,6 +312,7 @@ class Trainer(main.Trainer):
                 _kwargs.update(num_dists=0)
                 _env = GoToLocEnv(
                     locs=[l for l in locs if filter_fn(*l)],
+                    scaled_reward=scaled_reward,
                     **_kwargs,
                 )
                 missions = [
@@ -326,7 +329,8 @@ class Trainer(main.Trainer):
                 _env = FullyObsWrapper(_env)
 
             _env = ActionInObsWrapper(_env)
-            _env = ZeroOneRewardWrapper(_env)
+            if not (env_id == "go-to-loc" and scaled_reward):
+                _env = ZeroOneRewardWrapper(_env)
             _env = MissionEnumeratorWrapper(_env, missions=missions)
             _env = RolloutsWrapper(_env)
 

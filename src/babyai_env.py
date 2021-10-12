@@ -249,8 +249,10 @@ class GoToLocEnv(RenderEnv, ReproducibleEnv):
         room_size: int,
         seed: int,
         locs: typing.Iterable,
+        scaled_reward: bool,
         num_dists: int = 0,
     ):
+        self.scaled_reward = scaled_reward
         self.locs = locs
         self.num_dists = num_dists
         super().__init__(
@@ -266,6 +268,18 @@ class GoToLocEnv(RenderEnv, ReproducibleEnv):
         self.add_distractors(num_distractors=self.num_dists, all_unique=False)
         self.check_objs_reachable()
         self.instrs = GoToLoc(LocDesc(self.grid, *self._rand_elem(self.locs)))
+
+    def step(self, action):
+        s, r, t, i = super().step(action)
+        if not self.scaled_reward:
+            return s, r, t, i
+        goal = self.instrs.desc.array
+        if t:
+            i.update(success=r > 0)
+            r = 1 / (1 + np.abs(np.array(self.agent_pos) - goal).sum())
+        else:
+            r = 0
+        return s, r, t, i
 
 
 class InvalidDirectionError(RuntimeError):
@@ -1272,7 +1286,7 @@ def main(args: "Args"):
 
     def step(action):
         obs, reward, done, info = env.step(action)
-        print("step=%s, reward=%.2f" % (env.step_count, reward))
+        print(f"step={env.step_count}, reward={reward}, success={info.get('success')}")
 
         if done:
             print("done!")
@@ -1317,10 +1331,14 @@ def main(args: "Args"):
             return
 
     # room_objects = [("ball", col) for col in ("black", "white")]
-    env = RelativePickupEnv(
+    env = GoToLocEnv(
         room_size=args.room_size,
         seed=args.seed,
-        strict=not args.not_strict,
+        locs=list(
+            itertools.product(
+                range(1, args.room_size - 1), range(1, args.room_size - 1)
+            )
+        ),
     )
     if args.agent_view:
         env = RGBImgObsWithDirectionWrapper(env)

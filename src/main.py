@@ -54,8 +54,10 @@ class InvalidEnvId(RuntimeError):
 
 EPISODE_RETURN = "episode return"
 EPISODE_LENGTH = "episode length"
+EPISODE_SUCCESS = "episode success"
 TEST_EPISODE_RETURN = "test episode return"
 TEST_EPISODE_LENGTH = "test episode length"
+TEST_EPISODE_SUCCESS = "test episode success"
 ACTION_LOSS = "action loss"
 VALUE_LOSS = "value loss"
 FPS = "fps"
@@ -195,6 +197,7 @@ class Trainer:
 
         episode_rewards = deque(maxlen=10)
         episode_lengths = deque(maxlen=10)
+        episode_successes = deque(maxlen=10)
 
         start = time.time()
         save_count = 0
@@ -248,6 +251,8 @@ class Trainer:
                     if "episode" in info.keys():
                         episode_rewards.append(info["episode"]["r"])
                         episode_lengths.append(info["episode"]["l"])
+                    if "success" in info.keys():
+                        episode_successes.append(info["success"])
 
                 # If done then clean the history of observations.
                 masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -297,6 +302,7 @@ class Trainer:
                     log = {
                         EPISODE_RETURN: np.mean(episode_rewards),
                         EPISODE_LENGTH: np.mean(episode_lengths),
+                        EPISODE_SUCCESS: np.mean(episode_successes),
                         ACTION_LOSS: action_loss,
                         VALUE_LOSS: value_loss,
                         FPS: fps,
@@ -330,6 +336,7 @@ class Trainer:
 
         episode_rewards = []
         episode_lengths = []
+        episode_success = []
 
         obs = envs.reset()
         recurrent_hidden_states = torch.zeros(
@@ -355,6 +362,8 @@ class Trainer:
                 if "episode" in info.keys():
                     episode_rewards.append(info["episode"]["r"])
                     episode_lengths.append(info["episode"]["l"])
+                if "success" in info.keys():
+                    episode_success.append(info["success"])
 
         envs.close()
         now = time.time()
@@ -368,6 +377,7 @@ class Trainer:
                 {
                     TEST_EPISODE_RETURN: np.mean(episode_rewards),
                     TEST_EPISODE_LENGTH: np.mean(episode_lengths),
+                    TEST_EPISODE_SUCCESS: np.mean(episode_success),
                 }
             )
         logging.info(pformat(log))
@@ -520,9 +530,9 @@ class Trainer:
                     *[
                         spec(x=HOURS, y=y)
                         for y in (
-                            TEST_EPISODE_RETURN,
-                            EPISODE_RETURN,
-                            EPISODE_LENGTH,
+                            (TEST_EPISODE_SUCCESS, EPISODE_SUCCESS)
+                            if args.env == "go-to-loc"
+                            else (TEST_EPISODE_RETURN, EPISODE_RETURN)
                         )
                     ],
                     *[
@@ -530,8 +540,8 @@ class Trainer:
                         for y in (
                             TEST_EPISODE_RETURN,
                             EPISODE_RETURN,
-                            TEST_EPISODE_LENGTH,
-                            EPISODE_LENGTH,
+                            EPISODE_SUCCESS,
+                            TEST_EPISODE_SUCCESS,
                             FPS,
                             ENTROPY,
                             GRADIENT_NORM,
