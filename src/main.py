@@ -456,7 +456,9 @@ class Trainer:
         if test:
             render = render_test
         envs = [
-            cls.make_env(seed=seed + i, render=render, test=test, **kwargs)
+            cls.make_env(
+                seed=seed + i, render=render, test=test, device=device, **kwargs
+            )
             for i in range(num_processes)
         ]
 

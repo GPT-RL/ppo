@@ -38,23 +38,28 @@ class Base(babyai_agent.Base):
         train_wpe: bool,
         **kwargs,
     ):
-        self._embedding_size = embedding_size
+        self.size_descriptor = embedding_size
         self.randomize_parameters = randomize_parameters
         self.train_wpe = train_wpe
         self.train_ln = train_ln
         super().__init__(*args, embedding_size=embedding_size, **kwargs)
 
+    def build_encodings(self, encoded):
+        return nn.Embedding.from_pretrained(encoded.float())
+
     def embed_mission(self, mission: torch.Tensor):
+        encoded = self.encodings.forward(mission.long())
         return (
-            super().embed_mission(mission)
-            if self.train_wpe or self.train_ln
-            else mission
+            encoded
+            if self.embeddings is None
+            else self.embeddings.forward(encoded.long())
         )
 
     def build_embeddings(self):
-        return GPTEmbed(
-            embedding_size=self._embedding_size,
-            randomize_parameters=self.randomize_parameters,
-            train_wpe=self.train_wpe,
-            train_ln=self.train_ln,
-        )
+        if self.train_wpe or self.train_ln:
+            return GPTEmbed(
+                embedding_size=self.size_descriptor,
+                randomize_parameters=self.randomize_parameters,
+                train_wpe=self.train_wpe,
+                train_ln=self.train_ln,
+            )
