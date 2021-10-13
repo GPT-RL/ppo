@@ -19,6 +19,7 @@ from babyai_env import (
     GoAndFaceEnv,
     GoToLocEnv,
     GoToObjEnv,
+    GoToRowEnv,
     MissionEnumeratorWrapper,
     NegationEnv,
     NegationObject,
@@ -34,9 +35,9 @@ from babyai_env import (
     ToggleEnv,
     ZeroOneRewardWrapper,
 )
-from descs import CardinalDirection, LocDesc, OrdinalDirection
+from descs import CardinalDirection, LocDesc, OrdinalDirection, RowDesc
 from envs import RenderWrapper, VecPyTorch
-from instrs import GoToLoc
+from instrs import GoToLoc, GoToRow
 from utils import build_gpt, get_gpt_size
 
 
@@ -276,7 +277,6 @@ class Trainer(main.Trainer):
                 _env = NegationEnv(
                     *args, goal_objects=goal_objects, room_objects=objects, **_kwargs
                 )
-                longest_mission = "pick up an object that is not a ball."
             elif env_id == "colors":
                 test_colors = test_colors.split(",")
                 train_colors = train_colors.split(",")
@@ -290,7 +290,6 @@ class Trainer(main.Trainer):
                     goal_objects=objects,
                     **_kwargs,
                 )
-                longest_mission = "pick up the forest green ball."
             elif env_id == "go-to-loc":
 
                 def is_test(x: int, y: int):
@@ -318,7 +317,27 @@ class Trainer(main.Trainer):
                 missions = [
                     GoToLoc(LocDesc(_env.grid, *loc)).surface(None) for loc in locs
                 ]
-                longest_mission = "go to (0, 0)"
+            elif env_id == "go-to-row":
+
+                def is_test(y: int):
+                    return str(test_number) in str(y)
+
+                def is_train(y: int):
+                    return not is_test(y)
+
+                filter_fn = is_test if test else is_train
+
+                rows = list(range(1, room_size - 1))
+                del _kwargs["strict"]
+                _kwargs.update(num_dists=0)
+                _env = GoToRowEnv(
+                    rows=[r for r in rows if filter_fn(r)],
+                    scaled_reward=scaled_reward,
+                    **_kwargs,
+                )
+                missions = [
+                    GoToRow(RowDesc(_env.grid, row)).surface(None) for row in rows
+                ]
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
 
@@ -329,7 +348,7 @@ class Trainer(main.Trainer):
                 _env = FullyObsWrapper(_env)
 
             _env = ActionInObsWrapper(_env)
-            if not (env_id == "go-to-loc" and scaled_reward):
+            if not (env_id in ("go-to-loc", "go-to-row") and scaled_reward):
                 _env = ZeroOneRewardWrapper(_env)
             _env = MissionEnumeratorWrapper(_env, missions=missions)
             _env = RolloutsWrapper(_env)

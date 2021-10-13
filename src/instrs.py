@@ -12,6 +12,7 @@ from descs import (
     OrdinalDirection,
     RandomDesc,
     RoomDesc,
+    RowDesc,
 )
 
 
@@ -256,6 +257,35 @@ class GoToLoc(ActionInstr):
         if not action == self.env.actions.done:
             return "continue"
         if np.array_equal(self.env.agent_pos, self.desc.array):
+            return "success"
+
+        return "failure"
+
+
+class GoToRow(ActionInstr):
+    """
+    Pick up an object matching a given description
+    eg: pick up the grey ball
+    """
+
+    def __init__(self, loc_desc: RowDesc):
+        self.desc = loc_desc
+        super().__init__()
+
+    def surface(self, env):
+        return "go to " + self.desc.surface()
+
+    def reset_verifier(self, env: MiniGridEnv):
+        super().reset_verifier(env)
+
+    def verify_action(self):
+        raise NotImplementedError
+
+    def verify(self, action):
+        if not action == self.env.actions.done:
+            return "continue"
+        _, y = self.env.agent_pos
+        if y == self.desc.y:
             return "success"
 
         return "failure"

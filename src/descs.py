@@ -268,11 +268,11 @@ class LocDesc(Desc):
     Description of a set of objects in an environment
     """
 
-    def __init__(self, grid: RoomGrid, i: int, j: int):
-        assert 1 <= i < grid.height - 1
-        assert 1 <= j < grid.width - 1
-        self.i = i
-        self.j = j
+    def __init__(self, grid: RoomGrid, x: int, y: int):
+        assert 1 <= x < grid.width - 1
+        assert 1 <= y < grid.height - 1
+        self.i = x
+        self.j = y
 
     def __repr__(self):
         return f"({self.i}, {self.j})"
@@ -280,6 +280,23 @@ class LocDesc(Desc):
     @property
     def array(self):
         return np.array([self.i, self.j])
+
+    @staticmethod
+    def find_matching_objs(*args, **kwargs):
+        return [], []
+
+
+class RowDesc(Desc):
+    """
+    Description of a set of objects in an environment
+    """
+
+    def __init__(self, grid: RoomGrid, y: int):
+        assert 1 <= y < grid.width - 1
+        self.y = y
+
+    def __repr__(self):
+        return f"row {self.y}"
 
     @staticmethod
     def find_matching_objs(*args, **kwargs):

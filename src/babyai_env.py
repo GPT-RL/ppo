@@ -39,6 +39,7 @@ from descs import (
     NegativeObjDesc,
     OrdinalDirection,
     RoomDesc,
+    RowDesc,
     TYPES,
     WallDesc,
 )
@@ -47,6 +48,7 @@ from instrs import (
     GoToCornerInstr,
     GoToLoc,
     GoToRoomInstr,
+    GoToRow,
     GoToWallInstr,
     MultiAndInstr,
     ToggleInstr,
@@ -277,6 +279,46 @@ class GoToLocEnv(RenderEnv, ReproducibleEnv):
         if t:
             i.update(success=r > 0)
             r = 1 / (1 + np.abs(np.array(self.agent_pos) - goal).sum())
+        else:
+            r = 0
+        return s, r, t, i
+
+
+class GoToRowEnv(RenderEnv, ReproducibleEnv):
+    def __init__(
+        self,
+        room_size: int,
+        seed: int,
+        rows: typing.Iterable,
+        scaled_reward: bool,
+        num_dists: int = 0,
+    ):
+        self.scaled_reward = scaled_reward
+        self.rows = rows
+        self.num_dists = num_dists
+        super().__init__(
+            room_size=room_size,
+            num_rows=1,
+            num_cols=1,
+            seed=seed,
+        )
+
+    def gen_mission(self):
+        self.place_agent()
+        self.connect_all()
+        self.add_distractors(num_distractors=self.num_dists, all_unique=False)
+        self.check_objs_reachable()
+        self.instrs = GoToRow(RowDesc(self.grid, self._rand_elem(self.rows)))
+
+    def step(self, action):
+        s, r, t, i = super().step(action)
+        if not self.scaled_reward:
+            return s, r, t, i
+        goal = self.instrs.desc.y
+        if t:
+            i.update(success=r > 0)
+            x, y = self.agent_pos
+            r = 1 / (1 + abs(y - goal))
         else:
             r = 0
         return s, r, t, i
@@ -1331,14 +1373,11 @@ def main(args: "Args"):
             return
 
     # room_objects = [("ball", col) for col in ("black", "white")]
-    env = GoToLocEnv(
+    env = GoToRowEnv(
         room_size=args.room_size,
         seed=args.seed,
-        locs=list(
-            itertools.product(
-                range(1, args.room_size - 1), range(1, args.room_size - 1)
-            )
-        ),
+        rows=range(1, args.room_size - 1),
+        scaled_reward=False,
     )
     if args.agent_view:
         env = RGBImgObsWithDirectionWrapper(env)
