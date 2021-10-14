@@ -324,6 +324,51 @@ class GoToRowEnv(RenderEnv, ReproducibleEnv):
         return s, r, t, i
 
 
+class LinearEnv(gym.Env):
+    def __init__(self, locations: typing.Iterable[int], seed: int, size: int = None):
+        self.locations = list(locations)
+        if size is None:
+            size = max(self.locations)
+
+        self.eye = np.eye(size)
+        self.state = None
+        self.target = None
+        self.actions = [-1, 0, 1]
+        self.random = np.random.default_rng(seed=seed)
+        self.observation_space = gym.spaces.Dict(
+            dict(image=gym.spaces.Box(low=0, high=255, shape=[size]))
+        )
+        self.action_space = gym.spaces.Discrete(3)
+
+    def observation(self):
+        return dict(
+            image=self.eye[self.state], mission=f"Go to grid {self.target}", direction=0
+        )
+
+    def step(self, action: np.ndarray):
+        self.action = self.actions[int(action)]
+        self.state += self.action
+        self.state = np.clip(self.state, a_min=0, a_max=len(self.eye) - 1)
+        s = self.observation()
+        t = self.action == 0
+        if t:
+            self.reward = r = 1 / (1 + abs(self.state - self.target))
+            i = dict(success=self.state == self.target)
+        else:
+            self.reward = r = 0
+            i = dict()
+        return s, r, t, i
+
+    def reset(self):
+        self.state, self.target = self.random.choice(self.locations, size=2)
+        return self.observation()
+
+    def render(self, mode="human"):
+        print("action:", self.action)
+        print("reward:", self.reward)
+        print(self.state)
+
+
 class InvalidDirectionError(RuntimeError):
     pass
 
