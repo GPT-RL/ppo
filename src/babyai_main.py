@@ -1,6 +1,6 @@
 import functools
 import itertools
-from typing import Collection, Generator, List, Literal, Union, cast
+from typing import Generator, List, Literal, Union, cast
 
 import gym
 import torch
@@ -20,6 +20,7 @@ from babyai_env import (
     GoToLocEnv,
     GoToObjEnv,
     GoToRowEnv,
+    LinearEnv,
     MissionEnumeratorWrapper,
     NegationEnv,
     NegationObject,
@@ -38,7 +39,7 @@ from babyai_env import (
 from descs import CardinalDirection, LocDesc, OrdinalDirection, RowDesc
 from envs import RenderWrapper, VecPyTorch
 from instrs import GoToLoc, GoToRow
-from utils import build_gpt, get_gpt_size
+from utils import get_gpt_size
 
 
 class Args(main.Args):
@@ -338,17 +339,37 @@ class Trainer(main.Trainer):
                 missions = [
                     GoToRow(RowDesc(_env.grid, row)).surface(None) for row in rows
                 ]
+            elif env_id == "linear":
+
+                def is_test(y: int):
+                    return str(test_number) in str(y)
+
+                def is_train(y: int):
+                    return not is_test(y)
+
+                filter_fn = is_test if test else is_train
+
+                rows = list(range(room_size))
+                del _kwargs["strict"]
+                _kwargs.update(num_dists=0)
+                _env = LinearEnv(
+                    locations=[l for l in rows if filter_fn(l)],
+                    seed=seed,
+                    size=room_size,
+                )
+                missions = [f"Go to grid {target}" for target in rows]
+
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
 
             _env = DirectionWrapper(_env)
             if env_id == "colors":
                 _env = RGBImgObsWithDirectionWrapper(_env)
-            else:
+            elif env_id != "linear":
                 _env = FullyObsWrapper(_env)
 
             _env = ActionInObsWrapper(_env)
-            if not (env_id in ("go-to-loc", "go-to-row") and scaled_reward):
+            if not (env_id in ("go-to-loc", "go-to-row", "linear") and scaled_reward):
                 _env = ZeroOneRewardWrapper(_env)
             _env = MissionEnumeratorWrapper(_env, missions=missions)
             _env = RolloutsWrapper(_env)

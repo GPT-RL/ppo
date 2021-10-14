@@ -83,38 +83,46 @@ class Base(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain("relu"),
         )
-        h, w, d = self.observation_spaces.image.shape
-        dummy_input = torch.zeros(1, d, h, w)
+        image_shape = self.observation_spaces.image.shape
+        if len(image_shape) == 3:
+            h, w, d = image_shape
+            dummy_input = torch.zeros(1, d, h, w)
 
-        self.conv = nn.Sequential(
-            init_(nn.Conv2d(d, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            nn.Flatten(),
-        )
-        try:
-            output = self.conv(dummy_input)
-            assert not second_layer
-        except RuntimeError:
-            self.conv = (
-                nn.Sequential(
-                    init_(nn.Conv2d(d, 32, 3, stride=2)),
-                    nn.ReLU(),
-                    init_(nn.Conv2d(32, 32, 3, stride=1)),
-                    nn.ReLU(),
-                    nn.Flatten(),
-                )
-                if second_layer
-                else nn.Sequential(
-                    init_(nn.Conv2d(d, 32, 3, 2)),
-                    nn.ReLU(),
-                    nn.Flatten(),
-                )
+            self.image_net = nn.Sequential(
+                init_(nn.Conv2d(d, 32, 8, stride=4)),
+                nn.ReLU(),
+                init_(nn.Conv2d(32, 64, 4, stride=2)),
+                nn.ReLU(),
+                init_(nn.Conv2d(64, 32, 3, stride=1)),
+                nn.ReLU(),
+                nn.Flatten(),
             )
-            output = self.conv(dummy_input)
+            try:
+                output = self.image_net(dummy_input)
+                assert not second_layer
+            except RuntimeError:
+                self.image_net = (
+                    nn.Sequential(
+                        init_(nn.Conv2d(d, 32, 3, stride=2)),
+                        nn.ReLU(),
+                        init_(nn.Conv2d(32, 32, 3, stride=1)),
+                        nn.ReLU(),
+                        nn.Flatten(),
+                    )
+                    if second_layer
+                    else nn.Sequential(
+                        init_(nn.Conv2d(d, 32, 3, 2)),
+                        nn.ReLU(),
+                        nn.Flatten(),
+                    )
+                )
+                output = self.image_net(dummy_input)
+        else:
+            dummy_input = torch.zeros(image_shape)
+            self.image_net = nn.Sequential(
+                nn.Linear(int(np.prod(image_shape)), hidden_size), nn.ReLU()
+            )
+            output = self.image_net(dummy_input)
 
         self.merge = nn.Sequential(
             init_(
@@ -157,10 +165,10 @@ class Base(NNBase):
             )
         )
 
-        image = inputs.image.reshape(-1, *self.observation_spaces.image.shape).permute(
-            0, 3, 1, 2
-        )
-        image = self.conv(image)
+        image = inputs.image.reshape(-1, *self.observation_spaces.image.shape)
+        if len(image.shape) == 4:
+            image = image.permute(0, 3, 1, 2)
+        image = self.image_net(image)
         directions = inputs.direction.long()
         directions = F.one_hot(directions, num_classes=self.num_directions).squeeze(1)
         action = inputs.action.long()
