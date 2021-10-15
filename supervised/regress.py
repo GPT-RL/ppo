@@ -3,10 +3,11 @@ from __future__ import print_function
 import logging
 import os
 import time
+from collections import deque, namedtuple
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
-from typing import Literal, Optional, cast, get_args
+from typing import Any, Iterable, Literal, NamedTuple, Optional, cast, get_args
 
 import numpy as np
 import pandas as pd
@@ -78,17 +79,20 @@ class Net(nn.Module):
             get_gpt_size(embedding_size)
         ).n_embd
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        self.embed = nn.Linear(max_int, self.embedding_size)
         self.net = nn.Sequential(
-            nn.Linear(self.embedding_size + max_int, hidden_size),
+            nn.Linear(2 * self.embedding_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
-        embedded = self.gpt(x2.long())
-        cat = torch.cat([x1, embedded], dim=-1)
+        embedded1 = self.embed(x1).squeeze(1)
+        embedded2 = self.gpt(x2.long()).squeeze(1)
+        cat = torch.cat([embedded1, embedded2], dim=-1)
         return self.net(cat).squeeze(-1)
 
 
@@ -185,6 +189,37 @@ def get_save_path(run_id: Optional[int]):
     )
 
 
+def max_agreement(
+    goals: torch.tensor,
+    targets: torch.tensor,
+    outputs: torch.tensor,
+):
+    goals = goals.argmax(-1)
+    goals = goals.cpu().numpy()
+    targets = targets.cpu().numpy()
+    outputs = outputs.detach().cpu().numpy()
+
+    df = pd.DataFrame(data=dict(goals=goals, targets=targets, outputs=outputs))
+
+    def pair_inequalities(s: pd.Series):
+        a = s.to_numpy()
+        return np.expand_dims(a, axis=0) >= np.expand_dims(a, axis=1)
+
+    def matching_inequalities(s1: pd.Series, s2: pd.Series):
+        return np.mean(pair_inequalities(s1) == pair_inequalities(s2))
+
+    return np.mean(
+        [
+            matching_inequalities(gdf["targets"], gdf["outputs"])
+            for _, gdf in df.groupby("goals")
+        ]
+    )
+
+
+def compute_targets(inputs, goals):
+    return abs(goals - inputs.argmax(-1))
+
+
 def train(args: Args, logger: HasuraLogger):
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -200,37 +235,65 @@ def train(args: Args, logger: HasuraLogger):
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
 
-    data1 = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
-    data2 = np.repeat(np.arange(args.max_integer), args.max_integer)
-    rng = np.random.default_rng(seed=args.seed)
-    rng.shuffle(data1, axis=1)
-    rng.shuffle(data2)
-    targets = 1 / (1 + np.abs(data2 - data1.argmax(-1)))
+    obs = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
+    goal = np.repeat(np.arange(args.max_integer), args.max_integer)
 
     def get_divisors():
         divisor = 1
         while divisor <= args.max_integer:
-            yield divisor
             divisor *= 10
-
-    is_test = np.stack([(data2 % d) == args.test_integer for d in get_divisors()])
-    is_test = is_test.any(axis=0)
+            yield divisor
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
     def tokenize():
-        for n in tqdm(data2, desc="Tokenizing data"):
-            yield tokenizer.encode(str(n), return_tensors="pt").squeeze(0)
+        for n in tqdm(goal, desc="Tokenizing data"):
+            encode = tokenizer.encode(str(n), return_tensors="pt")
+            yield encode.squeeze(0)
 
     tokenized = list(tokenize())
     tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
-    data1 = torch.tensor(data1, dtype=torch.float)
-    inputs = torch.cat([data1, tokenized], dim=-1)
+    targets = compute_targets(inputs=obs, goals=goal)
+    is_test = [
+        goal == args.test_integer,
+        *((goal % d) == args.test_integer for d in get_divisors()),
+    ]
+    is_test = np.stack(is_test)
+    is_test = is_test.any(axis=0)
+    train_goals = set(goal[~is_test])
+    test_goals = set(goal[is_test])
+    tokenized_goals = {g: tokenizer.encode(str(g))[0] for g in goal}
+    data = np.concatenate(
+        [
+            obs,
+            tokenized,
+            np.expand_dims(targets, axis=1),
+            np.expand_dims(is_test, axis=1),
+        ],
+        axis=1,
+    )
 
-    _is_test = torch.tensor(is_test)
-    _targets = torch.tensor(targets, dtype=torch.float)
-    train_dataset = _Dataset(inputs=inputs[~_is_test], targets=_targets[~_is_test])
-    test_dataset = _Dataset(inputs=inputs[_is_test], targets=_targets[_is_test])
+    def repeat_data(in_dataset, batch_size):
+        tiles = int(np.ceil(batch_size / sum(in_dataset)))
+        return np.tile(data[in_dataset], (tiles, 1))
+
+    data = np.concatenate(
+        [
+            repeat_data(~is_test, args.batch_size),
+            repeat_data(is_test, args.test_batch_size),
+        ],
+        axis=0,
+    )
+
+    rng = np.random.default_rng(seed=args.seed)
+    rng.shuffle(data, axis=0)
+    data = torch.tensor(data, dtype=torch.float32)
+
+    inputs, targets, is_test = torch.split(data, [obs.shape[1] + 1, 1, 1], dim=-1)
+    is_test = is_test.bool().squeeze(-1)
+
+    train_dataset = _Dataset(inputs=inputs[~is_test], targets=targets[~is_test])
+    test_dataset = _Dataset(inputs=inputs[is_test], targets=targets[is_test])
 
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
@@ -254,59 +317,72 @@ def train(args: Args, logger: HasuraLogger):
 
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     start = time.time()
-    frames = 0
+
+    log_obs = torch.eye(args.max_integer).to(device)
+    save_count = 0
+
+    def sequential_order(t: torch.Tensor):
+        return t[:-1] < t[1:]
+
+    def accuracy_for_goal(g: int):
+        _inputs = F.pad(log_obs, (0, 1), value=tokenized_goals[g])
+        _outputs = model(_inputs)
+        _targets = compute_targets(log_obs, g * torch.ones_like(_outputs))
+        return (
+            # (sequential_order(_outputs) == sequential_order(_targets))
+            (_outputs.round() == _targets.round())
+            .float()
+            .mean()
+            .item()
+        )
+
+    def get_accuracy(_goals: Iterable[int]):
+        with torch.no_grad():
+            return np.mean(list(map(accuracy_for_goal, _goals))).item()
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
 
         model.eval()
         test_loss = 0
-        correct = []
         with torch.no_grad():
             for data, target in test_loader:
-                frames += len(data)
                 data, target = data.to(device), target.to(device)
                 output = model(data)
-                test_loss += F.mse_loss(
-                    output, target, reduction="sum"
-                ).item()  # sum up batch loss
-                pred = output.round()
-                correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+                test_loss += F.mse_loss(output.flatten(), target.flatten()).item()
 
-        test_loss /= len(test_loader.dataset)
-        test_accuracy = torch.cat(correct).mean()
         now = time.time()
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
-            TEST_ACCURACY: test_accuracy.item(),
+            TEST_ACCURACY: get_accuracy(test_goals),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
-            FPS: frames / (now - start),
         }
         pprint(log)
         if logger.run_id is not None:
             logger.log(log)
 
         model.train()
-        correct = []
+        frames = 0
+        tick = time.time()
         for batch_idx, (data, target) in enumerate(train_loader):
+            frames += len(data)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
-            loss = F.mse_loss(output, target)
-            pred = output.round()
-            correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+            loss = F.mse_loss(output.flatten(), target.flatten())
             loss.backward()
             optimizer.step()
             if batch_idx % args.log_interval == 0:
-                accuracy = torch.cat(correct).mean()
+
                 log = {
                     EPOCH: epoch,
                     LOSS: loss.item(),
-                    ACCURACY: accuracy.item(),
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
+                    ACCURACY: get_accuracy(train_goals),
+                    SAVE_COUNT: save_count,
                 }
                 pprint(log)
                 if logger.run_id is not None:
@@ -315,10 +391,21 @@ def train(args: Args, logger: HasuraLogger):
                 if args.dry_run:
                     break
 
+        now = time.time()
+        log = {
+            RUN_ID: logger.run_id,
+            EPOCH: epoch,
+            HOURS: (now - start) / 3600,
+            FPS: frames / (now - tick),
+        }
+        pprint(log)
+        if logger.run_id is not None:
+            logger.log(log)
         scheduler.step()
 
-    if args.save_model:
-        torch.save(model.state_dict(), str(save_path))
+        if args.save_model:
+            torch.save(model.state_dict(), str(save_path))
+            save_count += 1
 
 
 EXCLUDED = {
@@ -376,12 +463,13 @@ def main(args: ArgsType):
 
         if args.logger_args is not None:
             charts = [
-                spec(x=x, y=y)
+                spec(x=x, y=y, scale_type="log" if y == LOSS else "linear")
                 for y in (
                     LOSS,
                     ACCURACY,
                     TEST_LOSS,
                     TEST_ACCURACY,
+                    SAVE_COUNT,
                 )
                 for x in (HOURS, EPOCH)
             ]
