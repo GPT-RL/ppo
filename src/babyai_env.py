@@ -342,7 +342,9 @@ class LinearEnv(gym.Env):
 
     def observation(self):
         return dict(
-            image=self.eye[self.state], mission=f"Go to grid {self.target}", direction=0
+            image=self.eye[self.state],
+            mission=f"Perform the following instruction. Go to grid {self.target}",
+            direction=0,
         )
 
     def step(self, action: np.ndarray):
