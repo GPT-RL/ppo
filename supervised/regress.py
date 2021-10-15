@@ -81,7 +81,6 @@ class Net(nn.Module):
             nn.Linear(2 * max_int, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -230,7 +229,7 @@ def train(args: Args, logger: HasuraLogger):
     rng = np.random.default_rng(seed=args.seed)
     rng.shuffle(data1, axis=1)
     rng.shuffle(data2)
-    targets = 1 / (1 + np.square(data2.argmax(-1) - data1.argmax(-1)))
+    targets = np.abs(data2.argmax(-1) - data1.argmax(-1))
 
     def get_divisors():
         divisor = 1
@@ -301,7 +300,9 @@ def train(args: Args, logger: HasuraLogger):
         data = torch.cat(data, dim=0)
         targets, outputs = map(torch.cat, (targets, outputs))
         log = {
-            TEST_ACCURACY: order_agreement(data[:, args.max_integer :], targets, outputs),
+            TEST_ACCURACY: order_agreement(
+                data[:, args.max_integer :], targets, outputs
+            ),
             EPOCH: epoch,
             RUN_ID: logger.run_id,
             HOURS: (time.time() - start) / 3600,
