@@ -258,9 +258,7 @@ def train(args: Args, logger: HasuraLogger):
                 test_loss += F.mse_loss(
                     output, target, reduction="sum"
                 ).item()  # sum up batch loss
-                pred = output.argmax(
-                    dim=1, keepdim=True
-                )  # get the index of the max log-probability
+                pred = output.round()
                 correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
 
         test_loss /= len(test_loader.dataset)
@@ -285,9 +283,8 @@ def train(args: Args, logger: HasuraLogger):
             optimizer.zero_grad()
             output = model(data)
             loss = F.mse_loss(output, target)
-            pred = output.argmax(
-                dim=1, keepdim=True
-            )  # get the index of the max log-probability
+            pred = output.round(
+            )
             correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
             loss.backward()
             optimizer.step()
