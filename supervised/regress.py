@@ -229,7 +229,7 @@ def train(args: Args, logger: HasuraLogger):
     rng = np.random.default_rng(seed=args.seed)
     rng.shuffle(data1, axis=1)
     rng.shuffle(data2)
-    targets = np.abs(data2.argmax(-1) - data1.argmax(-1))
+    targets = np.square(data2.argmax(-1) - data1.argmax(-1))
 
     def get_divisors():
         divisor = 1
