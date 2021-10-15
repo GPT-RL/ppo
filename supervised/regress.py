@@ -77,18 +77,18 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        # self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         self.net = nn.Sequential(
-            nn.Linear(self.embedding_size + max_int, hidden_size),
+            nn.Linear(2 * max_int, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
             nn.Sigmoid(),
         )
 
     def forward(self, x):
-        x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
-        embedded = self.gpt(x2.long())
-        cat = torch.cat([x1, embedded], dim=-1)
+        x1, x2 = torch.split(x, [self.max_int, self.max_int], dim=-1)
+        # embedded = self.gpt(x2.long())
+        cat = torch.cat([x1, x2], dim=-1)
         return self.net(cat).squeeze(-1)
 
 
@@ -201,11 +201,11 @@ def train(args: Args, logger: HasuraLogger):
         test_kwargs.update(cuda_kwargs)
 
     data1 = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
-    data2 = np.repeat(np.arange(args.max_integer), args.max_integer)
+    data2 = np.repeat(np.eye(args.max_integer), args.max_integer, axis=0)
     rng = np.random.default_rng(seed=args.seed)
     rng.shuffle(data1, axis=1)
     rng.shuffle(data2)
-    targets = 1 / (1 + np.abs(data2 - data1.argmax(-1)))
+    targets = 1 / (1 + np.square(data2.argmax(-1) - data1.argmax(-1)))
 
     def get_divisors():
         divisor = 1
@@ -213,8 +213,8 @@ def train(args: Args, logger: HasuraLogger):
             yield divisor
             divisor *= 10
 
-    is_test = np.stack([(data2 % d) == args.test_integer for d in get_divisors()])
-    is_test = is_test.any(axis=0)
+    # is_test = np.stack([(data2 % d) == args.test_integer for d in get_divisors()])
+    # is_test = is_test.any(axis=0)
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
@@ -222,15 +222,18 @@ def train(args: Args, logger: HasuraLogger):
         for n in tqdm(data2, desc="Tokenizing data"):
             yield tokenizer.encode(str(n), return_tensors="pt").squeeze(0)
 
-    tokenized = list(tokenize())
-    tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
+    # tokenized = list(tokenize())
+    # tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
     data1 = torch.tensor(data1, dtype=torch.float)
-    inputs = torch.cat([data1, tokenized], dim=-1)
+    data2 = torch.tensor(data2, dtype=torch.float)
+    inputs = torch.cat([data1, data2], dim=-1)
 
-    _is_test = torch.tensor(is_test)
+    # _is_test = torch.tensor(is_test)
     _targets = torch.tensor(targets, dtype=torch.float)
-    train_dataset = _Dataset(inputs=inputs[~_is_test], targets=_targets[~_is_test])
-    test_dataset = _Dataset(inputs=inputs[_is_test], targets=_targets[_is_test])
+    # train_dataset = _Dataset(inputs=inputs[~_is_test], targets=_targets[~_is_test])
+    # test_dataset = _Dataset(inputs=inputs[_is_test], targets=_targets[_is_test])
+    train_dataset = _Dataset(inputs=inputs, targets=_targets)
+    test_dataset = _Dataset(inputs=inputs, targets=_targets)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
