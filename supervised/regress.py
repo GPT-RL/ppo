@@ -82,13 +82,14 @@ class Net(nn.Module):
             nn.Linear(self.embedding_size + max_int, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
         embedded = self.gpt(x2.long())
         cat = torch.cat([x1, embedded], dim=-1)
-        return self.net(cat)
+        return self.net(cat).squeeze(-1)
 
 
 def get_gpt_size(gpt_size: GPTSize):
