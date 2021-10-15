@@ -361,8 +361,8 @@ def train(args: Args, logger: HasuraLogger):
             logger.log(log)
         scheduler.step()
 
-    if args.save_model:
-        torch.save(model.state_dict(), str(save_path))
+        if args.save_model:
+            torch.save(model.state_dict(), str(save_path))
 
 
 EXCLUDED = {
