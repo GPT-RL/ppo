@@ -235,7 +235,7 @@ def train(args: Args, logger: HasuraLogger):
             yield divisor
             divisor *= 10
 
-    is_test = np.dstack([(data // d) == args.test_integer for d in get_divisors()])
+    is_test = np.dstack([(data % d) == args.test_integer for d in get_divisors()])
     is_test = is_test.any(axis=(1, 2))
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
