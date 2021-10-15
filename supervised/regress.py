@@ -18,7 +18,6 @@ import yaml
 from gql import gql
 from run_logger import HasuraLogger
 from tap import Tap
-from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -185,6 +184,32 @@ def get_save_path(run_id: Optional[int]):
     )
 
 
+def order_agreement(
+    goals: torch.tensor,
+    targets: torch.tensor,
+    outputs: torch.tensor,
+):
+    goals = goals.argmax(-1)
+    goals = goals.cpu().numpy()
+    targets = targets.cpu().numpy()
+    outputs = outputs.detach().cpu().numpy()
+    df = pd.DataFrame(data=dict(goals=goals, targets=targets, outputs=outputs))
+
+    def pair_inequalities(s: pd.Series):
+        a = s.to_numpy()
+        return np.expand_dims(a, axis=0) >= np.expand_dims(a, axis=1)
+
+    def matching_inequalities(s1: pd.Series, s2: pd.Series):
+        return np.mean(pair_inequalities(s1) == pair_inequalities(s2))
+
+    return np.mean(
+        [
+            matching_inequalities(gdf["targets"], gdf["outputs"])
+            for _, gdf in df.groupby("goals")
+        ]
+    )
+
+
 def train(args: Args, logger: HasuraLogger):
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -259,30 +284,36 @@ def train(args: Args, logger: HasuraLogger):
     start = time.time()
     frames = 0
 
+    memory = []
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
 
         model.eval()
         test_loss = 0
-        correct = []
         with torch.no_grad():
             for data, target in test_loader:
                 frames += len(data)
                 data, target = data.to(device), target.to(device)
                 output = model(data)
-                test_loss += F.mse_loss(
-                    output, target, reduction="sum"
-                ).item()  # sum up batch loss
-                pred = output.round()
-                correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+                memory.append((data, target, output))
 
-        test_loss /= len(test_loader.dataset)
-        test_accuracy = torch.cat(correct).mean()
+        data, targets, outputs = zip(*memory)
+        data = torch.cat(data, dim=0)
+        targets, outputs = map(torch.cat, (targets, outputs))
+        log = {
+            TEST_ACCURACY: order_agreement(data[:, args.max_integer :], targets, outputs),
+            EPOCH: epoch,
+            RUN_ID: logger.run_id,
+            HOURS: (time.time() - start) / 3600,
+        }
+        pprint(log)
+        if logger.run_id is not None:
+            logger.log(log)
+
         now = time.time()
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
-            TEST_ACCURACY: test_accuracy.item(),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
             FPS: frames / (now - start),
@@ -292,22 +323,19 @@ def train(args: Args, logger: HasuraLogger):
             logger.log(log)
 
         model.train()
-        correct = []
+        memory = []
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
             loss = F.mse_loss(output, target)
-            pred = output.round()
-            correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
+            memory.append((data, target, output))
             loss.backward()
             optimizer.step()
             if batch_idx % args.log_interval == 0:
-                accuracy = torch.cat(correct).mean()
                 log = {
                     EPOCH: epoch,
                     LOSS: loss.item(),
-                    ACCURACY: accuracy.item(),
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
                 }
@@ -318,6 +346,18 @@ def train(args: Args, logger: HasuraLogger):
                 if args.dry_run:
                     break
 
+        data, targets, outputs = zip(*memory)
+        data = torch.cat(data, dim=0)
+        targets, outputs = map(torch.cat, (targets, outputs))
+        log = {
+            ACCURACY: order_agreement(data[:, args.max_integer :], targets, outputs),
+            RUN_ID: logger.run_id,
+            EPOCH: epoch,
+            HOURS: (time.time() - start) / 3600,
+        }
+        pprint(log)
+        if logger.run_id is not None:
+            logger.log(log)
         scheduler.step()
 
     if args.save_model:
