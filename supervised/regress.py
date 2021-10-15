@@ -69,8 +69,11 @@ class GPTEmbed(nn.Module):
 
 
 class Net(nn.Module):
-    def __init__(self, embedding_size: GPTSize, hidden_size: int, **kwargs):
+    def __init__(
+        self, embedding_size: GPTSize, hidden_size: int, max_int: int, **kwargs
+    ):
         super(Net, self).__init__()
+        self.max_int = max_int
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
@@ -79,10 +82,11 @@ class Net(nn.Module):
             nn.Linear(self.embedding_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
-        return self.net(x)
+        return self.net(x) * self.max_int
 
 
 def get_gpt_size(gpt_size: GPTSize):
@@ -230,6 +234,7 @@ def train(args: Args, logger: HasuraLogger):
         randomize_parameters=args.randomize_parameters,
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
+        max_int=args.max_integer
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
@@ -283,8 +288,7 @@ def train(args: Args, logger: HasuraLogger):
             optimizer.zero_grad()
             output = model(data)
             loss = F.mse_loss(output, target)
-            pred = output.round(
-            )
+            pred = output.round()
             correct += [pred.eq(target.view_as(pred)).squeeze(-1).float()]
             loss.backward()
             optimizer.step()
