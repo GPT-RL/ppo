@@ -77,16 +77,18 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
+        self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         self.net = nn.Sequential(
-            GPTEmbed(embedding_size=embedding_size, **kwargs),
-            nn.Linear(self.embedding_size, hidden_size),
+            nn.Linear(self.embedding_size + max_int, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, x):
-        return self.net(x) * self.max_int
+        x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
+        embedded = self.gpt(x2.long())
+        cat = torch.cat([x1, embedded], dim=-1)
+        return self.net(cat)
 
 
 def get_gpt_size(gpt_size: GPTSize):
@@ -197,8 +199,12 @@ def train(args: Args, logger: HasuraLogger):
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
 
-    data = np.arange(args.max_integer)
-    data = np.expand_dims(data, axis=(-1))
+    data1 = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
+    data2 = np.repeat(np.arange(args.max_integer), args.max_integer)
+    rng = np.random.default_rng(seed=args.seed)
+    rng.shuffle(data1, axis=1)
+    rng.shuffle(data2)
+    targets = 1 / (1 + np.abs(data2 - data1.argmax(-1)))
 
     def get_divisors():
         divisor = 1
@@ -206,22 +212,22 @@ def train(args: Args, logger: HasuraLogger):
             yield divisor
             divisor *= 10
 
-    is_test = np.stack(
-        [(data.squeeze(-1) % d) == args.test_integer for d in get_divisors()]
-    )
+    is_test = np.stack([(data2 % d) == args.test_integer for d in get_divisors()])
     is_test = is_test.any(axis=0)
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
     def tokenize():
-        for n in tqdm(data, desc="Tokenizing data"):
+        for n in tqdm(data2, desc="Tokenizing data"):
             yield tokenizer.encode(str(n), return_tensors="pt").squeeze(0)
 
-    inputs = list(tokenize())
-    inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).squeeze(0).T
+    tokenized = list(tokenize())
+    tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
+    data1 = torch.tensor(data1, dtype=torch.float)
+    inputs = torch.cat([data1, tokenized], dim=-1)
 
     _is_test = torch.tensor(is_test)
-    _targets = torch.tensor(data, dtype=torch.float)
+    _targets = torch.tensor(targets, dtype=torch.float)
     train_dataset = _Dataset(inputs=inputs[~_is_test], targets=_targets[~_is_test])
     test_dataset = _Dataset(inputs=inputs[_is_test], targets=_targets[_is_test])
 
@@ -234,7 +240,7 @@ def train(args: Args, logger: HasuraLogger):
         randomize_parameters=args.randomize_parameters,
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
-        max_int=args.max_integer
+        max_int=args.max_integer,
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
