@@ -77,7 +77,10 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        # self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        self.gpt = nn.Embedding(
+            num_embeddings=max_int, embedding_dim=self.embedding_size
+        )
         self.net = nn.Sequential(
             nn.Linear(self.embedding_size + max_int, hidden_size),
             nn.ReLU(),
@@ -86,7 +89,7 @@ class Net(nn.Module):
 
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
-        embedded = self.gpt(x2.long())
+        embedded = self.gpt(x2.long()).squeeze(1)
         cat = torch.cat([x1, embedded], dim=-1)
         return self.net(cat).squeeze(-1)
 
@@ -249,10 +252,11 @@ def train(args: Args, logger: HasuraLogger):
             encode = tokenizer.encode(str(n), return_tensors="pt")
             yield encode.squeeze(0)
 
-    tokenized = list(tokenize())
-    tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
+    # tokenized = list(tokenize())
+    # tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
     data1 = torch.tensor(data1, dtype=torch.float)
-    inputs = torch.cat([data1, tokenized], dim=-1)
+    data2 = torch.tensor(data2, dtype=torch.float).unsqueeze(-1)
+    inputs = torch.cat([data1, data2], dim=-1)
 
     _is_test = torch.tensor(is_test)
     _targets = torch.tensor(targets, dtype=torch.float)
@@ -418,7 +422,7 @@ def main(args: ArgsType):
 
         if args.logger_args is not None:
             charts = [
-                spec(x=x, y=y)
+                spec(x=x, y=y, scale_type="log" if y == LOSS else "linear")
                 for y in (
                     LOSS,
                     ACCURACY,
