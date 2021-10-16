@@ -81,7 +81,7 @@ class Net(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(self.embedding_size + max_int, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, 2),
+            nn.Linear(hidden_size, 1),
         )
 
     def forward(self, x):
@@ -193,24 +193,22 @@ def max_agreement(
     goals = goals.cpu().numpy()
     targets = targets.cpu().numpy()
     outputs = outputs.detach().cpu().numpy()
-    outputs = outputs.argmax(-1)
-    return np.mean(outputs == targets)
 
-    # df = pd.DataFrame(data=dict(goals=goals, targets=targets, outputs=outputs))
-    #
-    # def pair_inequalities(s: pd.Series):
-    #     a = s.to_numpy()
-    #     return np.expand_dims(a, axis=0) >= np.expand_dims(a, axis=1)
-    #
-    # def matching_inequalities(s1: pd.Series, s2: pd.Series):
-    #     return np.mean(pair_inequalities(s1) == pair_inequalities(s2))
-    #
-    # return np.mean(
-    #     [
-    #         matching_inequalities(gdf["targets"], gdf["outputs"])
-    #         for _, gdf in df.groupby("goals")
-    #     ]
-    # )
+    df = pd.DataFrame(data=dict(goals=goals, targets=targets, outputs=outputs))
+
+    def pair_inequalities(s: pd.Series):
+        a = s.to_numpy()
+        return np.expand_dims(a, axis=0) >= np.expand_dims(a, axis=1)
+
+    def matching_inequalities(s1: pd.Series, s2: pd.Series):
+        return np.mean(pair_inequalities(s1) == pair_inequalities(s2))
+
+    return np.mean(
+        [
+            matching_inequalities(gdf["targets"], gdf["outputs"])
+            for _, gdf in df.groupby("goals")
+        ]
+    )
 
 
 def train(args: Args, logger: HasuraLogger):
@@ -233,7 +231,7 @@ def train(args: Args, logger: HasuraLogger):
     rng = np.random.default_rng(seed=args.seed)
     rng.shuffle(data1, axis=1)
     rng.shuffle(data2)
-    targets = data2 == data1.argmax(-1)
+    targets = 0.99 ** np.abs(data2 - data1.argmax(-1))
 
     def get_divisors():
         divisor = 1
@@ -325,14 +323,11 @@ def train(args: Args, logger: HasuraLogger):
 
         model.train()
         memory = []
-        weight: torch.Tensor = cast(
-            torch.Tensor, torch.tensor([1, args.max_integer - 1]) / args.max_integer
-        ).to(device)
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
-            loss = F.cross_entropy(output, target.long(), weight=weight)
+            loss = F.mse_loss(output, target)
             memory.append((data, target, output))
             loss.backward()
             optimizer.step()
