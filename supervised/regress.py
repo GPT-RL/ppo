@@ -82,7 +82,7 @@ class Net(nn.Module):
             num_embeddings=max_int, embedding_dim=self.embedding_size
         )
         self.net = nn.Sequential(
-            nn.Linear(self.embedding_size + max_int, hidden_size),
+            nn.Linear(self.embedding_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
@@ -90,8 +90,9 @@ class Net(nn.Module):
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
         embedded = self.gpt(x2.long()).squeeze(1)
-        cat = torch.cat([x1, embedded], dim=-1)
-        return self.net(cat).squeeze(-1)
+        # cat = torch.cat([x1, embedded], dim=-1)
+        # return self.net(cat).squeeze(-1)
+        return self.net(embedded).squeeze(-1)
 
 
 def get_gpt_size(gpt_size: GPTSize):
@@ -215,7 +216,8 @@ def max_agreement(
 
 
 def compute_targets(inputs, goals):
-    return abs(goals - inputs.argmax(-1))
+    return goals
+    # return abs(goals - inputs.argmax(-1))
 
 
 def train(args: Args, logger: HasuraLogger):
@@ -305,12 +307,13 @@ def train(args: Args, logger: HasuraLogger):
         _inputs = F.pad(log_obs, (0, 1), value=goal)
         _outputs = model(_inputs)
         _targets = compute_targets(log_obs, goal * torch.ones_like(_outputs))
-        return (
-            (sequential_order(_outputs) == sequential_order(_targets))
-            .float()
-            .mean()
-            .item()
-        )
+        return (_outputs.round() == _targets.round()).float().mean().item()
+        # return (
+        #     (sequential_order(_outputs) == sequential_order(_targets))
+        #     .float()
+        #     .mean()
+        #     .item()
+        # )
 
     def get_accuracy(_goals: Iterable[int]):
         with torch.no_grad():
