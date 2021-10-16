@@ -3,10 +3,11 @@ from __future__ import print_function
 import logging
 import os
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
-from typing import Literal, Optional, cast, get_args
+from typing import Iterable, Literal, Optional, cast, get_args
 
 import numpy as np
 import pandas as pd
@@ -18,7 +19,6 @@ import yaml
 from gql import gql
 from run_logger import HasuraLogger
 from tap import Tap
-from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -214,6 +214,10 @@ def max_agreement(
     )
 
 
+def compute_targets(inputs, goals):
+    return 0.99 ** abs(goals - inputs.argmax(-1))
+
+
 def train(args: Args, logger: HasuraLogger):
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -234,7 +238,8 @@ def train(args: Args, logger: HasuraLogger):
     rng = np.random.default_rng(seed=args.seed)
     rng.shuffle(data1, axis=1)
     rng.shuffle(data2)
-    targets = 0.99 ** np.abs(data2 - data1.argmax(-1))
+
+    targets = compute_targets(inputs=data1, goals=data2)
 
     def get_divisors():
         divisor = 1
@@ -258,10 +263,14 @@ def train(args: Args, logger: HasuraLogger):
     data2 = torch.tensor(data2, dtype=torch.float).unsqueeze(-1)
     inputs = torch.cat([data1, data2], dim=-1)
 
-    _is_test = torch.tensor(is_test)
-    _targets = torch.tensor(targets, dtype=torch.float)
-    train_dataset = _Dataset(inputs=inputs[~_is_test], targets=_targets[~_is_test])
-    test_dataset = _Dataset(inputs=inputs[_is_test], targets=_targets[_is_test])
+    torch_is_test = torch.tensor(is_test)
+    torch_targets = torch.tensor(targets, dtype=torch.float)
+    train_dataset = _Dataset(
+        inputs=inputs[~torch_is_test], targets=torch_targets[~torch_is_test]
+    )
+    test_dataset = _Dataset(
+        inputs=inputs[torch_is_test], targets=torch_targets[torch_is_test]
+    )
 
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
@@ -285,49 +294,61 @@ def train(args: Args, logger: HasuraLogger):
 
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     start = time.time()
-    frames = 0
 
-    memory = []
+    n_log_goals = int(np.ceil(args.batch_size / args.max_integer))
+    log_obs = torch.eye(args.max_integer).to(device)
+
+    def sequential_order(t: torch.Tensor):
+        return t[:-1] < t[1:]
+
+    def accuracy_for_goal(goal: int):
+        _inputs = F.pad(log_obs, (0, 1), value=goal)
+        _outputs = model(_inputs)
+        _targets = compute_targets(log_obs, goal * torch.ones_like(_outputs))
+        return (
+            (sequential_order(_outputs) == sequential_order(_targets))
+            .float()
+            .mean()
+            .item()
+        )
+
+    def get_accuracy(_goals: Iterable[int]):
+        with torch.no_grad():
+            return np.mean(list(map(accuracy_for_goal, _goals))).item()
+
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
 
         model.eval()
         test_loss = 0
+        goals = set()
         with torch.no_grad():
             for data, target in test_loader:
-                frames += len(data)
                 data, target = data.to(device), target.to(device)
+                goals |= set(data[:, -1])
                 output = model(data)
-                memory.append((data, target, output))
-
-        data, targets, outputs = zip(*memory)
-        data = torch.cat(data, dim=0)
-        targets, outputs = map(torch.cat, (targets, outputs))
-        log = {
-            TEST_ACCURACY: max_agreement(data[:, -1], targets, outputs),
-            EPOCH: epoch,
-            RUN_ID: logger.run_id,
-            HOURS: (time.time() - start) / 3600,
-        }
-        pprint(log)
-        if logger.run_id is not None:
-            logger.log(log)
+                test_loss += F.mse_loss(output, target).item()
 
         now = time.time()
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
+            TEST_ACCURACY: get_accuracy(goals),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
-            FPS: frames / (now - start),
         }
         pprint(log)
         if logger.run_id is not None:
             logger.log(log)
 
         model.train()
+        frames = 0
+        tick = time.time()
         memory = []
+        goals = deque(maxlen=n_log_goals)
         for batch_idx, (data, target) in enumerate(train_loader):
+            goals.extend(data[:, -1])
+            frames += len(data)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -336,11 +357,13 @@ def train(args: Args, logger: HasuraLogger):
             loss.backward()
             optimizer.step()
             if batch_idx % args.log_interval == 0:
+
                 log = {
                     EPOCH: epoch,
                     LOSS: loss.item(),
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
+                    ACCURACY: get_accuracy(goals),
                 }
                 pprint(log)
                 if logger.run_id is not None:
@@ -349,14 +372,12 @@ def train(args: Args, logger: HasuraLogger):
                 if args.dry_run:
                     break
 
-        data, targets, outputs = zip(*memory)
-        data = torch.cat(data, dim=0)
-        targets, outputs = map(torch.cat, (targets, outputs))
+        now = time.time()
         log = {
-            ACCURACY: max_agreement(data[:, -1], targets, outputs),
             RUN_ID: logger.run_id,
             EPOCH: epoch,
-            HOURS: (time.time() - start) / 3600,
+            HOURS: (now - start) / 3600,
+            FPS: frames / (now - tick),
         }
         pprint(log)
         if logger.run_id is not None:

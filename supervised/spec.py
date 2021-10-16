@@ -65,7 +65,12 @@ def spec(x, y, color="run ID", scale_type="linear"):
             subfigure(
                 parameters=params,
                 x_kwargs={"scale": {"domain": {"param": "selection", "encoding": "x"}}},
-                y_kwargs={"scale": {"type": scale_type, "domain": {"param": "selection", "encoding": "y"}}},
+                y_kwargs={
+                    "scale": {
+                        "type": scale_type,
+                        "domain": {"param": "selection", "encoding": "y"},
+                    }
+                },
             ),
         ],
     }
