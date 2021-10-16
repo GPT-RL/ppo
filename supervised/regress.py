@@ -19,6 +19,7 @@ import yaml
 from gql import gql
 from run_logger import HasuraLogger
 from tap import Tap
+from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -77,10 +78,7 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        # self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
-        self.gpt = nn.Embedding(
-            num_embeddings=max_int, embedding_dim=self.embedding_size
-        )
+        self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         self.embed = nn.Linear(max_int, self.embedding_size)
         self.net = nn.Sequential(
             nn.Linear(2 * self.embedding_size, hidden_size),
@@ -255,9 +253,9 @@ def train(args: Args, logger: HasuraLogger):
             encode = tokenizer.encode(str(n), return_tensors="pt")
             yield encode.squeeze(0)
 
-    # tokenized = list(tokenize())
-    # tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
-    inputs = np.append(data1, np.expand_dims(data2, axis=1), axis=1)
+    tokenized = list(tokenize())
+    tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
+    inputs = np.append(data1, tokenized, axis=1)
     rng = np.random.default_rng(seed=args.seed)
     rng.shuffle(inputs, axis=0)
     inputs = torch.tensor(inputs, dtype=torch.float32)
