@@ -306,6 +306,8 @@ def train(args: Args, logger: HasuraLogger):
     def accuracy_for_goal(goal: int):
         _inputs = F.pad(log_obs, (0, 1), value=goal)
         _outputs = model(_inputs)
+        if args.load_id:
+            breakpoint()
         _targets = compute_targets(log_obs, goal * torch.ones_like(_outputs))
         return (
             (sequential_order(_outputs) == sequential_order(_targets))
