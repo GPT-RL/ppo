@@ -81,6 +81,9 @@ class Net(nn.Module):
         self.gpt = nn.Embedding(
             num_embeddings=max_int, embedding_dim=self.embedding_size
         )
+        self.embed = nn.Embedding(
+            num_embeddings=max_int, embedding_dim=self.embedding_size
+        )
         self.net = nn.Sequential(
             nn.Linear(2 * self.embedding_size, hidden_size),
             nn.ReLU(),
@@ -94,7 +97,7 @@ class Net(nn.Module):
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
         embedded1 = self.gpt(x1.argmax(-1)).squeeze(1)
-        embedded2 = self.gpt(x2.long()).squeeze(1)
+        embedded2 = self.embed(x2.long()).squeeze(1)
         cat = torch.cat([embedded1, embedded2], dim=-1)
         return self.net(cat).squeeze(-1)
 
