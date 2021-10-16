@@ -325,11 +325,14 @@ def train(args: Args, logger: HasuraLogger):
 
         model.train()
         memory = []
+        weight: torch.Tensor = cast(
+            torch.Tensor, torch.tensor([1, args.max_integer - 1]) / args.max_integer
+        ).to(device)
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
-            loss = F.cross_entropy(output, target.long())
+            loss = F.cross_entropy(output, target.long(), weight=weight)
             memory.append((data, target, output))
             loss.backward()
             optimizer.step()
