@@ -240,20 +240,12 @@ def train(args: Args, logger: HasuraLogger):
 
     data1 = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
     data2 = np.repeat(np.arange(args.max_integer), args.max_integer)
-    rng = np.random.default_rng(seed=args.seed)
-    rng.shuffle(data1, axis=1)
-    rng.shuffle(data2)
-
-    targets = compute_targets(inputs=data1, goals=data2)
 
     def get_divisors():
         divisor = 1
         while divisor <= args.max_integer:
             yield divisor
             divisor *= 10
-
-    is_test = np.stack([(data2 % d) == args.test_integer for d in get_divisors()])
-    is_test = is_test.any(axis=0)
 
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
@@ -264,18 +256,18 @@ def train(args: Args, logger: HasuraLogger):
 
     # tokenized = list(tokenize())
     # tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
-    data1 = torch.tensor(data1, dtype=torch.float)
-    data2 = torch.tensor(data2, dtype=torch.float).unsqueeze(-1)
-    inputs = torch.cat([data1, data2], dim=-1)
+    inputs = np.append(data1, np.expand_dims(data2, axis=1), axis=1)
+    rng = np.random.default_rng(seed=args.seed)
+    rng.shuffle(inputs, axis=0)
+    inputs = torch.tensor(inputs, dtype=torch.float32)
+    targets = compute_targets(inputs=inputs[:, :-1], goals=inputs[:, -1])
 
-    torch_is_test = torch.tensor(is_test)
-    torch_targets = torch.tensor(targets, dtype=torch.float)
-    train_dataset = _Dataset(
-        inputs=inputs[~torch_is_test], targets=torch_targets[~torch_is_test]
+    is_test = torch.stack(
+        [(inputs[:, -1] % d) == args.test_integer for d in get_divisors()]
     )
-    test_dataset = _Dataset(
-        inputs=inputs[torch_is_test], targets=torch_targets[torch_is_test]
-    )
+    is_test = is_test.any(axis=0)
+    train_dataset = _Dataset(inputs=inputs[~is_test], targets=targets[~is_test])
+    test_dataset = _Dataset(inputs=inputs[is_test], targets=targets[is_test])
 
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
@@ -309,8 +301,6 @@ def train(args: Args, logger: HasuraLogger):
     def accuracy_for_goal(goal: int):
         _inputs = F.pad(log_obs, (0, 1), value=goal)
         _outputs = model(_inputs)
-        if args.load_id:
-            breakpoint()
         _targets = compute_targets(log_obs, goal * torch.ones_like(_outputs))
         return (
             (sequential_order(_outputs) == sequential_order(_targets))
