@@ -84,6 +84,8 @@ class Net(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(self.embedding_size + max_int, hidden_size),
             nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
 
