@@ -349,6 +349,8 @@ def train(args: Args, logger: HasuraLogger):
             optimizer.zero_grad()
             output = model(data)
             loss = F.mse_loss(output, target)
+            if epoch == 49:
+                breakpoint()
             memory.append((data, target, output))
             loss.backward()
             optimizer.step()
