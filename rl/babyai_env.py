@@ -374,13 +374,17 @@ class LinearEnv(gym.Env):
         return s, r, t, i
 
     def reset(self):
+        self.action = None
+        self.reward = None
         self.state, self.target = self.random.choice(self.locations, size=2)
         return self.observation()
 
     def render(self, mode="human"):
         print("action:", self.action)
         print("reward:", self.reward)
-        print(self.state)
+        print("state:", self.state)
+        print("target:", self.target)
+        input("pause")
 
 
 class InvalidDirectionError(RuntimeError):
