@@ -3,6 +3,7 @@ import itertools
 from typing import Generator, List, Literal, Union, cast
 
 import gym
+from gym.wrappers import TimeLimit
 import torch
 from stable_baselines3.common.monitor import Monitor
 from torch.nn.utils.rnn import pad_sequence
@@ -358,6 +359,7 @@ class Trainer(main.Trainer):
                     size=room_size,
                     scaled_reward=scaled_reward,
                 )
+                _env = TimeLimit(_env, max_episode_steps=room_size + 1)
                 missions = [f"{target}" for target in rows]
 
             else:
