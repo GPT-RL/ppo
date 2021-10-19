@@ -77,15 +77,15 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        # self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         # self.embed = nn.Linear(max_int, self.embedding_size)
         self.net = nn.Sequential(
-            nn.Embedding(max_int, hidden_size),
+            self.gpt,
             #     nn.Linear(2 * self.embedding_size, hidden_size),
             #     nn.ReLU(),
             #     nn.Linear(hidden_size, hidden_size),
             #     nn.ReLU(),
-            nn.Linear(hidden_size, 1),
+            nn.Linear(self.embedding_size, 1),
         )
 
     def forward(self, x):
@@ -264,15 +264,13 @@ def train(args: Args, logger: HasuraLogger):
     ]
     is_test = np.stack(is_test)
     is_test = is_test.any(axis=0)
-    train_goals = set(goal[~is_test])
-    test_goals = set(goal[is_test])
-    tokenized_goals = {g: tokenizer.encode(str(g))[0] for g in goal}
-    data = np.stack(
-        [goal, targets, is_test],
+    data = np.concatenate(
+        [tokenized, np.expand_dims(targets, -1), np.expand_dims(is_test, -1)],
         axis=1,
     )
-    _inputs = torch.tensor(goal).unsqueeze(-1).to(device)
+    _inputs = tokenized.to(device)
     _targets = torch.tensor(targets).unsqueeze(-1).to(device)
+    _is_test = torch.tensor(is_test).to(device)
 
     def repeat_data(in_dataset, batch_size):
         tiles = int(np.ceil(batch_size / sum(in_dataset)))
@@ -323,34 +321,30 @@ def train(args: Args, logger: HasuraLogger):
     log_obs = torch.eye(args.max_integer).to(device)
     save_count = 0
 
-    def metric_for_goal(g: int, f):
-        # _inputs = F.pad(log_obs, (0, 1), value=tokenized_goals[g])
-        _inputs = torch.tensor([g], device=device)
-        _outputs = model(_inputs)
-        _targets = compute_targets(log_obs, g * torch.ones_like(_outputs))
-        return f(_outputs, _targets).float().mean().item()
-
-    def get_metric(_goals: Iterable[int], f):
+    def get_metric(f):
         with torch.no_grad():
             _outputs = model(_inputs)
             return torch.mean(f(_outputs, _targets).float()).item()
             # return np.mean([metric_for_goal(g, f) for g in _goals]).item()
 
-    def get_accuracy(_goals: Iterable[int]):
+    def get_accuracy(in_dataset: torch.Tensor):
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            distances = torch.abs(_outputs - _targets.T)
-            return distances.argmin(-1) == torch.arange(len(_targets), device=device)
+            distances = torch.abs(_outputs.unsqueeze(-1) - _targets)
+            correct_nearest_neighbor = distances.argmax(-1) == torch.arange(
+                len(_targets), device=device
+            )
+            return correct_nearest_neighbor[in_dataset]
 
-        return get_metric(_goals, f)
+        return get_metric(f)
 
-    def get_correct_ordering(_goals: Iterable[int]):
+    def get_correct_ordering(in_dataset: torch.Tensor):
         def sequential_order(t: torch.Tensor):
             return t[:-1] < t[1:]
 
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
             return sequential_order(_outputs) == sequential_order(_targets)
 
-        return get_metric(_goals, f)
+        return get_metric(f)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
@@ -367,8 +361,8 @@ def train(args: Args, logger: HasuraLogger):
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
-            TEST_ACCURACY: get_accuracy(test_goals),
-            TEST_CORRECT_ORDERING: get_correct_ordering(test_goals),
+            TEST_ACCURACY: get_accuracy(_is_test),
+            TEST_CORRECT_ORDERING: get_correct_ordering(_is_test),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
         }
@@ -394,8 +388,8 @@ def train(args: Args, logger: HasuraLogger):
                     LOSS: loss.item(),
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
-                    ACCURACY: get_accuracy(train_goals),
-                    CORRECT_ORDERING: get_correct_ordering(train_goals),
+                    ACCURACY: get_accuracy(~_is_test),
+                    CORRECT_ORDERING: get_correct_ordering(~_is_test),
                     SAVE_COUNT: save_count,
                 }
                 pprint(log)
