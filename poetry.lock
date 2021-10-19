@@ -491,6 +491,7 @@ test = ["hypothesis (>=3.58)", "pytest (>=6.0)", "pytest-xdist"]
 [package.source]
 type = "url"
 url = "https://files.pythonhosted.org/packages/4c/dc/5949dd7e2b0233a26dc3482ee2ee8707542cc25696602d990ed407ff939e/pandas-1.3.2-cp38-cp38-macosx_10_9_x86_64.whl"
+
 [[package]]
 name = "parso"
 version = "0.8.2"
@@ -884,6 +885,7 @@ typing-extensions = "*"
 [package.source]
 type = "url"
 url = "https://download.pytorch.org/whl/cu111/torch-1.9.0%2Bcu111-cp38-cp38-linux_x86_64.whl"
+
 [[package]]
 name = "tqdm"
 version = "4.62.3"
@@ -1042,7 +1044,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "b74f7cfff048792f57d14bd187c4975c74f973d83eb0cb906937b467c07403f4"
+content-hash = "bb5351ac4be9af5d179ff31035762bb3373f9c117bef30082b5dd5457487bc2c"
 
 [metadata.files]
 ansicolors = [
