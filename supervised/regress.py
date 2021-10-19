@@ -321,24 +321,30 @@ def train(args: Args, logger: HasuraLogger):
     log_obs = torch.eye(args.max_integer).to(device)
     save_count = 0
 
-    def sequential_order(t: torch.Tensor):
-        return t[:-1] < t[1:]
-
-    def accuracy_for_goal(g: int):
+    def metric_for_goal(g: int, f):
         _inputs = F.pad(log_obs, (0, 1), value=tokenized_goals[g])
         _outputs = model(_inputs)
         _targets = compute_targets(log_obs, g * torch.ones_like(_outputs))
-        return (
-            # (sequential_order(_outputs) == sequential_order(_targets))
-            (_outputs.round() == _targets.round())
-            .float()
-            .mean()
-            .item()
-        )
+        return f(_outputs, _targets).float().mean().item()
+
+    def get_metric(_goals: Iterable[int], f):
+        with torch.no_grad():
+            return np.mean([metric_for_goal(g, f) for g in _goals]).item()
 
     def get_accuracy(_goals: Iterable[int]):
-        with torch.no_grad():
-            return np.mean(list(map(accuracy_for_goal, _goals))).item()
+        def f(_outputs: torch.Tensor, _targets: torch.Tensor):
+            return _outputs.round() == _targets.round()
+
+        return get_metric(_goals, f)
+
+    def get_correct_ordering(_goals: Iterable[int]):
+        def sequential_order(t: torch.Tensor):
+            return t[:-1] < t[1:]
+
+        def f(_outputs: torch.Tensor, _targets: torch.Tensor):
+            return sequential_order(_outputs) == sequential_order(_targets)
+
+        return get_metric(_goals, f)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
@@ -356,6 +362,7 @@ def train(args: Args, logger: HasuraLogger):
             EPOCH: epoch,
             TEST_LOSS: test_loss,
             TEST_ACCURACY: get_accuracy(test_goals),
+            TEST_CORRECT_ORDERING: get_correct_ordering(test_goals),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
         }
@@ -382,6 +389,7 @@ def train(args: Args, logger: HasuraLogger):
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
                     ACCURACY: get_accuracy(train_goals),
+                    CORRECT_ORDERING: get_correct_ordering(train_goals),
                     SAVE_COUNT: save_count,
                 }
                 pprint(log)
@@ -430,6 +438,8 @@ LOSS = "loss"
 TEST_LOSS = "test loss"
 ACCURACY = "accuracy"
 TEST_ACCURACY = "test accuracy"
+CORRECT_ORDERING = "correct ordering"
+TEST_CORRECT_ORDERING = "test correct ordering"
 RUN_ID = "run ID"
 
 
@@ -467,8 +477,10 @@ def main(args: ArgsType):
                 for y in (
                     LOSS,
                     ACCURACY,
-                    TEST_LOSS,
                     TEST_ACCURACY,
+                    CORRECT_ORDERING,
+                    TEST_CORRECT_ORDERING,
+                    TEST_LOSS,
                     SAVE_COUNT,
                 )
                 for x in (HOURS, EPOCH)
