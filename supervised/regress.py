@@ -3,11 +3,10 @@ from __future__ import print_function
 import logging
 import os
 import time
-from collections import deque, namedtuple
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
-from typing import Any, Iterable, Literal, NamedTuple, Optional, cast, get_args
+from typing import Iterable, Literal, Optional, cast, get_args
 
 import numpy as np
 import pandas as pd
@@ -78,22 +77,25 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
-        self.embed = nn.Linear(max_int, self.embedding_size)
+        # self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        # self.embed = nn.Linear(max_int, self.embedding_size)
         self.net = nn.Sequential(
-            nn.Linear(2 * self.embedding_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
+            nn.Embedding(max_int, hidden_size),
+            #     nn.Linear(2 * self.embedding_size, hidden_size),
+            #     nn.ReLU(),
+            #     nn.Linear(hidden_size, hidden_size),
+            #     nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
 
     def forward(self, x):
-        x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
-        embedded1 = self.embed(x1).squeeze(1)
-        embedded2 = self.gpt(x2.long()).squeeze(1)
-        cat = torch.cat([embedded1, embedded2], dim=-1)
-        return self.net(cat).squeeze(-1)
+        return self.net(x.long()).squeeze(-1)
+
+    # x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
+    # embedded1 = self.embed(x1).squeeze(1)
+    # embedded2 = self.gpt(x2.long()).squeeze(1)
+    # cat = torch.cat([embedded1, embedded2], dim=-1)
+    # return self.net(cat).squeeze(-1)
 
 
 def get_gpt_size(gpt_size: GPTSize):
@@ -217,7 +219,8 @@ def max_agreement(
 
 
 def compute_targets(inputs, goals):
-    return abs(goals - inputs.argmax(-1))
+    return 0.99 ** goals
+    # return abs(goals - inputs.argmax(-1))
 
 
 def train(args: Args, logger: HasuraLogger):
@@ -236,7 +239,8 @@ def train(args: Args, logger: HasuraLogger):
         test_kwargs.update(cuda_kwargs)
 
     obs = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
-    goal = np.repeat(np.arange(args.max_integer), args.max_integer)
+    # goal = np.repeat(np.arange(args.max_integer), args.max_integer)
+    goal = np.arange(args.max_integer)
 
     def get_divisors():
         divisor = 1
@@ -263,15 +267,12 @@ def train(args: Args, logger: HasuraLogger):
     train_goals = set(goal[~is_test])
     test_goals = set(goal[is_test])
     tokenized_goals = {g: tokenizer.encode(str(g))[0] for g in goal}
-    data = np.concatenate(
-        [
-            obs,
-            tokenized,
-            np.expand_dims(targets, axis=1),
-            np.expand_dims(is_test, axis=1),
-        ],
+    data = np.stack(
+        [goal, targets, is_test],
         axis=1,
     )
+    _inputs = torch.tensor(goal).unsqueeze(-1).to(device)
+    _targets = torch.tensor(targets).unsqueeze(-1).to(device)
 
     def repeat_data(in_dataset, batch_size):
         tiles = int(np.ceil(batch_size / sum(in_dataset)))
@@ -289,7 +290,8 @@ def train(args: Args, logger: HasuraLogger):
     rng.shuffle(data, axis=0)
     data = torch.tensor(data, dtype=torch.float32)
 
-    inputs, targets, is_test = torch.split(data, [obs.shape[1] + 1, 1, 1], dim=-1)
+    inputs, targets, is_test = torch.split(data, [1, 1, 1], dim=-1)
+    # inputs, targets, is_test = torch.split(data, [obs.shape[1] + 1, 1, 1], dim=-1)
     is_test = is_test.bool().squeeze(-1)
 
     train_dataset = _Dataset(inputs=inputs[~is_test], targets=targets[~is_test])
@@ -322,18 +324,22 @@ def train(args: Args, logger: HasuraLogger):
     save_count = 0
 
     def metric_for_goal(g: int, f):
-        _inputs = F.pad(log_obs, (0, 1), value=tokenized_goals[g])
+        # _inputs = F.pad(log_obs, (0, 1), value=tokenized_goals[g])
+        _inputs = torch.tensor([g], device=device)
         _outputs = model(_inputs)
         _targets = compute_targets(log_obs, g * torch.ones_like(_outputs))
         return f(_outputs, _targets).float().mean().item()
 
     def get_metric(_goals: Iterable[int], f):
         with torch.no_grad():
-            return np.mean([metric_for_goal(g, f) for g in _goals]).item()
+            _outputs = model(_inputs)
+            return torch.mean(f(_outputs, _targets).float()).item()
+            # return np.mean([metric_for_goal(g, f) for g in _goals]).item()
 
     def get_accuracy(_goals: Iterable[int]):
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            return _outputs.round() == _targets.round()
+            distances = torch.abs(_outputs - _targets.T)
+            return distances.argmax(-1) == torch.arange(len(_targets), device=device)
 
         return get_metric(_goals, f)
 
