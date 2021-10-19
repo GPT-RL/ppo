@@ -356,6 +356,7 @@ class Trainer(main.Trainer):
                     locations=[l for l in rows if filter_fn(l)],
                     seed=seed,
                     size=room_size,
+                    scaled_reward=scaled_reward,
                 )
                 missions = [f"Go to grid {target}" for target in rows]
 

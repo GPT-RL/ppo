@@ -325,7 +325,14 @@ class GoToRowEnv(RenderEnv, ReproducibleEnv):
 
 
 class LinearEnv(gym.Env):
-    def __init__(self, locations: typing.Iterable[int], seed: int, size: int = None):
+    def __init__(
+        self,
+        locations: typing.Iterable[int],
+        seed: int,
+        scaled_reward: bool,
+        size: int = None,
+    ):
+        self.scaled_reward = scaled_reward
         self.locations = list(locations)
         if size is None:
             size = max(self.locations)
@@ -354,8 +361,13 @@ class LinearEnv(gym.Env):
         s = self.observation()
         t = self.action == 0
         if t:
-            self.reward = r = 1 / (1 + abs(self.state - self.target))
-            i = dict(success=self.state == self.target)
+            success = self.state == self.target
+            self.reward = r = (
+                1 / (1 + abs(self.state - self.target))
+                if self.scaled_reward
+                else float(success)
+            )
+            i = dict(success=success)
         else:
             self.reward = r = 0
             i = dict()
