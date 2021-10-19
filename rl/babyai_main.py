@@ -358,7 +358,7 @@ class Trainer(main.Trainer):
                     size=room_size,
                     scaled_reward=scaled_reward,
                 )
-                missions = [f"Go to grid {target}" for target in rows]
+                missions = [f"{target}" for target in rows]
 
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")
