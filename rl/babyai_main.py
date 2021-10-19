@@ -357,10 +357,7 @@ class Trainer(main.Trainer):
                     seed=seed,
                     size=room_size,
                 )
-                missions = [
-                    f"Perform the following instruction. Go to grid {target}"
-                    for target in rows
-                ]
+                missions = [f"Go to grid {target}" for target in rows]
 
             else:
                 raise RuntimeError(f"{env_id} is not a valid env_id")

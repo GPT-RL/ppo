@@ -343,7 +343,7 @@ class LinearEnv(gym.Env):
     def observation(self):
         return dict(
             image=self.eye[self.state],
-            mission=f"Perform the following instruction. Go to grid {self.target}",
+            mission=f"Go to grid {self.target}",
             direction=0,
         )
 
