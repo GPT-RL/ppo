@@ -339,7 +339,7 @@ def train(args: Args, logger: HasuraLogger):
     def get_accuracy(_goals: Iterable[int]):
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
             distances = torch.abs(_outputs - _targets.T)
-            return distances.argmax(-1) == torch.arange(len(_targets), device=device)
+            return distances.argmin(-1) == torch.arange(len(_targets), device=device)
 
         return get_metric(_goals, f)
 
