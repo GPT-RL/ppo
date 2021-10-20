@@ -70,7 +70,12 @@ class GPTEmbed(nn.Module):
 
 class Net(nn.Module):
     def __init__(
-        self, embedding_size: GPTSize, hidden_size: int, max_int: int, **kwargs
+        self,
+        embedding_size: GPTSize,
+        hidden_size: int,
+        n_layers: int,
+        max_int: int,
+        **kwargs,
     ):
         super(Net, self).__init__()
         self.max_int = max_int
@@ -79,14 +84,14 @@ class Net(nn.Module):
         ).n_embd
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         # self.embed = nn.Linear(max_int, self.embedding_size)
-        self.net = nn.Sequential(
-            self.gpt,
-            #     nn.Linear(2 * self.embedding_size, hidden_size),
-            #     nn.ReLU(),
-            #     nn.Linear(hidden_size, hidden_size),
-            #     nn.ReLU(),
-            nn.Linear(self.embedding_size, 1),
-        )
+        def inner_layers():
+            in_size = self.embedding_size
+            for _ in range(n_layers - 1):
+                yield nn.Linear(in_size, hidden_size)
+                in_size = hidden_size
+            yield nn.Linear(in_size, 1)
+
+        self.net = nn.Sequential(self.gpt, *inner_layers())
 
     def forward(self, x):
         return self.net(x.long()).squeeze(-1)
@@ -166,6 +171,7 @@ class Args(Tap):
     max_integer: int = 20
     test_integer: int = 2
     no_cuda: bool = False
+    n_layers: int = 0
     randomize_parameters: bool = False
     save_model: bool = False
     seed: int = 1
@@ -305,6 +311,7 @@ def train(args: Args, logger: HasuraLogger):
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
         max_int=args.max_integer,
+        n_layers=args.n_layers,
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
@@ -318,7 +325,6 @@ def train(args: Args, logger: HasuraLogger):
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     start = time.time()
 
-    log_obs = torch.eye(args.max_integer).to(device)
     save_count = 0
 
     def get_metric(f):
