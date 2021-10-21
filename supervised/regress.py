@@ -51,6 +51,15 @@ def build_gpt(gpt_size: GPTSize, randomize_parameters: bool):
     )
 
 
+class Lambda(nn.Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+
+    def forward(self, x):
+        return self.f(x)
+
+
 class GPTEmbed(nn.Module):
     def __init__(
         self,
@@ -349,7 +358,6 @@ def train(args: Args, logger: HasuraLogger):
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
 
-        model.eval()
         test_loss = 0
         with torch.no_grad():
             for data, target in test_loader:
@@ -370,7 +378,6 @@ def train(args: Args, logger: HasuraLogger):
         if logger.run_id is not None:
             logger.log(log)
 
-        model.train()
         frames = 0
         tick = time.time()
         for batch_idx, (data, target) in enumerate(train_loader):
