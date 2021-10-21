@@ -69,13 +69,19 @@ class GPTEmbed(nn.Module):
         train_ln: bool,
     ):
         super().__init__()
-        self.gpt = build_gpt(embedding_size, randomize_parameters)
-        for name, p in self.gpt.named_parameters():
+        gpt = build_gpt(embedding_size, randomize_parameters)
+        for name, p in gpt.named_parameters():
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
 
+        self.net = nn.Sequential(
+            Lambda(lambda x: x.long()),
+            gpt,
+            Lambda(lambda x: x.last_hidden_state[:, -1]),
+        )
+
     def forward(self, x, **_):
-        return self.gpt.forward(x).last_hidden_state[:, -1]
+        return self.net(x)
 
 
 class Net(nn.Module):
@@ -99,9 +105,9 @@ class Net(nn.Module):
 
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
-        embedded1 = self.embed(x1).squeeze(1)
-        embedded2 = self.gpt(x2.long()).squeeze(1)
-        cat = torch.cat([embedded1, embedded2], dim=-1)
+        embedded1 = self.embed(x1)
+        embedded2 = self.gpt(x2)
+        cat = torch.cat([embedded1, embedded2], dim=-1).squeeze(1)
         return self.net(cat).squeeze(-1)
 
 
