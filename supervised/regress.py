@@ -275,20 +275,15 @@ def train(args: Args, logger: HasuraLogger):
     ]
     is_test = np.stack(is_test)
     is_test = is_test.any(axis=0)
-    data = np.concatenate(
-        [
-            obs,
-            tokenized,
-            np.expand_dims(targets, axis=1),
-            np.expand_dims(is_test, axis=1),
-        ],
+    data = np.stack(
+        [targets, is_test],
         axis=1,
     )
-    _inputs = torch.tensor(
-        data[:, : obs.shape[1] + 1], dtype=torch.float32, device=device
-    )
-    _targets = torch.tensor(targets, dtype=torch.float32, device=device)
-    _is_test = torch.tensor(is_test, dtype=torch.bool, device=device)
+    data = np.concatenate([obs, tokenized, data], axis=1)
+    _inputs = data[:, : args.max_integer + 1]
+    _inputs = torch.tensor(_inputs, dtype=torch.float32).to(device)
+    _targets = torch.tensor(targets).unsqueeze(-1).to(device)
+    _is_test = torch.tensor(is_test).to(device)
 
     def repeat_data(in_dataset, batch_size):
         tiles = int(np.ceil(batch_size / sum(in_dataset)))
@@ -306,7 +301,7 @@ def train(args: Args, logger: HasuraLogger):
     rng.shuffle(data, axis=0)
     data = torch.tensor(data, dtype=torch.float32)
 
-    inputs, targets, is_test = torch.split(data, [obs.shape[1] + 1, 1, 1], dim=-1)
+    inputs, targets, is_test = torch.split(data, [args.max_integer + 1, 1, 1], dim=-1)
     is_test = is_test.bool().squeeze(-1)
 
     train_dataset = _Dataset(inputs=inputs[~is_test], targets=targets[~is_test])
