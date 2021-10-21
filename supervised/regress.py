@@ -3,11 +3,10 @@ from __future__ import print_function
 import logging
 import os
 import time
-from collections import deque, namedtuple
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
-from typing import Any, Iterable, Literal, NamedTuple, Optional, cast, get_args
+from typing import Literal, Optional, cast, get_args
 
 import numpy as np
 import pandas as pd
@@ -85,7 +84,7 @@ class GPTEmbed(nn.Module):
             embeddings = gpt(tokenized).last_hidden_state[:, -1]
             self.net = nn.Sequential(
                 Lambda(lambda x: x.long()),
-                nn.Embedding(*embeddings.shape),
+                nn.Embedding(1 + tokenized.max(), embeddings.size(1)),
                 Lambda(lambda x: x[:, -1]),
             )
 
