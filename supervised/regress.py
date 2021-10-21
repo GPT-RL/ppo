@@ -349,7 +349,7 @@ def train(args: Args, logger: HasuraLogger):
     def get_accuracy(is_dataset: torch.Tensor):
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
             distances = torch.abs(_outputs - _targets)
-            correct_target = _targets[distances.argmin(-1)] == _targets
+            correct_target = _targets[distances.argmin(0)] == _targets
             return correct_target[is_dataset]
 
         return get_metric(f)
