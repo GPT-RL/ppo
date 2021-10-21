@@ -290,8 +290,9 @@ def train(args: Args, logger: HasuraLogger):
     data = np.concatenate([obs, tokenized, data], axis=1)
     _inputs = data[:, : args.max_integer + 1]
     _inputs = torch.tensor(_inputs, dtype=torch.float32).to(device)
-    _targets = torch.tensor(targets).unsqueeze(-1).to(device)
+    _targets = torch.tensor(targets).to(device)
     _is_test = torch.tensor(is_test).to(device)
+    _goal = torch.sort(torch.tensor(goal).to(device)).values
 
     def repeat_data(in_dataset, batch_size):
         tiles = int(np.ceil(batch_size / sum(in_dataset)))
@@ -348,7 +349,7 @@ def train(args: Args, logger: HasuraLogger):
 
     def get_accuracy(is_dataset: torch.Tensor):
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            distances = torch.abs(_outputs - _targets)
+            distances = torch.abs(_outputs - _targets.unsqueeze(-1))
             correct_target = _targets[distances.argmin(0)] == _targets
             return correct_target[is_dataset]
 
@@ -356,12 +357,20 @@ def train(args: Args, logger: HasuraLogger):
 
     def get_expected_return(is_dataset: torch.Tensor):
         def sequential_order(t: torch.Tensor):
-            return t[:-1] < t[1:]
+            return F.pad(cast(torch.Tensor, t[:-1] < t[1:]), (0, 1), value=True)
 
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-
-            correct_ordering = sequential_order(_outputs) == sequential_order(_targets)
-            breakpoint()
+            orderings = []
+            unique_goals, goals_count = _goal[is_dataset].unique(return_counts=True)
+            out = torch.split(_outputs[is_dataset], list(goals_count))
+            tgt = torch.split(_targets[is_dataset], list(goals_count))
+            for g, o, t in zip(unique_goals, out, tgt):
+                correct_ordering = sequential_order(o) == sequential_order(t)
+                correct_ordering = cast(torch.Tensor, correct_ordering)
+                orderings.extend([correct_ordering[g:], correct_ordering[:g].flip(-1)])
+            orderings = pad_sequence(orderings)
+            orderings = torch.cumprod(orderings, dim=0)
+            return orderings.sum() / is_dataset.sum()
 
         return get_metric(f)
 
@@ -380,7 +389,7 @@ def train(args: Args, logger: HasuraLogger):
             EPOCH: epoch,
             TEST_LOSS: test_loss,
             TEST_ACCURACY: get_accuracy(_is_test),
-            # TEST_EXPECTED_RETURN: get_expected_return(~_is_test),
+            TEST_EXPECTED_RETURN: get_expected_return(_is_test),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
         }
@@ -405,7 +414,7 @@ def train(args: Args, logger: HasuraLogger):
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
                     ACCURACY: get_accuracy(~_is_test),
-                    # EXPECTED_RETURN: get_expected_return(~_is_test),
+                    EXPECTED_RETURN: get_expected_return(~_is_test),
                     SAVE_COUNT: save_count,
                 }
                 pprint(log)
