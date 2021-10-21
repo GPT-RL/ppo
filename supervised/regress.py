@@ -67,6 +67,7 @@ class GPTEmbed(nn.Module):
         randomize_parameters: bool,
         train_wpe: bool,
         train_ln: bool,
+        tokenized: torch.Tensor,
     ):
         super().__init__()
         gpt = build_gpt(embedding_size, randomize_parameters)
@@ -74,11 +75,19 @@ class GPTEmbed(nn.Module):
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
 
-        self.net = nn.Sequential(
-            Lambda(lambda x: x.long()),
-            gpt,
-            Lambda(lambda x: x.last_hidden_state[:, -1]),
-        )
+        if train_ln or train_wpe:
+            self.net = nn.Sequential(
+                Lambda(lambda x: x.long()),
+                gpt,
+                Lambda(lambda x: x.last_hidden_state[:, -1]),
+            )
+        else:
+            embeddings = gpt(tokenized).last_hidden_state[:, -1]
+            self.net = nn.Sequential(
+                Lambda(lambda x: x.long()),
+                nn.Embedding(*embeddings.shape),
+                Lambda(lambda x: x[:, -1]),
+            )
 
     def forward(self, x, **_):
         return self.net(x)
@@ -317,6 +326,7 @@ def train(args: Args, logger: HasuraLogger):
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
         max_int=args.max_integer,
+        tokenized=tokenized,
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
