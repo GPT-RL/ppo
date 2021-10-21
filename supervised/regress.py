@@ -275,9 +275,6 @@ def train(args: Args, logger: HasuraLogger):
     ]
     is_test = np.stack(is_test)
     is_test = is_test.any(axis=0)
-    train_goals = set(goal[~is_test])
-    test_goals = set(goal[is_test])
-    tokenized_goals = {g: tokenizer.encode(str(g))[0] for g in goal}
     data = np.concatenate(
         [
             obs,
@@ -287,6 +284,11 @@ def train(args: Args, logger: HasuraLogger):
         ],
         axis=1,
     )
+    _inputs = torch.tensor(
+        data[:, : obs.shape[1] + 1], dtype=torch.float32, device=device
+    )
+    _targets = torch.tensor(targets, dtype=torch.float32, device=device)
+    _is_test = torch.tensor(is_test, dtype=torch.bool, device=device)
 
     def repeat_data(in_dataset, batch_size):
         tiles = int(np.ceil(batch_size / sum(in_dataset)))
@@ -333,33 +335,31 @@ def train(args: Args, logger: HasuraLogger):
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     start = time.time()
 
-    log_obs = torch.eye(args.max_integer).to(device)
     save_count = 0
 
-    def metric_for_goal(g: int, f):
-        _inputs = F.pad(log_obs, (0, 1), value=tokenized_goals[g])
-        _outputs = model(_inputs)
-        _targets = compute_targets(log_obs, g * torch.ones_like(_outputs))
-        return f(_outputs, _targets).float().mean().item()
-
-    def get_metric(_goals: Iterable[int], f):
+    def get_metric(f):
         with torch.no_grad():
-            return np.mean([metric_for_goal(g, f) for g in _goals]).item()
+            _outputs = model(_inputs)
+            return torch.mean(f(_outputs, _targets).float()).item()
 
-    def get_accuracy(_goals: Iterable[int]):
+    def get_accuracy(is_dataset: torch.Tensor):
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            return _outputs.round() == _targets.round()
+            distances = torch.abs(_outputs - _targets)
+            correct_target = _targets[distances.argmin(-1)] == _targets
+            return correct_target[is_dataset]
 
-        return get_metric(_goals, f)
+        return get_metric(f)
 
-    def get_correct_ordering(_goals: Iterable[int]):
+    def get_expected_return(is_dataset: torch.Tensor):
         def sequential_order(t: torch.Tensor):
             return t[:-1] < t[1:]
 
         def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            return sequential_order(_outputs) == sequential_order(_targets)
 
-        return get_metric(_goals, f)
+            correct_ordering = sequential_order(_outputs) == sequential_order(_targets)
+            breakpoint()
+
+        return get_metric(f)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
@@ -375,8 +375,8 @@ def train(args: Args, logger: HasuraLogger):
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
-            TEST_ACCURACY: get_accuracy(test_goals),
-            TEST_CORRECT_ORDERING: get_correct_ordering(test_goals),
+            TEST_ACCURACY: get_accuracy(~_is_test),
+            # TEST_EXPECTED_RETURN: get_expected_return(~_is_test),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
         }
@@ -395,14 +395,13 @@ def train(args: Args, logger: HasuraLogger):
             loss.backward()
             optimizer.step()
             if batch_idx % args.log_interval == 0:
-
                 log = {
                     EPOCH: epoch,
                     LOSS: loss.item(),
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
-                    ACCURACY: get_accuracy(train_goals),
-                    CORRECT_ORDERING: get_correct_ordering(train_goals),
+                    ACCURACY: get_accuracy(~_is_test),
+                    # EXPECTED_RETURN: get_expected_return(~_is_test),
                     SAVE_COUNT: save_count,
                 }
                 pprint(log)
@@ -451,8 +450,8 @@ LOSS = "loss"
 TEST_LOSS = "test loss"
 ACCURACY = "accuracy"
 TEST_ACCURACY = "test accuracy"
-CORRECT_ORDERING = "correct ordering"
-TEST_CORRECT_ORDERING = "test correct ordering"
+EXPECTED_RETURN = "expected return"
+TEST_EXPECTED_RETURN = "test expected return"
 RUN_ID = "run ID"
 
 
@@ -491,8 +490,8 @@ def main(args: ArgsType):
                     LOSS,
                     ACCURACY,
                     TEST_ACCURACY,
-                    CORRECT_ORDERING,
-                    TEST_CORRECT_ORDERING,
+                    EXPECTED_RETURN,
+                    TEST_EXPECTED_RETURN,
                     TEST_LOSS,
                     SAVE_COUNT,
                     FPS,
