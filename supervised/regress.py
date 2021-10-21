@@ -74,17 +74,19 @@ class GPTEmbed(nn.Module):
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
 
+        gpt = nn.Sequential(
+            Lambda(lambda x: x.long()),
+            gpt,
+            Lambda(lambda x: x.last_hidden_state[:, -1]),
+        )
         if train_ln or train_wpe:
-            self.net = nn.Sequential(
-                Lambda(lambda x: x.long()),
-                gpt,
-                Lambda(lambda x: x.last_hidden_state[:, -1]),
-            )
+            self.net = gpt
         else:
-            embeddings = gpt(tokenized).last_hidden_state[:, -1]
+            dummy_tokens = torch.arange(tokenized.max() + 1).unsqueeze(-1)
+            embeddings = gpt(dummy_tokens)
             self.net = nn.Sequential(
                 Lambda(lambda x: x.long()),
-                nn.Embedding(1 + tokenized.max(), embeddings.size(1)),
+                nn.Embedding.from_pretrained(embeddings),
                 Lambda(lambda x: x[:, -1]),
             )
 
