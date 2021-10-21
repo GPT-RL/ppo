@@ -379,7 +379,7 @@ def train(args: Args, logger: HasuraLogger):
         log = {
             EPOCH: epoch,
             TEST_LOSS: test_loss,
-            TEST_ACCURACY: get_accuracy(~_is_test),
+            TEST_ACCURACY: get_accuracy(_is_test),
             # TEST_EXPECTED_RETURN: get_expected_return(~_is_test),
             RUN_ID: logger.run_id,
             HOURS: (now - start) / 3600,
