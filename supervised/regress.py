@@ -486,7 +486,7 @@ def main(args: ArgsType):
 
         if args.logger_args is not None:
             charts = [
-                spec(x=x, y=y, scale_type="log" if y == LOSS else "linear")
+                spec(x=x, y=y, scale_type="log" if LOSS in y else "linear")
                 for y in (
                     LOSS,
                     ACCURACY,
@@ -495,6 +495,7 @@ def main(args: ArgsType):
                     TEST_CORRECT_ORDERING,
                     TEST_LOSS,
                     SAVE_COUNT,
+                    FPS,
                 )
                 for x in (HOURS, EPOCH)
             ]
