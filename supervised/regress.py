@@ -398,31 +398,35 @@ def train(args: Args, logger: HasuraLogger):
         return get_metric(f)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
+    batches_since_log = 0
     for epoch in range(1, args.epochs + 1):
 
-        test_loss = 0
-        with torch.no_grad():
-            for data, target in test_loader:
-                data, target = data.to(device), target.to(device)
-                output = model(data)
-                test_loss += F.mse_loss(output.flatten(), target.flatten()).item()
+        if batches_since_log > args.log_interval:
+            test_loss = 0
+            with torch.no_grad():
+                for data, target in test_loader:
+                    data, target = data.to(device), target.to(device)
+                    output = model(data)
+                    test_loss += F.mse_loss(output.flatten(), target.flatten()).item()
 
-        now = time.time()
-        log = {
-            EPOCH: epoch,
-            TEST_LOSS: test_loss,
-            TEST_ACCURACY: get_accuracy(_is_test),
-            TEST_EXPECTED_RETURN: get_expected_return(_is_test),
-            RUN_ID: logger.run_id,
-            HOURS: (now - start) / 3600,
-        }
-        pprint(log)
-        if logger.run_id is not None:
-            logger.log(log)
+            log = {
+                EPOCH: epoch,
+                TEST_LOSS: test_loss,
+                TEST_ACCURACY: get_accuracy(_is_test),
+                TEST_EXPECTED_RETURN: get_expected_return(_is_test),
+                RUN_ID: logger.run_id,
+                HOURS: (time.time() - start) / 3600,
+            }
+            pprint(log)
+            if logger.run_id is not None:
+                logger.log(log)
 
         frames = 0
         tick = time.time()
+        if batches_since_log > args.log_interval:
+            batches_since_log = 0
         for batch_idx, (data, target) in enumerate(train_loader):
+            batches_since_log += 1
             frames += len(data)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
@@ -430,7 +434,7 @@ def train(args: Args, logger: HasuraLogger):
             loss = F.mse_loss(output.flatten(), target.flatten())
             loss.backward()
             optimizer.step()
-            if batch_idx % args.log_interval == 0:
+            if batches_since_log > args.log_interval:
                 log = {
                     EPOCH: epoch,
                     LOSS: loss.item(),
@@ -447,16 +451,17 @@ def train(args: Args, logger: HasuraLogger):
                 if args.dry_run:
                     break
 
-        now = time.time()
-        log = {
-            RUN_ID: logger.run_id,
-            EPOCH: epoch,
-            HOURS: (now - start) / 3600,
-            FPS: frames / (now - tick),
-        }
-        pprint(log)
-        if logger.run_id is not None:
-            logger.log(log)
+        if batches_since_log > args.log_interval:
+            now = time.time()
+            log = {
+                RUN_ID: logger.run_id,
+                EPOCH: epoch,
+                HOURS: (now - start) / 3600,
+                FPS: frames / (now - tick),
+            }
+            pprint(log)
+            if logger.run_id is not None:
+                logger.log(log)
         scheduler.step()
 
         if args.save_model:
