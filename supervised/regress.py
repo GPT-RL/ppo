@@ -96,7 +96,12 @@ class GPTEmbed(nn.Module):
 
 class Net(nn.Module):
     def __init__(
-        self, embedding_size: GPTSize, hidden_size: int, max_int: int, **kwargs
+        self,
+        embedding_size: GPTSize,
+        hidden_size: int,
+        max_int: int,
+        n_layers: int,
+        **kwargs,
     ):
         super(Net, self).__init__()
         self.max_int = max_int
@@ -108,8 +113,10 @@ class Net(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(2 * self.embedding_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
+            *[
+                nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU())
+                for _ in range(n_layers)
+            ],
             nn.Linear(hidden_size, 1),
         )
 
@@ -187,12 +194,13 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     max_integer: int = 20
-    test_integer: int = 2
+    n_layers: int = 1
     no_cuda: bool = False
     randomize_parameters: bool = False
     save_model: bool = False
     seed: int = 1
     test_batch_size: int = 1000
+    test_integer: int = 2
     train_ln: bool = False
     train_wpe: bool = False
 
@@ -329,6 +337,7 @@ def train(args: Args, logger: HasuraLogger):
         train_ln=args.train_ln,
         max_int=args.max_integer,
         tokenized=tokenized,
+        n_layers=args.n_layers,
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
