@@ -209,7 +209,7 @@ class Args(Tap):
     hidden_size: int = 512
     host_machine: str = os.getenv("HOST_MACHINE")
     load_id: int = None  # path to load parameters from if at all
-    log_interval: int = 100
+    log_interval: int = 5
     log_level: str = "INFO"
     lr: float = 1.0
     max_integer: int = 20
@@ -409,10 +409,11 @@ def train(args: Args, logger: HasuraLogger):
         return get_metric(f)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
-    batches_since_log = 0
     for epoch in range(1, args.epochs + 1):
 
-        if batches_since_log > args.log_interval:
+        log_epoch = epoch % args.log_interval == 0
+
+        if log_epoch:
             test_loss = 0
             with torch.no_grad():
                 for data, target in test_loader:
@@ -434,10 +435,7 @@ def train(args: Args, logger: HasuraLogger):
 
         frames = 0
         tick = time.time()
-        if batches_since_log > args.log_interval:
-            batches_since_log = 0
         for batch_idx, (data, target) in enumerate(train_loader):
-            batches_since_log += 1
             frames += len(data)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
@@ -445,7 +443,7 @@ def train(args: Args, logger: HasuraLogger):
             loss = F.mse_loss(output.flatten(), target.flatten())
             loss.backward()
             optimizer.step()
-            if batches_since_log > args.log_interval:
+            if batch_idx == 0 and log_epoch:
                 log = {
                     EPOCH: epoch,
                     LOSS: loss.item(),
@@ -462,7 +460,7 @@ def train(args: Args, logger: HasuraLogger):
                 if args.dry_run:
                     break
 
-        if batches_since_log > args.log_interval:
+        if log_epoch:
             now = time.time()
             log = {
                 RUN_ID: logger.run_id,
