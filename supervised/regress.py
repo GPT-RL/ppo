@@ -259,7 +259,7 @@ def max_agreement(
 
 
 def compute_targets(inputs, goals):
-    return 0.99 ** abs(goals - inputs.argmax(-1))
+    return 0.9 ** abs(goals - inputs.argmax(-1))
 
 
 def train(args: Args, logger: HasuraLogger):
