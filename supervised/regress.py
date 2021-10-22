@@ -110,6 +110,7 @@ class Net(nn.Module):
         hidden_size: int,
         max_int: int,
         n_layers: int,
+        multiplicative_interaction: bool,
         **kwargs,
     ):
         super(Net, self).__init__()
@@ -119,8 +120,12 @@ class Net(nn.Module):
         ).n_embd
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         self.embed = nn.Linear(max_int, self.embedding_size)
+        self.multiplicative_interaction = multiplicative_interaction
         self.net = nn.Sequential(
-            nn.Linear(2 * self.embedding_size, hidden_size),
+            nn.Linear(
+                (1 if multiplicative_interaction else 2) * self.embedding_size,
+                hidden_size,
+            ),
             nn.ReLU(),
             *[
                 nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU())
@@ -133,7 +138,11 @@ class Net(nn.Module):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
         embedded1 = self.embed(x1)
         embedded2 = self.gpt(x2)
-        cat = torch.cat([embedded1, embedded2], dim=-1).squeeze(1)
+        cat = (
+            embedded1 * embedded2
+            if self.multiplicative_interaction
+            else torch.cat([embedded1, embedded2], dim=-1).squeeze(1)
+        )
         return self.net(cat).squeeze(-1)
 
 
@@ -204,6 +213,7 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     max_integer: int = 20
+    multiplicative_interaction: bool = False
     n_layers: int = 1
     no_cuda: bool = False
     architecture: ARCHITECTURE = PRETRAINED
@@ -350,6 +360,7 @@ def train(args: Args, logger: HasuraLogger):
         max_int=args.max_integer,
         tokenized=tokenized,
         n_layers=args.n_layers,
+        multiplicative_interaction=args.multiplicative_interaction,
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
