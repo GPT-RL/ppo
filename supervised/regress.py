@@ -200,7 +200,7 @@ class Args(Tap):
     batch_size: int = 32
     config: Optional[str] = None  # If given, yaml config from which to load params
     data_path: str = "data.zip"
-    discount: Optional[float] = None
+    discount: Optional[float] = (0.9,)
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
@@ -213,7 +213,7 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     max_integer: int = 20
-    multiplicative_interaction: bool = False
+    multiplicative_interaction: bool = True
     n_layers: int = 1
     no_cuda: bool = False
     architecture: ARCHITECTURE = PRETRAINED
