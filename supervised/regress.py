@@ -110,15 +110,15 @@ class Net(nn.Module):
         ).n_embd
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         self.embed = nn.Linear(max_int, self.embedding_size)
-        self.net = nn.Sequential(
-            nn.Linear(2 * self.embedding_size, hidden_size),
-            nn.ReLU(),
-            *[
-                nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU())
-                for _ in range(n_layers)
-            ],
-            nn.Linear(hidden_size, 1),
-        )
+
+        def inner_layers():
+            in_size = 2 * self.embedding_size
+            for _ in range(n_layers):
+                yield nn.Sequential(nn.Linear(in_size, hidden_size), nn.ReLU())
+                in_size = hidden_size
+            yield nn.Sequential(nn.Linear(in_size, 1), nn.ReLU())
+
+        self.net = nn.Sequential(*inner_layers())
 
     def forward(self, x):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
