@@ -59,17 +59,23 @@ class Lambda(nn.Module):
         return self.f(x)
 
 
+BASELINE = "baseline"
+RANDOMIZED = "randomized"
+PRETRAINED = "pretrained"
+ARCHITECTURE = Literal[RANDOMIZED, PRETRAINED, BASELINE]
+
+
 class GPTEmbed(nn.Module):
     def __init__(
         self,
         embedding_size: GPTSize,
-        randomize_parameters: bool,
+        architecture: ARCHITECTURE,
         train_wpe: bool,
         train_ln: bool,
         tokenized: torch.Tensor,
     ):
         super().__init__()
-        gpt = build_gpt(embedding_size, randomize_parameters)
+        gpt = build_gpt(embedding_size, architecture == RANDOMIZED)
         for name, p in gpt.named_parameters():
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
@@ -79,14 +85,17 @@ class GPTEmbed(nn.Module):
             gpt,
             Lambda(lambda x: x.last_hidden_state[:, -1]),
         )
-        if train_ln or train_wpe:
+        if (train_ln or train_wpe) and (architecture in [RANDOMIZED, PRETRAINED]):
             self.net = gpt
         else:
-            dummy_tokens = torch.arange(tokenized.max() + 1).unsqueeze(-1)
+            num_embeddings = tokenized.max() + 1
+            dummy_tokens = torch.arange(num_embeddings).unsqueeze(-1)
             embeddings = gpt(dummy_tokens)
             self.net = nn.Sequential(
                 Lambda(lambda x: x.long()),
-                nn.Embedding.from_pretrained(embeddings),
+                nn.Embedding(num_embeddings, embeddings.size(1))
+                if architecture == BASELINE
+                else nn.Embedding.from_pretrained(embeddings),
                 Lambda(lambda x: x[:, -1]),
             )
 
@@ -196,7 +205,7 @@ class Args(Tap):
     max_integer: int = 20
     n_layers: int = 1
     no_cuda: bool = False
-    randomize_parameters: bool = False
+    architecture: ARCHITECTURE = PRETRAINED
     save_model: bool = False
     seed: int = 1
     test_batch_size: int = 1000
@@ -332,7 +341,7 @@ def train(args: Args, logger: HasuraLogger):
     model = Net(
         embedding_size=args.embedding_size,
         hidden_size=args.hidden_size,
-        randomize_parameters=args.randomize_parameters,
+        architecture=args.architecture,
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
         max_int=args.max_integer,
