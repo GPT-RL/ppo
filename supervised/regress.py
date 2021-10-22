@@ -120,7 +120,7 @@ class Net(nn.Module):
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
         self.embed = nn.Linear(max_int, self.embedding_size)
         self.net = nn.Sequential(
-            nn.Linear(2 * self.embedding_size, hidden_size),
+            nn.Linear(self.embedding_size, hidden_size),
             nn.ReLU(),
             *[
                 nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU())
@@ -133,8 +133,7 @@ class Net(nn.Module):
         x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
         embedded1 = self.embed(x1)
         embedded2 = self.gpt(x2)
-        cat = torch.cat([embedded1, embedded2], dim=-1).squeeze(1)
-        return self.net(cat).squeeze(-1)
+        return self.net(embedded1 * embedded2).squeeze(-1)
 
 
 def get_gpt_size(gpt_size: GPTSize):
