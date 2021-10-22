@@ -191,6 +191,7 @@ class Args(Tap):
     batch_size: int = 32
     config: Optional[str] = None  # If given, yaml config from which to load params
     data_path: str = "data.zip"
+    discount: Optional[float] = None
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
@@ -258,11 +259,13 @@ def max_agreement(
     )
 
 
-def compute_targets(inputs, goals):
-    return 0.9 ** abs(goals - inputs.argmax(-1))
-
-
 def train(args: Args, logger: HasuraLogger):
+    def compute_targets(_inputs, _goals):
+        abs_distance = abs(_goals - _inputs.argmax(-1))
+        if args.discount is None:
+            return abs_distance
+        return args.discount ** abs_distance
+
     # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -295,7 +298,7 @@ def train(args: Args, logger: HasuraLogger):
 
     tokenized = list(tokenize())
     tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
-    targets = compute_targets(inputs=obs, goals=goal)
+    targets = compute_targets(_inputs=obs, _goals=goal)
     is_test = [
         goal == args.test_integer,
         *((goal % d) == args.test_integer for d in get_divisors()),
