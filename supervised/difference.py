@@ -335,7 +335,7 @@ def train(args: Args, logger: HasuraLogger):
 
     def get_accuracy(is_dataset: torch.Tensor):
         def f(raw_outputs: torch.Tensor):
-            return (raw_outputs.round() == raw_targets)[is_dataset]
+            return (raw_outputs.flatten().round() == raw_targets)[is_dataset]
 
         return get_metric(f)
 
