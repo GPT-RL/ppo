@@ -336,7 +336,30 @@ def train(args: Args, logger: HasuraLogger):
 
     def get_accuracy(is_dataset: torch.Tensor):
         def f(raw_outputs: torch.Tensor):
-            return (raw_outputs.flatten().round() == raw_targets)[is_dataset]
+            distances = torch.abs(raw_outputs - raw_targets.unsqueeze(-1))
+            correct_target = raw_targets[distances.argmin(0)] == raw_targets
+            return correct_target[is_dataset]
+
+        return get_metric(f)
+
+    def get_expected_return(is_dataset: torch.Tensor):
+        def sequential_order(t: torch.Tensor):
+            return F.pad(cast(torch.Tensor, t[:-1] < t[1:]), (0, 1), value=True)
+
+        def f(raw_outputs: torch.Tensor):
+            orderings = []
+            unique_goals, goals_count = product[:, 1][is_dataset].unique(
+                return_counts=True
+            )
+            out = torch.split(raw_outputs[is_dataset], list(goals_count))
+            tgt = torch.split(raw_targets[is_dataset], list(goals_count))
+            for g, o, t in zip(unique_goals, out, tgt):
+                correct_ordering = sequential_order(o) == sequential_order(t)
+                correct_ordering = cast(torch.Tensor, correct_ordering)
+                orderings.extend([correct_ordering[g:], correct_ordering[:g].flip(-1)])
+            orderings = pad_sequence(orderings)
+            orderings = torch.cumprod(orderings, dim=0)
+            return orderings.sum() / is_dataset.sum()
 
         return get_metric(f)
 
@@ -357,6 +380,7 @@ def train(args: Args, logger: HasuraLogger):
                 EPOCH: epoch,
                 TEST_LOSS: test_loss,
                 TEST_ACCURACY: get_accuracy(raw_is_test),
+                TEST_EXPECTED_RETURN: get_expected_return(raw_is_test),
                 RUN_ID: logger.run_id,
                 HOURS: (time.time() - start) / 3600,
             }
@@ -381,6 +405,7 @@ def train(args: Args, logger: HasuraLogger):
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
                     ACCURACY: get_accuracy(~raw_is_test),
+                    EXPECTED_RETURN: get_expected_return(~raw_is_test),
                     SAVE_COUNT: save_count,
                 }
                 pprint(log)
