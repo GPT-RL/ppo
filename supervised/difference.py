@@ -109,6 +109,7 @@ class Net(nn.Module):
         hidden_size: int,
         max_int: int,
         n_layers: int,
+        inputs,
         **kwargs,
     ):
         super(Net, self).__init__()
@@ -116,9 +117,11 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        gpt = GPTEmbed(embedding_size=embedding_size, inputs=inputs, **kwargs)
         self.embedding1 = nn.Sequential(
-            gpt, nn.Linear(self.embedding_size, hidden_size)
+            Lambda(lambda x: x.squeeze(-1).long()),
+            nn.Embedding(int(1 + inputs.max()), self.embedding_size),
+            nn.Linear(self.embedding_size, hidden_size),
         )
         self.embedding2 = nn.Sequential(
             gpt, nn.Linear(self.embedding_size, hidden_size)
