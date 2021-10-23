@@ -9,7 +9,6 @@ from pathlib import Path
 from pprint import pprint
 from typing import Literal, Optional, cast, get_args
 
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -118,8 +117,10 @@ class Net(nn.Module):
             get_gpt_size(embedding_size)
         ).n_embd
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
+        self.embedding1 = nn.Embedding(max_int, self.embedding_size)
+        self.embedding2 = nn.Embedding(max_int, self.embedding_size)
         self.net = nn.Sequential(
-            self.gpt,
+            # self.gpt,
             nn.Linear(
                 self.embedding_size,
                 hidden_size,
@@ -133,6 +134,9 @@ class Net(nn.Module):
         )
 
     def forward(self, x):
+        x1, x2 = torch.split(x, [1, 1], dim=-1)
+        x = self.embedding1(x1.long()) * self.embedding2(x2.long())
+
         return self.net(x).squeeze(-1)
 
 
@@ -140,10 +144,6 @@ def get_gpt_size(gpt_size: GPTSize):
     gpt_size = "" if gpt_size == "small" else f"-{gpt_size}"
     gpt_size = f"gpt2{gpt_size}"
     return gpt_size
-
-
-def shuffle(df: pd.DataFrame, **kwargs):
-    return df.sample(frac=1, **kwargs).reset_index(drop=True)
 
 
 ANTONYMS = "antonyms"
@@ -264,11 +264,12 @@ def train(args: Args, logger: HasuraLogger):
             desc="Tokenizing data",
         ):
             encode = tokenizer.encode(f"{n1} - {n2} =", return_tensors="pt")
-            yield encode.squeeze(0), n1 - n2
+            encode = encode.squeeze(0)
+            yield (n1, n2), n1 - n2
 
     inputs, targets = zip(*generate_data())
-    inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
-    inputs = inputs.float()
+    # inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
+    inputs = torch.tensor(inputs).float()
     targets = torch.tensor(targets)
     is_test = torch.tensor([str(args.test_integer) in str(p) for p in product])
 
