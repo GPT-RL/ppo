@@ -71,15 +71,35 @@ class GPTEmbed(nn.Module):
         architecture: ARCHITECTURE,
         train_wpe: bool,
         train_ln: bool,
+        inputs: torch.Tensor,
     ):
         super().__init__()
-        self.gpt = gpt = build_gpt(embedding_size, architecture == RANDOMIZED)
+        gpt = build_gpt(embedding_size, architecture == RANDOMIZED)
         for name, p in gpt.named_parameters():
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
 
+        gpt = nn.Sequential(
+            Lambda(lambda x: x.long()),
+            gpt,
+            Lambda(lambda x: x.last_hidden_state[:, -1]),
+        )
+        if (train_ln or train_wpe) and (architecture in [RANDOMIZED, PRETRAINED]):
+            self.net = gpt
+        else:
+            num_embeddings = inputs.max() + 1
+            dummy_tokens = torch.arange(num_embeddings).unsqueeze(-1)
+            embeddings = gpt(dummy_tokens)
+            self.net = nn.Sequential(
+                Lambda(lambda x: x.long()),
+                nn.Embedding(num_embeddings, embeddings.size(1))
+                if architecture == BASELINE
+                else nn.Embedding.from_pretrained(embeddings),
+                Lambda(lambda x: x[:, -1]),
+            )
+
     def forward(self, x, **_):
-        return self.gpt.forward(inputs_embeds=x).last_hidden_state
+        return self.net(x)
 
 
 class Net(nn.Module):
@@ -97,19 +117,14 @@ class Net(nn.Module):
         self.embedding_size = GPT2Config.from_pretrained(
             get_gpt_size(embedding_size)
         ).n_embd
-        gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
-        num_embeddings = int(inputs.max() + 1)
+        gpt = GPTEmbed(embedding_size=embedding_size, inputs=inputs, **kwargs)
         self.embedding1 = nn.Sequential(
-            Lambda(lambda x: x.long().squeeze()),
-            nn.Embedding(num_embeddings, self.embedding_size),
-            gpt,
+            Lambda(lambda x: x.squeeze(-1).long()),
+            nn.Embedding(int(1 + inputs.max()), self.embedding_size),
             nn.Linear(self.embedding_size, hidden_size),
         )
         self.embedding2 = nn.Sequential(
-            Lambda(lambda x: x.long().squeeze()),
-            nn.Embedding(num_embeddings, self.embedding_size),
-            gpt,
-            nn.Linear(self.embedding_size, hidden_size),
+            gpt, nn.Linear(self.embedding_size, hidden_size)
         )
         self.net = nn.Sequential(
             nn.Linear(
@@ -127,6 +142,7 @@ class Net(nn.Module):
     def forward(self, x):
         x1, x2 = torch.split(x, [1, 1], dim=-1)
         x = self.embedding1(x1) * self.embedding2(x2)
+
         return self.net(x).squeeze(-1)
 
 
@@ -242,8 +258,19 @@ def train(args: Args, logger: HasuraLogger):
         [*itertools.product(range(args.max_integer), range(args.max_integer))]
     )
 
-    inputs = product
+    def generate_data():
+        for n1, n2 in tqdm(
+            product,
+            desc="Tokenizing data",
+        ):
+            yield [
+                tokenizer.encode(f"{n}", return_tensors="pt").squeeze(0)
+                for n in (n1, n2)
+            ]
+
+    inputs = torch.tensor([*generate_data()])
     targets = product[:, 0] - product[:, 1]
+    # inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
     inputs = inputs.float()
     is_test = torch.tensor([str(args.test_integer) in str(p) for p in product])
 
