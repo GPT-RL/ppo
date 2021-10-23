@@ -272,7 +272,7 @@ def train(args: Args, logger: HasuraLogger):
     targets = product[:, 0] - product[:, 1]
     # inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
     inputs = inputs.float()
-    is_test = torch.tensor([str(args.test_integer) in str(p) for p in product])
+    is_test = torch.tensor([str(args.test_integer) in str(n) for _, n in product])
 
     raw_inputs = inputs.to(device)
     raw_targets = targets.to(device)
