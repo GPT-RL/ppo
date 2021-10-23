@@ -74,29 +74,15 @@ class GPTEmbed(nn.Module):
         inputs: torch.Tensor,
     ):
         super().__init__()
-        gpt = build_gpt(embedding_size, architecture == RANDOMIZED)
+        self.gpt = gpt = build_gpt(embedding_size, architecture == RANDOMIZED)
         for name, p in gpt.named_parameters():
             requires_grad = (train_wpe and "wpe" in name) or (train_ln and "ln" in name)
             p.requires_grad_(requires_grad)
 
-        gpt = nn.Sequential(
-            Lambda(lambda x: x.long()),
-            gpt,
+        self.net = nn.Sequential(
+            Lambda(lambda x: self.gpt.forward(inputs_embeds=x)),
             Lambda(lambda x: x.last_hidden_state[:, -1]),
         )
-        if (train_ln or train_wpe) and (architecture in [RANDOMIZED, PRETRAINED]):
-            self.net = gpt
-        else:
-            num_embeddings = inputs.max() + 1
-            dummy_tokens = torch.arange(num_embeddings).unsqueeze(-1)
-            embeddings = gpt(dummy_tokens)
-            self.net = nn.Sequential(
-                Lambda(lambda x: x.long()),
-                nn.Embedding(num_embeddings, embeddings.size(1))
-                if architecture == BASELINE
-                else nn.Embedding.from_pretrained(embeddings),
-                Lambda(lambda x: x[:, -1]),
-            )
 
     def forward(self, x, **_):
         return self.net(x)
@@ -120,7 +106,7 @@ class Net(nn.Module):
         self.embedding1 = nn.Embedding(max_int, self.embedding_size)
         self.embedding2 = nn.Embedding(max_int, self.embedding_size)
         self.net = nn.Sequential(
-            # self.gpt,
+            self.gpt,
             nn.Linear(
                 self.embedding_size,
                 hidden_size,
