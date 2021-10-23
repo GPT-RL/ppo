@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import itertools
 import logging
 import os
 import time
@@ -8,7 +9,6 @@ from pathlib import Path
 from pprint import pprint
 from typing import Literal, Optional, cast, get_args
 
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -72,7 +72,7 @@ class GPTEmbed(nn.Module):
         architecture: ARCHITECTURE,
         train_wpe: bool,
         train_ln: bool,
-        tokenized: torch.Tensor,
+        inputs: torch.Tensor,
     ):
         super().__init__()
         gpt = build_gpt(embedding_size, architecture == RANDOMIZED)
@@ -88,7 +88,7 @@ class GPTEmbed(nn.Module):
         if (train_ln or train_wpe) and (architecture in [RANDOMIZED, PRETRAINED]):
             self.net = gpt
         else:
-            num_embeddings = tokenized.max() + 1
+            num_embeddings = inputs.max() + 1
             dummy_tokens = torch.arange(num_embeddings).unsqueeze(-1)
             embeddings = gpt(dummy_tokens)
             self.net = nn.Sequential(
@@ -110,7 +110,6 @@ class Net(nn.Module):
         hidden_size: int,
         max_int: int,
         n_layers: int,
-        multiplicative_interaction: bool,
         **kwargs,
     ):
         super(Net, self).__init__()
@@ -119,11 +118,10 @@ class Net(nn.Module):
             get_gpt_size(embedding_size)
         ).n_embd
         self.gpt = GPTEmbed(embedding_size=embedding_size, **kwargs)
-        self.embed = nn.Linear(max_int, self.embedding_size)
-        self.multiplicative_interaction = multiplicative_interaction
         self.net = nn.Sequential(
+            self.gpt,
             nn.Linear(
-                (1 if multiplicative_interaction else 2) * self.embedding_size,
+                self.embedding_size,
                 hidden_size,
             ),
             nn.ReLU(),
@@ -135,15 +133,7 @@ class Net(nn.Module):
         )
 
     def forward(self, x):
-        x1, x2 = torch.split(x, [self.max_int, 1], dim=-1)
-        embedded1 = self.embed(x1)
-        embedded2 = self.gpt(x2)
-        cat = (
-            embedded1 * embedded2
-            if self.multiplicative_interaction
-            else torch.cat([embedded1, embedded2], dim=-1).squeeze(1)
-        )
-        return self.net(cat).squeeze(-1)
+        return self.net(x).squeeze(-1)
 
 
 def get_gpt_size(gpt_size: GPTSize):
@@ -213,7 +203,6 @@ class Args(Tap):
     log_level: str = "INFO"
     lr: float = 1.0
     max_integer: int = 20
-    multiplicative_interaction: bool = True
     n_layers: int = 1
     no_cuda: bool = False
     architecture: ARCHITECTURE = PRETRAINED
@@ -242,33 +231,6 @@ def get_save_path(run_id: Optional[int]):
     )
 
 
-def max_agreement(
-    goals: torch.tensor,
-    targets: torch.tensor,
-    outputs: torch.tensor,
-):
-    goals = goals.argmax(-1)
-    goals = goals.cpu().numpy()
-    targets = targets.cpu().numpy()
-    outputs = outputs.detach().cpu().numpy()
-
-    df = pd.DataFrame(data=dict(goals=goals, targets=targets, outputs=outputs))
-
-    def pair_inequalities(s: pd.Series):
-        a = s.to_numpy()
-        return np.expand_dims(a, axis=0) >= np.expand_dims(a, axis=1)
-
-    def matching_inequalities(s1: pd.Series, s2: pd.Series):
-        return np.mean(pair_inequalities(s1) == pair_inequalities(s2))
-
-    return np.mean(
-        [
-            matching_inequalities(gdf["targets"], gdf["outputs"])
-            for _, gdf in df.groupby("goals")
-        ]
-    )
-
-
 def train(args: Args, logger: HasuraLogger):
     def compute_targets(_inputs, _goals):
         abs_distance = abs(_goals - _inputs.argmax(-1))
@@ -290,59 +252,49 @@ def train(args: Args, logger: HasuraLogger):
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
 
-    obs = np.tile(np.eye(args.max_integer), (args.max_integer, 1))
-    goal = np.repeat(np.arange(args.max_integer), args.max_integer)
-
-    def get_divisors():
-        divisor = 1
-        while divisor <= args.max_integer:
-            divisor *= 10
-            yield divisor
-
     tokenizer = GPT2Tokenizer.from_pretrained(get_gpt_size(args.embedding_size))
 
-    def tokenize():
-        for n in tqdm(goal, desc="Tokenizing data"):
-            encode = tokenizer.encode(str(n), return_tensors="pt")
-            yield encode.squeeze(0)
-
-    tokenized = list(tokenize())
-    tokenized = pad_sequence(tokenized, padding_value=tokenizer.eos_token_id).T
-    targets = compute_targets(_inputs=obs, _goals=goal)
-    is_test = [
-        goal == args.test_integer,
-        *((goal % d) == args.test_integer for d in get_divisors()),
-    ]
-    is_test = np.stack(is_test)
-    is_test = is_test.any(axis=0)
-    data = np.stack(
-        [targets, is_test],
-        axis=1,
+    product = torch.tensor(
+        [*itertools.product(range(args.max_integer), range(args.max_integer))]
     )
-    data = np.concatenate([obs, tokenized, data], axis=1)
-    _inputs = data[:, : args.max_integer + 1]
-    _inputs = torch.tensor(_inputs, dtype=torch.float32).to(device)
-    _targets = torch.tensor(targets).to(device)
-    _is_test = torch.tensor(is_test).to(device)
-    _goal = torch.sort(torch.tensor(goal).to(device)).values
+
+    def generate_data():
+        for n1, n2 in tqdm(
+            product,
+            desc="Tokenizing data",
+        ):
+            encode = tokenizer.encode(f"{n1} - {n2} =", return_tensors="pt")
+            yield encode.squeeze(0), n1 - n2
+
+    inputs, targets = zip(*generate_data())
+    inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
+    inputs = inputs.float()
+    targets = torch.tensor(targets)
+    is_test = torch.tensor([str(args.test_integer) in str(p) for p in product])
+
+    raw_inputs = inputs.to(device)
+    raw_targets = targets.to(device)
+    raw_is_test = is_test.to(device)
+
+    data = torch.stack([targets, is_test], dim=1)
+    data = torch.cat([inputs, data], dim=1)
 
     def repeat_data(in_dataset, batch_size):
-        tiles = int(np.ceil(batch_size / sum(in_dataset)))
-        return np.tile(data[in_dataset], (tiles, 1))
+        tiles = int(torch.ceil(batch_size / sum(in_dataset)))
+        return torch.tile(data[in_dataset], (tiles, 1))
 
-    data = np.concatenate(
+    data = torch.cat(
         [
             repeat_data(~is_test, args.batch_size),
             repeat_data(is_test, args.test_batch_size),
         ],
-        axis=0,
+        dim=0,
     )
 
-    rng = np.random.default_rng(seed=args.seed)
-    rng.shuffle(data, axis=0)
-    data = torch.tensor(data, dtype=torch.float32)
+    torch.manual_seed(args.seed)
+    data = data[torch.randperm(len(data))]
 
-    inputs, targets, is_test = torch.split(data, [args.max_integer + 1, 1, 1], dim=-1)
+    inputs, targets, is_test = torch.split(data, [inputs.size(-1), 1, 1], dim=-1)
     is_test = is_test.bool().squeeze(-1)
 
     train_dataset = _Dataset(inputs=inputs[~is_test], targets=targets[~is_test])
@@ -358,9 +310,8 @@ def train(args: Args, logger: HasuraLogger):
         train_wpe=args.train_wpe,
         train_ln=args.train_ln,
         max_int=args.max_integer,
-        tokenized=tokenized,
+        inputs=raw_inputs,
         n_layers=args.n_layers,
-        multiplicative_interaction=args.multiplicative_interaction,
     ).to(device)
 
     save_path = get_save_path(logger.run_id)
@@ -378,33 +329,12 @@ def train(args: Args, logger: HasuraLogger):
 
     def get_metric(f):
         with torch.no_grad():
-            _outputs = model(_inputs)
-            return torch.mean(f(_outputs, _targets).float()).item()
+            raw_outputs = model(raw_inputs)
+            return torch.mean(f(raw_outputs).float()).item()
 
     def get_accuracy(is_dataset: torch.Tensor):
-        def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            distances = torch.abs(_outputs - _targets.unsqueeze(-1))
-            correct_target = _targets[distances.argmin(0)] == _targets
-            return correct_target[is_dataset]
-
-        return get_metric(f)
-
-    def get_expected_return(is_dataset: torch.Tensor):
-        def sequential_order(t: torch.Tensor):
-            return F.pad(cast(torch.Tensor, t[:-1] < t[1:]), (0, 1), value=True)
-
-        def f(_outputs: torch.Tensor, _targets: torch.Tensor):
-            orderings = []
-            unique_goals, goals_count = _goal[is_dataset].unique(return_counts=True)
-            out = torch.split(_outputs[is_dataset], list(goals_count))
-            tgt = torch.split(_targets[is_dataset], list(goals_count))
-            for g, o, t in zip(unique_goals, out, tgt):
-                correct_ordering = sequential_order(o) == sequential_order(t)
-                correct_ordering = cast(torch.Tensor, correct_ordering)
-                orderings.extend([correct_ordering[g:], correct_ordering[:g].flip(-1)])
-            orderings = pad_sequence(orderings)
-            orderings = torch.cumprod(orderings, dim=0)
-            return orderings.sum() / is_dataset.sum()
+        def f(raw_outputs: torch.Tensor):
+            return (raw_outputs.round() == raw_targets)[is_dataset]
 
         return get_metric(f)
 
@@ -424,8 +354,7 @@ def train(args: Args, logger: HasuraLogger):
             log = {
                 EPOCH: epoch,
                 TEST_LOSS: test_loss,
-                TEST_ACCURACY: get_accuracy(_is_test),
-                TEST_EXPECTED_RETURN: get_expected_return(_is_test),
+                TEST_ACCURACY: get_accuracy(raw_is_test),
                 RUN_ID: logger.run_id,
                 HOURS: (time.time() - start) / 3600,
             }
@@ -449,8 +378,7 @@ def train(args: Args, logger: HasuraLogger):
                     LOSS: loss.item(),
                     RUN_ID: logger.run_id,
                     HOURS: (time.time() - start) / 3600,
-                    ACCURACY: get_accuracy(~_is_test),
-                    EXPECTED_RETURN: get_expected_return(~_is_test),
+                    ACCURACY: get_accuracy(~raw_is_test),
                     SAVE_COUNT: save_count,
                 }
                 pprint(log)
