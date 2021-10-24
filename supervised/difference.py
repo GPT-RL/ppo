@@ -269,7 +269,7 @@ def train(args: Args, logger: HasuraLogger):
             ]
 
     inputs = torch.tensor([*generate_data()])
-    targets = product[:, 0] - product[:, 1]
+    targets = torch.abs(product[:, 0] - product[:, 1])
     # inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
     inputs = inputs.float()
     is_test = torch.tensor([str(args.test_integer) in str(n) for _, n in product])
