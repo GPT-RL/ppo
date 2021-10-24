@@ -196,7 +196,7 @@ class Args(Tap):
     batch_size: int = 32
     config: Optional[str] = None  # If given, yaml config from which to load params
     data_path: str = "data.zip"
-    discount: Optional[float] = (0.9,)
+    discount: Optional[float] = 0.9
     dry_run: bool = False
     embedding_size: GPTSize = "small"
     epochs: int = 14
@@ -269,7 +269,7 @@ def train(args: Args, logger: HasuraLogger):
             ]
 
     inputs = torch.tensor([*generate_data()])
-    targets = torch.abs(product[:, 0] - product[:, 1])
+    targets = args.discount ** torch.abs(product[:, 0] - product[:, 1])
     # inputs = pad_sequence(inputs, padding_value=tokenizer.eos_token_id).T
     inputs = inputs.float()
     is_test = torch.tensor([str(args.test_integer) in str(n) for _, n in product])
